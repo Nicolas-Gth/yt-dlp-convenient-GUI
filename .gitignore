@@ -1,0 +1,8 @@
+dist
+build
+__pycache__
+main.spec
+desktop.ini
+external/
+src/config/cookies.txt
+test
