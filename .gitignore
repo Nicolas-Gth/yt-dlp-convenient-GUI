@@ -1,8 +1,15 @@
+# Modules
+__pycache__
+
+# Binaries
+external/
 dist
 build
-__pycache__
+
+# Custom config files
+src/config/cookies.txt
+
+# Misc
 main.spec
 desktop.ini
-external/
-src/config/cookies.txt
-test
+.vscode
