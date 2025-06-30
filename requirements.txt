@@ -3,3 +3,4 @@ datetime
 plyer
 yt-dlp
 pydub
+mutagen

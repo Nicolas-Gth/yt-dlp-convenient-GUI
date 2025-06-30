@@ -16,16 +16,81 @@ from mutagen.easyid3 import EasyID3
 import io
 import re
 
+# Get the directory where this script is located
+script_dir = os.path.dirname(os.path.abspath(__file__))
+# Build the path to the icon file relative to the script location
+icon_path = os.path.join(script_dir, '..', 'assets', 'youtube-icon.ico')
+
 root = ThemedTk(theme="equilux")
-root.iconbitmap('./assets/youtube-icon.ico')
+# Try to set the icon, but continue if it fails (common on Linux)
+try:
+    root.iconbitmap(icon_path)
+except Exception:
+    # If .ico doesn't work, try to use it as a PhotoImage instead
+    try:
+        icon_image = Image.open(icon_path)
+        icon_photo = ImageTk.PhotoImage(icon_image)
+        root.iconphoto(False, icon_photo)
+    except Exception:
+        # If all else fails, just continue without an icon
+        pass
+
+# Configure cross-platform font settings
+import tkinter.font as tkFont
+
+# Define consistent fonts for cross-platform compatibility
+if os.name == 'nt':  # Windows
+    default_font = ('Segoe UI', 9)
+    title_font = ('Segoe UI', 10, 'bold')
+else:  # Linux/Unix
+    default_font = ('Liberation Sans', 9)
+    title_font = ('Liberation Sans', 10, 'bold')
+
+# Apply the default font
+root.option_add('*Font', default_font)
+
+# Configure ttk styles for consistency
+style = ttk.Style()
+style.configure('TLabel', font=default_font)
+style.configure('TButton', font=default_font)
+style.configure('TEntry', font=default_font)
+style.configure('TCombobox', font=default_font)
+
+def create_label(parent, text="", **kwargs):
+    """Create a label with consistent font styling"""
+    return ttk.Label(parent, text=text, font=default_font, **kwargs)
+
+def create_button(parent, text="", **kwargs):
+    """Create a button with consistent font styling"""
+    return ttk.Button(parent, text=text, **kwargs)
+
 root.title("yt-dlp Convenient GUI [v1.5] - Made by Nicolas-Gth")
+# Start with base size that will be adjusted later
 root.geometry("466x250")
+root.minsize(466, 250)  # Set minimum size
 root.configure(bg='#454746')
-root.resizable(False,False)
+# Allow resizing to accommodate different font sizes
+root.resizable(True, True)
 is_verbose = True
-    
-os.environ["PATH"] += os.pathsep + ".\\ffmpeg\\bin"
-ffmpeg_path = ".\\ffmpeg\\bin"
+
+# Build the path to ffmpeg relative to the script location (cross-platform)
+if os.name == 'nt':  # Windows
+    ffmpeg_dir = os.path.join(script_dir, '..', 'ffmpeg', 'bin')
+    os.environ["PATH"] += os.pathsep + ffmpeg_dir
+    ffmpeg_path = ffmpeg_dir
+else:  # Linux/Unix - assume ffmpeg is installed system-wide
+    # Check if ffmpeg is available in system PATH
+    import shutil
+    ffmpeg_executable = shutil.which('ffmpeg')
+    if ffmpeg_executable is None:
+        print("Warning: ffmpeg not found in system PATH. Please install ffmpeg.")
+        print("  Ubuntu/Debian: sudo apt install ffmpeg")
+        print("  Fedora: sudo dnf install ffmpeg")
+        print("  Arch: sudo pacman -S ffmpeg")
+        ffmpeg_path = None  # Will cause yt-dlp to skip ffmpeg-dependent features
+    else:
+        ffmpeg_path = os.path.dirname(ffmpeg_executable)  # Use the directory containing ffmpeg
+        print(f"Found ffmpeg at: {ffmpeg_executable}")
 
 folder_path = StringVar()
 
@@ -59,6 +124,11 @@ class MyCustomPP(yt_dlp.postprocessor.PostProcessor):
         file_format = getFileFormat(radio_button_format.get())
         file_path = f"{Entry2.get()}/{video_infos['title']}.{file_format}"
 
+        # Check if the file actually exists (conversion might have failed)
+        if not os.path.exists(file_path):
+            print(f"Warning: File {file_path} not found. Conversion may have failed.")
+            return [], video_infos
+
         # Add metadatas to the file
         try:
             artist_name = video_infos['artists'][0]
@@ -66,43 +136,52 @@ class MyCustomPP(yt_dlp.postprocessor.PostProcessor):
             artist_name = video_infos['uploader'].replace(" - Topic", "")
         
         if file_format == "mp3":
-            metadatas = MP3(file_path, ID3=EasyID3)
-            metadatas['artist'] = artist_name
             try:
-                album_name = video_infos['album']
-                metadatas['album'] = album_name
-            except KeyError:
-                pass
+                metadatas = MP3(file_path, ID3=EasyID3)
+                metadatas['artist'] = artist_name
+                try:
+                    album_name = video_infos['album']
+                    metadatas['album'] = album_name
+                except KeyError:
+                    pass
 
-            metadatas.save()
+                metadatas.save()
+            except Exception as e:
+                print(f"Warning: Could not add metadata to MP3 file: {e}")
 
         
         # Rename and sanitize the file name
         new_file_path = f"{Entry2.get()}/{re.sub(r'[!?:#%&{}<>|*/$@]', '', artist_name)} - {re.sub(r'[!?:#%&{}<>|*/$@]', '', video_infos['title'])}.{file_format}"
-        os.rename(file_path, new_file_path)
-        file_path = new_file_path
+        try:
+            os.rename(file_path, new_file_path)
+            file_path = new_file_path
+        except Exception as e:
+            print(f"Warning: Could not rename file: {e}")
         
-        if file_format == "mp3":
+        if file_format == "mp3" and os.path.exists(file_path):
             # Downloads thumbnail image and sets it as the album cover
-            u = urllib.request.urlopen(video_infos['thumbnail'])
-            raw_data = u.read()
-            u.close()
-            im = Image.open(BytesIO(raw_data))
+            try:
+                u = urllib.request.urlopen(video_infos['thumbnail'])
+                raw_data = u.read()
+                u.close()
+                im = Image.open(BytesIO(raw_data))
 
-            width, height = im.size
-            left = int((width - height)/2)
-            top = 0
-            right = width - int((width - height)/2)
-            bottom = height
-            album_im = im.crop((left, top, right, bottom))
-            
-            audio = ID3(file_path)
-            with io.BytesIO() as output:
-                album_im.save(output, format="JPEG")
-                data = output.getvalue()
-            with io.BytesIO(data) as albumart:
-                audio['APIC'] = APIC(encoding=0, mime='image/jpeg', type=3, desc=u'Cover', data=albumart.read())
-            audio.save()
+                width, height = im.size
+                left = int((width - height)/2)
+                top = 0
+                right = width - int((width - height)/2)
+                bottom = height
+                album_im = im.crop((left, top, right, bottom))
+                
+                audio = ID3(file_path)
+                with io.BytesIO() as output:
+                    album_im.save(output, format="JPEG")
+                    data = output.getvalue()
+                with io.BytesIO(data) as albumart:
+                    audio['APIC'] = APIC(encoding=0, mime='image/jpeg', type=3, desc=u'Cover', data=albumart.read())
+                audio.save()
+            except Exception as e:
+                print(f"Warning: Could not add album cover to MP3: {e}")
 
 
         return [], video_infos
@@ -130,13 +209,62 @@ def convert():
         concatenated_bitrate = clicked.get()
         bitrate = concatenated_bitrate.split("Kbps")[0]
         format = 'bestaudio/best'
-        ydl_opts = {'verbose': is_verbose, 'no-part': True,'ignoreerrors': True, 'quiet': True, 'extractor_args':{'youtubetab': {'skip':['authcheck']}}, "external_downloader_args": ['-loglevel', 'panic'],'format': format,'outtmpl': directory,'ffmpeg_location': ffmpeg_path, 'noplaylist': noplaylist,'progress_hooks': [my_hook], 'playliststart': playlist_start, 'playlistend': playlist_end,'postprocessors':[{'key':'FFmpegExtractAudio','preferredcodec': 'mp3','preferredquality': bitrate},{'key': 'FFmpegMetadata', 'add_metadata': True}]}
+        
+        # Base options
+        ydl_opts = {
+            'verbose': is_verbose, 
+            'no-part': True,
+            'ignoreerrors': True, 
+            'quiet': True, 
+            'extractor_args':{'youtubetab': {'skip':['authcheck']}}, 
+            "external_downloader_args": ['-loglevel', 'panic'],
+            'format': format,
+            'outtmpl': directory,
+            'noplaylist': noplaylist,
+            'progress_hooks': [my_hook], 
+            'playliststart': playlist_start, 
+            'playlistend': playlist_end
+        }
+        
+        # Add ffmpeg options only if ffmpeg is available
+        if ffmpeg_path is not None:
+            ydl_opts['ffmpeg_location'] = ffmpeg_path
+            ydl_opts['postprocessors'] = [
+                {'key':'FFmpegExtractAudio','preferredcodec': 'mp3','preferredquality': bitrate},
+                {'key': 'FFmpegMetadata', 'add_metadata': True}
+            ]
+        else:
+            print("Warning: MP3 conversion disabled - ffmpeg not found")
+            # Just download the best audio format available
+            ydl_opts['format'] = 'bestaudio'
 
     elif file_format == "mp4":
         concatenated_quality = clicked2.get()
         quality = concatenated_quality.split("p")[0]
         format = 'bestvideo[height<='+ quality +'][vbr<=12000][ext=mp4]+bestaudio[ext=m4a]/best[vbr<=12000][ext=mp4]/best'
-        ydl_opts = {'verbose': is_verbose,'no-part': True,'ignoreerrors': True,'quiet': True,'extractor_args':{'youtubetab': {'skip':['authcheck']}}, "external_downloader_args": ['-loglevel', 'panic'],'format': format,'outtmpl': directory,'ffmpeg_location': ffmpeg_path, 'noplaylist': noplaylist,'progress_hooks': [my_hook], 'playliststart': playlist_start, 'playlistend': playlist_end,'postprocessors':[{'key':'FFmpegVideoConvertor','preferedformat': 'mp4'}]}
+        
+        # Base options
+        ydl_opts = {
+            'verbose': is_verbose,
+            'no-part': True,
+            'ignoreerrors': True,
+            'quiet': True,
+            'extractor_args':{'youtubetab': {'skip':['authcheck']}}, 
+            "external_downloader_args": ['-loglevel', 'panic'],
+            'format': format,
+            'outtmpl': directory,
+            'noplaylist': noplaylist,
+            'progress_hooks': [my_hook], 
+            'playliststart': playlist_start, 
+            'playlistend': playlist_end
+        }
+        
+        # Add ffmpeg options only if ffmpeg is available
+        if ffmpeg_path is not None:
+            ydl_opts['ffmpeg_location'] = ffmpeg_path
+            ydl_opts['postprocessors'] = [{'key':'FFmpegVideoConvertor','preferedformat': 'mp4'}]
+        else:
+            print("Warning: MP4 conversion disabled - ffmpeg not found")
 
     global video_infos
     try:
@@ -154,6 +282,12 @@ def convert():
             except yt_dlp.utils.DownloadError as error:
                 FetchingErrorStatus = True
 
+    # Check if video_infos was successfully retrieved
+    if video_infos is None:
+        print("Error: Could not retrieve video information. Please check the URL.")
+        Button2.configure(text="      Convert      ")
+        return
+
     Button2.destroy()
 
     frameProgress = LabelFrame(root, bg='#454746', border = 0)
@@ -166,7 +300,7 @@ def convert():
     LabelMy_progress.grid(sticky = W, row=2, column=0, pady = 0, padx = 7)
 
     if noplaylist == False:
-        root.geometry("466x385")
+        adjust_window_size(base_height=PLATFORM_SCALE['height_base'], extra_height=135)
         global Total_progress
         Total_progress = ttk.Progressbar(frameProgress, orient = HORIZONTAL, length = 316, mode = 'determinate')
         Total_progress.grid(sticky = W, row=3, column=0, pady = 0, padx = 106)
@@ -178,45 +312,86 @@ def convert():
         LabelTotalProgress = ttk.Label(frameProgress, text = " 0.0%", anchor="w", justify = "left")
         LabelTotalProgress.grid(sticky = W, row=3, column=0, pady = 10, padx = 424)
 
-        thumbnail_url = video_infos['entries'][0]['thumbnail']
-        info_str = f"Title : \"{video_infos['entries'][0]['title']}\"\nChannel : \"{video_infos['entries'][0]['uploader']}\"\nDuration : {str(datetime.timedelta(seconds=int(video_infos['entries'][0]['duration'])))}"
-        songname_str = f"Downloading video 1 of {playlist_length+1} from the playlist \"{video_infos['title']}\""
-        NotificationText = f"Playlist \"{video_infos['title']}\""
+        # Safely access playlist information
+        if 'entries' in video_infos and len(video_infos['entries']) > 0:
+            thumbnail_url = video_infos['entries'][0].get('thumbnail', '')
+            title = video_infos['entries'][0].get('title', 'Unknown')
+            uploader = video_infos['entries'][0].get('uploader', 'Unknown')
+            duration = video_infos['entries'][0].get('duration', 0)
+            playlist_title = video_infos.get('title', 'Unknown Playlist')
+            
+            info_str = f"Title : \"{title}\"\nChannel : \"{uploader}\"\nDuration : {str(datetime.timedelta(seconds=int(duration)))}"
+            songname_str = f"Downloading video 1 of {playlist_length+1} from the playlist \"{playlist_title}\""
+            NotificationText = f"Playlist \"{playlist_title}\""
+        else:
+            print("Error: No entries found in playlist")
+            Button2.configure(text="      Convert      ")
+            return
     else:
-        root.geometry("466x350")
-        thumbnail_url = video_infos['thumbnail']
-        info_str = f"Title : \"{video_infos['title']}\"\nChannel : \"{video_infos['uploader'].replace(' - Topic', '')}\"\nDuration : {str(datetime.timedelta(seconds=int(video_infos['duration'])))}"
-        songname_str = f"Downloading \"{video_infos['title']}\""
-        NotificationText = f"Video \"{video_infos['title']}\""
+        adjust_window_size(base_height=PLATFORM_SCALE['height_base'], extra_height=100)
+        # Safely access single video information
+        thumbnail_url = video_infos.get('thumbnail', '')
+        title = video_infos.get('title', 'Unknown')
+        uploader = video_infos.get('uploader', 'Unknown').replace(' - Topic', '')
+        duration = video_infos.get('duration', 0)
+        
+        info_str = f"Title : \"{title}\"\nChannel : \"{uploader}\"\nDuration : {str(datetime.timedelta(seconds=int(duration)))}"
+        songname_str = f"Downloading \"{title}\""
+        NotificationText = f"Video \"{title}\""
 
-    u = urllib.request.urlopen(thumbnail_url)
-    raw_data = u.read()
-    u.close()
-    im = Image.open(BytesIO(raw_data))
+    # Only try to load thumbnail if URL is available
+    if thumbnail_url:
+        try:
+            u = urllib.request.urlopen(thumbnail_url)
+            raw_data = u.read()
+            u.close()
+            im = Image.open(BytesIO(raw_data))
+        except Exception as e:
+            print(f"Could not load thumbnail: {e}")
+            # Create a default image if thumbnail fails
+            im = Image.new('RGB', (100, 60), color='gray')
+    else:
+        # Create a default image if no thumbnail URL
+        im = Image.new('RGB', (100, 60), color='gray')
     thumbnail_margin = 74
     if noplaylist == False:
-        if 'Music' in video_infos['entries'][store()]['categories']:
-            width, height = im.size
-            left = int((width - height)/2)
-            top = 0
-            right = width - int((width - height)/2)
-            bottom = height
-            im = im.crop((left, top, right, bottom))
-            im.thumbnail((60, 60))
-        else:
+        # Safely check for categories in playlist entries
+        try:
+            current_entry = video_infos['entries'][store()]
+            categories = current_entry.get('categories', [])
+            if 'Music' in categories:
+                width, height = im.size
+                left = int((width - height)/2)
+                top = 0
+                right = width - int((width - height)/2)
+                bottom = height
+                im = im.crop((left, top, right, bottom))
+                im.thumbnail((60, 60))
+            else:
+                im.thumbnail((100, 60))
+                thumbnail_margin += 40
+        except (KeyError, IndexError, TypeError):
+            # Default thumbnail size if category check fails
             im.thumbnail((100, 60))
             thumbnail_margin += 40
 
     elif noplaylist == True:
-        if 'Music' in video_infos['categories']:
-            width, height = im.size
-            left = int((width - height)/2)
-            top = 0
-            right = width - int((width - height)/2)
-            bottom = height
-            im = im.crop((left, top, right, bottom))
-            im.thumbnail((60, 60))
-        else:
+        # Safely check for categories in single video
+        try:
+            categories = video_infos.get('categories', [])
+            if 'Music' in categories:
+                width, height = im.size
+                left = int((width - height)/2)
+                top = 0
+                right = width - int((width - height)/2)
+                bottom = height
+                im = im.crop((left, top, right, bottom))
+                im.thumbnail((60, 60))
+            else:
+                im.thumbnail((100, 60))
+                thumbnail_margin += 40
+        except (KeyError, TypeError):
+            # Default thumbnail size if category check fails
             im.thumbnail((100, 60))
             thumbnail_margin += 40
 
@@ -278,14 +453,18 @@ def convert():
     store2(PreviousSong)
 
     SpawnButton2()
-    root.geometry("466x250")
+    adjust_window_size()  # Reset to base size
     notification.notify(title = 'Download Complete!', message = f"{NotificationText} has been downloaded.", app_icon = 'youtube-icon.ico', timeout = 10)
 
 def start_convert():
     threading.Thread(target=convert).start()
 
 def my_hook(d):
-    video_index = d['info_dict']['playlist_autonumber'] -  1
+    # Safely get video index for playlists, default to 0 for single videos
+    if 'info_dict' in d and 'playlist_autonumber' in d['info_dict']:
+        video_index = d['info_dict']['playlist_autonumber'] - 1
+    else:
+        video_index = 0
     if d['status'] == 'downloading':
         My_progress['mode'] = 'determinate'
         progress_str = d['_percent_str'].replace("\x1b[0;94m ","").replace("\x1b[0m", "")
@@ -295,27 +474,54 @@ def my_hook(d):
                 store2(PreviousSong)
 
             if noplaylist == True:
-                songname_str = f"Downloading \"{video_infos['title']}\""
-                info_str = f"Title : \"{video_infos['title']}\"\nChannel : \"{video_infos['uploader']}\"\nDuration : {str(datetime.timedelta(seconds=int(video_infos['duration'])))}"
+                # Safe access for single video
+                title = video_infos.get('title', 'Unknown')
+                uploader = video_infos.get('uploader', 'Unknown')
+                duration = video_infos.get('duration', 0)
+                songname_str = f"Downloading \"{title}\""
+                info_str = f"Title : \"{title}\"\nChannel : \"{uploader}\"\nDuration : {str(datetime.timedelta(seconds=int(duration)))}"
 
             if noplaylist == False:
-                songname_str = f"Downloading video {video_index+1} of {playlist_length+1} from the playlist \"{video_infos['title']}\""
-                info_str = f"Title : \"{video_infos['entries'][video_index]['title']}\"\nChannel : \"{video_infos['entries'][video_index]['uploader']}\"\nDuration : {str(datetime.timedelta(seconds=int(video_infos['entries'][video_index]['duration'])))}"
-                u = urllib.request.urlopen(video_infos['entries'][video_index]['thumbnail'])
-                raw_data = u.read()
-                u.close()
-                im = Image.open(BytesIO(raw_data))
-                if " - Topic" in video_infos['entries'][video_index]['uploader']:
-                    width, height = im.size
-                    left = int((width - height)/2)
-                    top = 0
-                    right = width - int((width - height)/2)
-                    bottom = height
-                    im = im.crop((left, top, right, bottom))
-                im.thumbnail((100, 60))
-                image = ImageTk.PhotoImage(im)
-                LabelImage.configure(image=image)
-                LabelImage.image=image
+                # Safe access for playlist entries
+                try:
+                    if 'entries' in video_infos and video_index < len(video_infos['entries']):
+                        entry = video_infos['entries'][video_index]
+                        title = entry.get('title', 'Unknown')
+                        uploader = entry.get('uploader', 'Unknown')
+                        duration = entry.get('duration', 0)
+                        thumbnail_url = entry.get('thumbnail', '')
+                        playlist_title = video_infos.get('title', 'Unknown Playlist')
+                        
+                        songname_str = f"Downloading video {video_index+1} of {playlist_length+1} from the playlist \"{playlist_title}\""
+                        info_str = f"Title : \"{title}\"\nChannel : \"{uploader}\"\nDuration : {str(datetime.timedelta(seconds=int(duration)))}"
+                        
+                        # Load thumbnail if available
+                        if thumbnail_url:
+                            try:
+                                u = urllib.request.urlopen(thumbnail_url)
+                                raw_data = u.read()
+                                u.close()
+                                im = Image.open(BytesIO(raw_data))
+                                if " - Topic" in uploader:
+                                    width, height = im.size
+                                    left = int((width - height)/2)
+                                    top = 0
+                                    right = width - int((width - height)/2)
+                                    bottom = height
+                                    im = im.crop((left, top, right, bottom))
+                                im.thumbnail((100, 60))
+                                image = ImageTk.PhotoImage(im)
+                                LabelImage.configure(image=image)
+                                LabelImage.image=image
+                            except Exception as e:
+                                print(f"Could not load thumbnail: {e}")
+                    else:
+                        songname_str = "Processing playlist..."
+                        info_str = "Loading video information..."
+                except Exception as e:
+                    print(f"Error accessing playlist data: {e}")
+                    songname_str = "Processing playlist..."
+                    info_str = "Loading video information..."
                 
             LabelInfo.configure(text=info_str)
             LabelInfo.text=info_str
@@ -329,7 +535,22 @@ def my_hook(d):
         My_progress['mode'] = 'indeterminate'
         My_progress.start(50)
         progress_str = "Processing"
-        songname_str = f"Finished downloading \"{video_infos['title']}\""
+        
+        # Safe access to video title
+        if noplaylist == True:
+            title = video_infos.get('title', 'Unknown') if video_infos else 'Unknown'
+            songname_str = f"Finished downloading \"{title}\""
+        else:
+            # For playlists, try to get the current video title
+            try:
+                if video_infos and 'entries' in video_infos and video_index < len(video_infos['entries']):
+                    title = video_infos['entries'][video_index].get('title', 'Unknown')
+                else:
+                    title = 'Unknown'
+                songname_str = f"Finished downloading \"{title}\""
+            except (KeyError, IndexError):
+                songname_str = "Finished downloading video"
+        
         if noplaylist == False:
             TotalProgressPercentage = ((video_index+1)/(playlist_length+1))*100
             Total_progress["value"] = int(TotalProgressPercentage)
@@ -470,5 +691,58 @@ Choice2.grid(row=0, column=1, padx = 3)
 Label8 = ttk.Label(frame3, text = "It is not illegal to convert a Youtube video to MP3. But it is illegal to download a copyrighted\nmusic video. Using a Youtube converter to download a personal copy is against US copy-\nright law, so please use this software only to convert YouTube videos that are copyright free.", anchor="w",font=("Abadi Extra Light",8, "italic"), justify = LEFT)
 Label8.grid(sticky = W, row=0, column=0, padx = 10 , pady = 8)
 
+def adjust_window_size(base_width=None, base_height=None, extra_height=0):
+    """
+    Dynamically adjust window size based on content and platform
+    """
+    if base_width is None:
+        base_width = PLATFORM_SCALE['width_base']
+    if base_height is None:
+        base_height = PLATFORM_SCALE['height_base']
+    
+    try:
+        # Try advanced font-based scaling
+        test_font = tkFont.Font(family=default_font[0], size=default_font[1])
+        char_width = test_font.measure('M')
+        char_height = test_font.metrics('linespace')
+        
+        # Base scaling factors (Windows reference)
+        reference_char_width = 8
+        reference_char_height = 13
+        
+        width_scale = max(char_width / reference_char_width, 0.8)  # Minimum scale
+        height_scale = max(char_height / reference_char_height, 0.8)
+        
+        # Calculate new dimensions
+        new_width = max(int(base_width * width_scale), base_width)
+        new_height = max(int((base_height + extra_height) * height_scale), base_height + extra_height)
+        
+    except Exception:
+        # Fallback to platform constants if font scaling fails
+        new_width = base_width
+        new_height = base_height + extra_height
+    
+    # Apply the new size
+    root.geometry(f"{new_width}x{new_height}")
+    return new_width, new_height
+
+# Platform-specific size adjustments
+PLATFORM_SCALE = {
+    'width_base': 466,
+    'height_base': 250,
+    'height_extended': 385,
+    'height_single': 350
+}
+
+# Adjust for Linux font differences
+if os.name != 'nt':
+    PLATFORM_SCALE['width_base'] = 500
+    PLATFORM_SCALE['height_base'] = 270
+    PLATFORM_SCALE['height_extended'] = 420
+    PLATFORM_SCALE['height_single'] = 380
+
+# Apply initial size adjustment after all widgets are created
+root.update_idletasks()  # Ensure all widgets are rendered
+adjust_window_size()
 
 root.mainloop()
