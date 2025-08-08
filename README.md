@@ -1,6 +1,5 @@
 # yt-dlp Convenient GUI
-
-![yt-dlp Convenient GUI](assets/yt-dlp_convenient_gui_icon.png)
+<div align="center"><img src="assets/yt-dlp_convenient_gui_icon.png" alt="yt-dlp Convenient GUI" width="300"></div>
 
 A simple and intuitive graphical interface for yt-dlp that allows you to download videos and audio from YouTube and other platforms with ease.
 
