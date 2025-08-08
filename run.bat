@@ -2,8 +2,33 @@
 title yt-dlp Convenient GUI - Installation et Lancement Automatique
 color 0F
 
-:: Vérifier si c'est la première exécution (pas d'installation précédente)
-if not exist ".installed" goto :install
+:: Vérifier si tous les composants sont installés
+call :check_components
+if %componentsOK% == 0 goto :install
+goto :launch
+
+:check_components
+set componentsOK=1
+
+:: Vérifier Python
+python --version >nul 2>&1
+if %errorLevel% neq 0 set componentsOK=0
+
+:: Vérifier pip
+pip --version >nul 2>&1
+if %errorLevel% neq 0 set componentsOK=0
+
+:: Vérifier FFmpeg
+ffmpeg -version >nul 2>&1
+if %errorLevel% neq 0 set componentsOK=0
+
+:: Vérifier les dépendances Python critiques
+if %componentsOK% == 1 (
+    python -c "import yt_dlp, PIL, ttkthemes, plyer, mutagen" >nul 2>&1
+    if %errorLevel% neq 0 set componentsOK=0
+)
+
+goto :eof
 goto :launch
 
 :install
@@ -55,6 +80,7 @@ if exist "requirements.txt" (
 echo [4/4] Installation de FFmpeg...
 ffmpeg -version >nul 2>&1
 if %errorLevel% neq 0 (
+    if not exist "temp" mkdir temp
     if not exist "ffmpeg\bin" mkdir ffmpeg\bin
     echo Téléchargement de FFmpeg...
     powershell -Command "Invoke-WebRequest -Uri 'https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip' -OutFile 'temp\ffmpeg.zip'"
@@ -65,9 +91,8 @@ if %errorLevel% neq 0 (
     )
 )
 
-:: Nettoyage et marquage d'installation
+:: Nettoyage
 if exist "temp" rmdir /s /q "temp"
-echo. > .installed
 echo [OK] Installation terminée !
 echo.
 
