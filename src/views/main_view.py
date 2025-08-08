@@ -437,10 +437,13 @@ class MainApplicationView:
         if hasattr(self, 'video_progress'):
             if status == "processing":
                 self.video_progress['mode'] = 'indeterminate'
-                self.video_progress.start(50)
+                self.video_progress.start(10)
                 self.video_progress_percent.configure(text="Processing")
             else:
-                self.video_progress['mode'] = 'determinate'
+                if self.video_progress['mode'] != 'determinate':
+                    self.video_progress.stop()
+                    self.video_progress['mode'] = 'determinate'
+                
                 self.video_progress['value'] = percentage
                 self.video_progress_percent.configure(text=f" {percentage:.1f}%")
     
