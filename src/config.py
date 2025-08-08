@@ -28,8 +28,8 @@ DEFAULT_WINDOW_SIZE = {
 
 # Platform-specific size adjustments
 PLATFORM_SCALE = {
-    'width_base': 466,
-    'height_base': 250,
+    'width_base': 480,
+    'height_base': 218,
     'height_extended': 385,
     'height_single': 350
 }
@@ -47,7 +47,7 @@ TITLE_FONT = ('Arial', 10, 'bold')
 
 # Colors
 COLORS = {
-    'background': "#272727",
+    'background': "#333333",
     'button_normal': "#238a45",
     'button_active': "#449468",
     'text_primary': 'white',
