@@ -37,6 +37,10 @@ class ApplicationController:
         """Start the conversion process."""
         config = self.view.get_download_config()
         
+        # Check if config is None (validation failed)
+        if config is None:
+            return
+        
         # Validate input
         if not config.url or not config.output_directory:
             print("Error: Please provide both URL and output directory")
@@ -54,9 +58,13 @@ class ApplicationController:
     def _fetch_and_start_download(self, config):
         """Fetch video information and start download (runs in separate thread)."""
         # Fetch video information
-        video_info = self.download_controller.fetch_video_info(config)
+        video_info, error_message = self.download_controller.fetch_video_info(config)
         if not video_info:
-            print("Error: Could not retrieve video information. Please check the URL.")
+            if error_message:
+                # Show the yt-dlp error message on main thread
+                self.view.root.after(0, lambda: self.view.show_ytdlp_error(error_message))
+            else:
+                print("Error: Could not retrieve video information. Please check the URL.")
             # Hide fetching progress and restore button on main thread
             self.view.root.after(0, lambda: self.view.hide_fetching_progress())
             return

@@ -16,7 +16,7 @@ from config import (
     APP_TITLE, DEFAULT_WINDOW_SIZE, COLORS, DEFAULT_BITRATES, 
     DEFAULT_QUALITIES, DEFAULT_BITRATE, DEFAULT_QUALITY, ICON_PATH
 )
-from utils import get_platform_fonts, calculate_window_size, load_thumbnail, load_icon
+from utils import get_platform_fonts, calculate_window_size, load_thumbnail, load_icon, settings_manager
 from models import DownloadConfig, VideoInfo, PlaylistInfo
 
 
@@ -108,11 +108,15 @@ class MainApplicationView:
         self.format_var = IntVar()
         self.playlist_var = IntVar()
         
-        # Set default values
-        self.bitrate_var.set(DEFAULT_BITRATE)
-        self.quality_var.set(DEFAULT_QUALITY)
-        self.format_var.set(1)  # MP3
-        self.playlist_var.set(1)  # No playlist
+        # Load saved preferences
+        preferences = settings_manager.get_last_format_preferences()
+        
+        # Set values from preferences
+        self.bitrate_var.set(preferences.get("bitrate", DEFAULT_BITRATE))
+        self.quality_var.set(preferences.get("quality", DEFAULT_QUALITY))
+        self.format_var.set(preferences.get("format_var", 1))  # MP3 by default
+        # For playlist_var: 0 = Yes, 1 = No (inverted logic)
+        self.playlist_var.set(0 if preferences.get("playlist_mode", False) else 1)
     
     def setup_widgets(self):
         """Create and layout all GUI widgets."""
@@ -129,8 +133,9 @@ class MainApplicationView:
     def create_url_input(self):
         """Create URL input field."""
         self.url_entry = ttk.Entry(self.root, width=74, textvariable=self.url_var)
-        self.url_entry.insert(0, 'Enter a youtube URL')
-        self.url_entry.bind("<FocusIn>", lambda args: self.url_entry.delete('0', 'end'))
+        self.url_entry.insert(0, 'Enter a video URL')
+        self.url_entry.bind("<FocusIn>", self._on_url_focus_in)
+        self.url_entry.bind("<FocusOut>", self._on_url_focus_out)
         self.url_entry.grid(sticky=tk.W, row=0, column=0, pady=10, padx=5)
     
     def create_path_input(self):
@@ -143,8 +148,17 @@ class MainApplicationView:
             textvariable=self.folder_path, 
             width=59
         )
-        self.path_entry.insert(0, 'Choose a path for your file')
-        self.path_entry.bind("<FocusIn>", lambda args: self.path_entry.delete('0', 'end'))
+        
+        # Load the last used directory or set placeholder
+        last_directory = settings_manager.get_last_download_directory()
+        if last_directory:
+            self.folder_path.set(last_directory)
+        else:
+            # Always show placeholder when no directory is saved
+            self.path_entry.insert(0, 'Choose a path for your file')
+            self.path_entry.bind("<FocusIn>", self._on_path_focus_in)
+            self.path_entry.bind("<FocusOut>", self._on_path_focus_out)
+        
         self.path_entry.grid(row=0, column=0, padx=5, pady=5)
         
         self.browse_button = ttk.Button(
@@ -186,13 +200,23 @@ class MainApplicationView:
         )
         self.mp4_radio.grid(row=0, column=3)
         
-        # Default to bitrate menu (MP3)
-        self.quality_menu = ttk.OptionMenu(
-            self.frame1, 
-            self.bitrate_var, 
-            DEFAULT_BITRATE, 
-            *DEFAULT_BITRATES
-        )
+        # Create the appropriate menu based on saved format
+        if self.format_var.get() == 1:  # MP3
+            self.quality_menu = ttk.OptionMenu(
+                self.frame1, 
+                self.bitrate_var, 
+                self.bitrate_var.get(), 
+                *DEFAULT_BITRATES,
+                command=self._on_bitrate_changed
+            )
+        else:  # MP4
+            self.quality_menu = ttk.OptionMenu(
+                self.frame1, 
+                self.quality_var, 
+                self.quality_var.get(), 
+                *DEFAULT_QUALITIES,
+                command=self._on_quality_changed
+            )
         self.quality_menu.grid(row=0, column=4)
     
     def create_playlist_selection(self):
@@ -225,6 +249,10 @@ class MainApplicationView:
             cursor="hand2"
         )
         self.yes_playlist_radio.grid(sticky=tk.W, row=0, column=3, padx=5)
+        
+        # Show playlist options if playlist mode was previously selected
+        if self.playlist_var.get() == 0:  # Playlist mode enabled
+            self.show_playlist_options()
     
     def create_convert_button(self):
         """Create the main convert button."""
@@ -303,8 +331,9 @@ class MainApplicationView:
         self.quality_menu = ttk.OptionMenu(
             self.frame1, 
             self.quality_var, 
-            DEFAULT_QUALITY, 
-            *DEFAULT_QUALITIES
+            self.quality_var.get(), 
+            *DEFAULT_QUALITIES,
+            command=self._on_quality_changed
         )
         self.quality_menu.grid(row=0, column=4)
     
@@ -314,8 +343,9 @@ class MainApplicationView:
         self.quality_menu = ttk.OptionMenu(
             self.frame1, 
             self.bitrate_var, 
-            DEFAULT_BITRATE, 
-            *DEFAULT_BITRATES
+            self.bitrate_var.get(), 
+            *DEFAULT_BITRATES,
+            command=self._on_bitrate_changed
         )
         self.quality_menu.grid(row=0, column=4)
     
@@ -463,11 +493,34 @@ class MainApplicationView:
     
     def get_download_config(self) -> DownloadConfig:
         """Create DownloadConfig from current UI state."""
+        # Validate URL first
+        url_valid, url_error = self._validate_url()
+        if not url_valid:
+            self._show_url_tooltip(url_error)
+            return None
+        
+        # Validate download path
+        if not self._validate_download_path():
+            self._show_path_tooltip()
+            return None
+        
         config = DownloadConfig()
-        config.url = self.url_var.get()
+        config.url = self.url_var.get().strip()
         config.output_directory = self.folder_path.get()
         config.file_format = "mp3" if self.format_var.get() == 1 else "mp4"
         config.is_playlist = self.playlist_var.get() == 0
+        
+        # Save the output directory as the last used directory
+        if config.output_directory and config.output_directory != 'Choose a path for your file':
+            settings_manager.set_last_download_directory(config.output_directory)
+        
+        # Save all format preferences
+        settings_manager.save_format_preferences(
+            format_var=self.format_var.get(),
+            bitrate=self.bitrate_var.get(),
+            quality=self.quality_var.get(),
+            playlist_mode=config.is_playlist
+        )
         
         if config.file_format == "mp3":
             config.bitrate = self.bitrate_var.get().split("Kbps")[0]
@@ -606,6 +659,8 @@ class MainApplicationView:
             print(f"Selected directory: {filename}")  # Debug log
             if filename:  # Only set if user didn't cancel
                 self.folder_path.set(filename)
+                # Save the selected directory for future use
+                settings_manager.set_last_download_directory(filename)
                 print(f"Path set to: {self.folder_path.get()}")  # Debug log
         except Exception as e:
             print(f"Error in browse click: {e}")  # Debug log
@@ -613,29 +668,138 @@ class MainApplicationView:
         if self.on_browse_callback:
             self.on_browse_callback()
     
+    def _on_path_focus_in(self, event):
+        """Handle path entry focus in - clear placeholder if needed."""
+        if self.folder_path.get() == 'Choose a path for your file':
+            self.path_entry.delete('0', 'end')
+    
+    def _on_path_focus_out(self, event):
+        """Handle path entry focus out - restore placeholder if empty."""
+        if not self.folder_path.get().strip():
+            self.path_entry.delete('0', 'end')
+            self.path_entry.insert(0, 'Choose a path for your file')
+    
+    def _on_url_focus_in(self, event):
+        """Handle URL entry focus in - clear placeholder if needed."""
+        if self.url_var.get() == 'Enter a video URL':
+            self.url_entry.delete('0', 'end')
+    
+    def _on_url_focus_out(self, event):
+        """Handle URL entry focus out - restore placeholder if empty."""
+        if not self.url_var.get().strip():
+            self.url_entry.delete('0', 'end')
+            self.url_entry.insert(0, 'Enter a video URL')
+    
+    def _validate_download_path(self) -> bool:
+        """Validate that a download path has been selected."""
+        path = self.folder_path.get()
+        return path and path != 'Choose a path for your file' and path.strip() != ""
+    
+    def _show_path_tooltip(self):
+        """Show tooltip indicating that a download path must be selected."""
+        # Create a simple tooltip-like message
+        import tkinter.messagebox as messagebox
+        messagebox.showwarning(
+            "Path Required", 
+            "Please select a download directory before starting the download.\n\nClick the 'Browse' button to choose a folder."
+        )
+    
+    def _validate_url(self) -> tuple[bool, str]:
+        """Validate the URL and return (is_valid, error_message)."""
+        url = self.url_var.get().strip()
+        
+        if not url or url == 'Enter a video URL':
+            return False, "Please enter a video URL before starting the download."
+        
+        # Basic URL validation
+        if not (url.startswith('http://') or url.startswith('https://')):
+            return False, "Please enter a valid URL starting with http:// or https://"
+        
+        return True, ""
+    
+    def _show_url_tooltip(self, error_message: str):
+        """Show tooltip with URL error message."""
+        import tkinter.messagebox as messagebox
+        messagebox.showwarning("Invalid URL", error_message)
+    
+    def show_ytdlp_error(self, error_message: str):
+        """Show yt-dlp error in a tooltip/messagebox."""
+        import tkinter.messagebox as messagebox
+        # Clean up the error message for better presentation
+        clean_message = error_message.replace("ERROR: ", "").strip()
+        messagebox.showerror("Download Error", clean_message)
+    
     def _on_convert_click(self):
         if self.on_convert_callback:
             self.on_convert_callback()
     
     def _on_mp3_selected(self):
         self.switch_to_bitrate_menu()
+        # Save the format preference immediately
+        settings_manager.save_format_preferences(
+            format_var=1,
+            bitrate=self.bitrate_var.get(),
+            quality=self.quality_var.get(),
+            playlist_mode=(self.playlist_var.get() == 0)
+        )
         if self.on_format_change_callback:
             self.on_format_change_callback("mp3")
     
     def _on_mp4_selected(self):
         self.switch_to_quality_menu()
+        # Save the format preference immediately
+        settings_manager.save_format_preferences(
+            format_var=2,
+            bitrate=self.bitrate_var.get(),
+            quality=self.quality_var.get(),
+            playlist_mode=(self.playlist_var.get() == 0)
+        )
         if self.on_format_change_callback:
             self.on_format_change_callback("mp4")
     
     def _on_playlist_selected(self):
         self.show_playlist_options()
+        # Save the playlist preference immediately
+        settings_manager.save_format_preferences(
+            format_var=self.format_var.get(),
+            bitrate=self.bitrate_var.get(),
+            quality=self.quality_var.get(),
+            playlist_mode=True
+        )
         if self.on_playlist_change_callback:
             self.on_playlist_change_callback(True)
     
     def _on_no_playlist_selected(self):
         self.hide_playlist_options()
+        # Save the playlist preference immediately
+        settings_manager.save_format_preferences(
+            format_var=self.format_var.get(),
+            bitrate=self.bitrate_var.get(),
+            quality=self.quality_var.get(),
+            playlist_mode=False
+        )
         if self.on_playlist_change_callback:
             self.on_playlist_change_callback(False)
+    
+    def _on_bitrate_changed(self, selected_value):
+        """Handle bitrate selection change."""
+        # Save the bitrate preference immediately
+        settings_manager.save_format_preferences(
+            format_var=self.format_var.get(),
+            bitrate=selected_value,
+            quality=self.quality_var.get(),
+            playlist_mode=(self.playlist_var.get() == 0)
+        )
+    
+    def _on_quality_changed(self, selected_value):
+        """Handle quality selection change."""
+        # Save the quality preference immediately
+        settings_manager.save_format_preferences(
+            format_var=self.format_var.get(),
+            bitrate=self.bitrate_var.get(),
+            quality=selected_value,
+            playlist_mode=(self.playlist_var.get() == 0)
+        )
     
     def run(self):
         """Start the main event loop."""

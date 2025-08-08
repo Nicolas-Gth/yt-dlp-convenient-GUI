@@ -132,8 +132,8 @@ class DownloadController:
         """Set the callback function for download completion."""
         self.completion_callback = callback
     
-    def fetch_video_info(self, config: DownloadConfig) -> Optional[Dict]:
-        """Fetch video information without downloading."""
+    def fetch_video_info(self, config: DownloadConfig) -> tuple[Optional[Dict], Optional[str]]:
+        """Fetch video information without downloading. Returns (info, error_message)."""
         ydl_opts = {
             'verbose': config.verbose,
             'quiet': True,
@@ -149,22 +149,57 @@ class DownloadController:
         
         try:
             self.video_infos = yt_dlp.YoutubeDL(ydl_opts).extract_info(config.url, download=False)
-            return self.video_infos
+            
+            # Check if video_infos is None or empty (which happens with ignoreerrors=True for DRM sites)
+            if not self.video_infos:
+                # Check if this is a known DRM-protected site
+                if ("spotify.com" in config.url.lower() or 
+                    "netflix.com" in config.url.lower() or
+                    "disney" in config.url.lower() or
+                    "hulu.com" in config.url.lower() or
+                    "amazon" in config.url.lower()):
+                    return None, "This content is protected by DRM and cannot be downloaded.\n\nDRM (Digital Rights Management) prevents downloading from services like Spotify, Netflix, etc."
+                else:
+                    return None, "Could not retrieve video information. Please check the URL."
+            
+            return self.video_infos, None
+        except yt_dlp.utils.ExtractorError as error:
+            error_message = str(error)
+            
+            # Handle ExtractorError specifically (includes DRM errors)
+            if ("DRM protection" in error_message or "DRM protected" in error_message or 
+                "use DRM protection" in error_message or "known to use DRM" in error_message):
+                return None, "This content is protected by DRM and cannot be downloaded.\n\nDRM (Digital Rights Management) prevents downloading from services like Spotify, Netflix, etc."
+            else:
+                clean_error = error_message.replace("ERROR: ", "").strip()
+                return None, f"Download failed: {clean_error}"
         except yt_dlp.utils.DownloadError as error:
-            print(f"Error fetching video info: {error}")
-            return self._retry_fetch_info(config, ydl_opts)
-    
-    def _retry_fetch_info(self, config: DownloadConfig, ydl_opts: Dict) -> Optional[Dict]:
-        """Retry fetching video info on error."""
-        while True:
-            print("There was a problem during the fetching, automatically restarting!")
-            try:
-                self.video_infos = yt_dlp.YoutubeDL(ydl_opts).extract_info(config.url, download=False)
-                return self.video_infos
-            except yt_dlp.utils.DownloadError:
-                continue
-            except Exception:
-                return None
+            error_message = str(error)
+            
+            # Try to extract meaningful error messages
+            if ("DRM protection" in error_message or "DRM protected" in error_message or 
+                "use DRM protection" in error_message or "known to use DRM" in error_message):
+                return None, "This content is protected by DRM and cannot be downloaded.\n\nDRM (Digital Rights Management) prevents downloading from services like Spotify, Netflix, etc."
+            elif "Video unavailable" in error_message:
+                return None, "This video is unavailable or has been removed."
+            elif "Private video" in error_message:
+                return None, "This video is private and cannot be downloaded."
+            elif "This video is only available for Music Premium members" in error_message:
+                return None, "This video requires YouTube Music Premium."
+            elif "Video not found" in error_message or "does not exist" in error_message:
+                return None, "Video not found. Please check the URL."
+            elif "Unsupported URL" in error_message:
+                return None, "Unsupported URL format. Please check the URL."
+            elif "Sign in to confirm your age" in error_message:
+                return None, "This video requires age verification and cannot be downloaded."
+            elif "This video is not available" in error_message:
+                return None, "This video is not available in your region or has been removed."
+            else:
+                # For other errors, show the actual yt-dlp error message
+                clean_error = error_message.replace("ERROR: ", "").strip()
+                return None, f"Download failed: {clean_error}"
+        except Exception as e:
+            return None, f"Unexpected error: {str(e)}"
     
     def start_download(self, config: DownloadConfig):
         """Start the download process in a separate thread."""

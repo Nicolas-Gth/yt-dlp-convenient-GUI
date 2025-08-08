@@ -9,6 +9,10 @@ build
 # Custom config files
 src/config/cookies.txt
 
+# User settings and configuration
+yt-dlp-gui-config.json
+**/yt-dlp-gui-config.json
+
 # Misc
 main.spec
 desktop.ini
