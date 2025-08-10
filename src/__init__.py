@@ -13,8 +13,6 @@ Architecture:
 - utils/: Helper functions and utilities
 """
 
-from .version import __version__
-
 __author__ = "Nicolas-Gth"
 __description__ = "A convenient GUI for yt-dlp with native desktop integration"
 

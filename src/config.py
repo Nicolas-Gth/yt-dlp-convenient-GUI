@@ -3,22 +3,11 @@ Configuration and constants for the yt-dlp GUI application.
 """
 import os
 
-# Import version from the version module
-try:
-    from version import __version__
-except ImportError:
-    # Fallback for when this module is imported from outside the package
-    import sys
-    from pathlib import Path
-    # Add the src directory to path if not already there
-    src_dir = Path(__file__).parent
-    if str(src_dir) not in sys.path:
-        sys.path.insert(0, str(src_dir))
-    from version import __version__
+# Application version (single source of truth)
+APP_VERSION = "2.0.0"
 
 # Application constants
-APP_TITLE = f"yt-dlp Convenient GUI [v{__version__}] - Made by Nicolas-Gth"
-APP_VERSION = __version__
+APP_TITLE = f"yt-dlp Convenient GUI [v{APP_VERSION}] - Made by Nicolas-Gth"
 
 # Default window dimensions
 DEFAULT_WINDOW_SIZE = {
