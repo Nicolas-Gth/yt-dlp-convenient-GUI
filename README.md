@@ -6,26 +6,27 @@ A simple and intuitive graphical interface for yt-dlp that allows you to downloa
 ## Quick Start
 
 ### Windows Users
-**Simply double-click `run.bat`** - Everything will be installed automatically!
+Double-click `run.bat`
 
-The script will:
-- Install Python (if needed)
-- Install all dependencies
-- Download FFmpeg locally
-- Launch the application
-
-### Linux/macOS Users
+### macOS & Linux Users
+Open a terminal, then:
 ```bash
-# Install dependencies
-pip install -r requirements.txt
-
-# Install FFmpeg (if not already installed)
-# Ubuntu/Debian: sudo apt install ffmpeg
-# macOS: brew install ffmpeg
-
-# Run the application
-python3 run.py
+# Go into the project main directory
+cd /path/to/the/app/folder
+# Run the script
+./run.sh
 ```
+If you have a permission issue you can try
+```bash
+# Make executable
+chmod +x run.sh
+```
+
+The script automatically:
+- Detects your OS and distribution
+- Installs Python 3, pip, and FFmpeg using your system's package manager
+- Installs all Python dependencies
+- Launches the application
 
 ## Features
 
@@ -48,6 +49,12 @@ python3 run.py
 - If Python installation fails, restart your computer and run `run.bat` again
 - For antivirus issues, add the project folder to exceptions
 
-### Linux/macOS
-- Make sure FFmpeg is installed: `ffmpeg -version`
-- Check Python version: `python3 --version` (3.8+ required)
+### macOS & Linux
+- Make sure the script is executable: `chmod +x run.sh`
+- For permission issues, the script will prompt for your password when needed
+- If your distribution isn't supported, install manually:
+  ```bash
+  # Install Python 3, pip, and FFmpeg using your package manager
+  pip3 install -r requirements.txt
+  python3 run.py
+  ```
