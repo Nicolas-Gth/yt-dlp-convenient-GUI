@@ -4,7 +4,7 @@
 A simple and intuitive graphical interface for yt-dlp that allows you to download videos and audio from YouTube and other platforms with ease.
 
 ## Quick Start
-First download the [.zip archive](https://github.com/Nicolas-Gth/yt-dlp-convenient-GUI/archive/refs/heads/main.zip) or clone the project with `git clone https://github.com/Nicolas-Gth/yt-dlp-convenient-GUI.git`.
+First download and extract the [.zip archive](https://github.com/Nicolas-Gth/yt-dlp-convenient-GUI/archive/refs/heads/main.zip) or clone the project with `git clone https://github.com/Nicolas-Gth/yt-dlp-convenient-GUI.git`.
 ### Windows Users
 Double-click `run.bat`
 
@@ -12,7 +12,7 @@ Double-click `run.bat`
 Open a terminal, then:
 ```bash
 # Go into the project main directory
-cd /path/to/the/app/folder
+cd /path/to/the/extracted/app/folder
 # Run the script
 ./run.sh
 ```
