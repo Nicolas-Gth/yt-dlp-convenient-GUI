@@ -165,18 +165,15 @@ if "%LOCAL%"=="%REMOTE%" (
     echo [UPDATE] %BEHIND% new commit(s) available
     set /p update_response="Update now? (Y/n): "
     if /i not "%update_response%"=="n" (
-        git pull --ff-only >nul 2>&1
+        rem Force reset to remote (overwrites all local changes)
+        git reset --hard origin/main >nul 2>&1
+        if %errorLevel% neq 0 (
+            git reset --hard origin/master >nul 2>&1
+        )
         if %errorLevel% == 0 (
             echo [OK] Updated successfully!
         ) else (
-            echo [WARN] Auto-update failed, trying with rebase...
-            git pull --rebase >nul 2>&1
-            if %errorLevel% == 0 (
-                echo [OK] Updated successfully!
-            ) else (
-                echo [ERROR] Update failed. You may have local conflicts.
-                echo You can manually update with: git pull
-            )
+            echo [ERROR] Update failed.
         )
     ) else (
         echo [SKIP] Update skipped

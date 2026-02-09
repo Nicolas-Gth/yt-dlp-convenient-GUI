@@ -382,16 +382,19 @@ check_for_updates() {
         echo -e "${YELLOW}Update now? (Y/n):${NC}"
         read -r update_response
         if [[ ! "$update_response" =~ ^[Nn]$ ]]; then
-            if git pull --ff-only 2>/dev/null; then
+            # Determine remote branch
+            local remote_branch
+            if git rev-parse origin/main >/dev/null 2>&1; then
+                remote_branch="origin/main"
+            else
+                remote_branch="origin/master"
+            fi
+            # Force reset to remote (overwrites all local changes)
+            git reset --hard "$remote_branch" 2>/dev/null
+            if [[ $? -eq 0 ]]; then
                 echo -e "${GREEN}[OK]${NC} Updated successfully!"
             else
-                echo -e "${YELLOW}[WARN]${NC} Auto-update failed (local changes?). Trying with rebase..."
-                if git pull --rebase 2>/dev/null; then
-                    echo -e "${GREEN}[OK]${NC} Updated successfully!"
-                else
-                    echo -e "${RED}[ERROR]${NC} Update failed. You may have local conflicts."
-                    echo -e "${YELLOW}You can manually update with: git pull${NC}"
-                fi
+                echo -e "${RED}[ERROR]${NC} Update failed."
             fi
         else
             echo -e "${YELLOW}[SKIP]${NC} Update skipped"
