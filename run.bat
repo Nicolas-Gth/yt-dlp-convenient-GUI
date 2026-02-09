@@ -108,6 +108,9 @@ echo.
 :: Add FFmpeg to PATH
 if exist "ffmpeg\bin" set "PATH=%CD%\ffmpeg\bin;%PATH%"
 
+:: Check for updates from GitHub
+call :check_updates
+
 :: Final verification before launch
 python --version >nul 2>&1
 if %errorLevel% neq 0 (
@@ -124,3 +127,60 @@ if %errorLevel% neq 0 (
     echo [ERROR] Launch error
     pause
 )
+goto :eof
+
+:check_updates
+git --version >nul 2>&1
+if %errorLevel% neq 0 (
+    echo [SKIP] git is not installed, skipping update check
+    goto :eof
+)
+git rev-parse --is-inside-work-tree >nul 2>&1
+if %errorLevel% neq 0 (
+    echo [SKIP] Not a git repository, skipping update check
+    goto :eof
+)
+echo Checking for updates...
+git fetch origin >nul 2>&1
+if %errorLevel% neq 0 (
+    echo [SKIP] Could not reach GitHub (no internet?)
+    goto :eof
+)
+for /f %%a in ('git rev-parse HEAD') do set LOCAL=%%a
+for /f %%a in ('git rev-parse origin/main 2^>nul') do set REMOTE=%%a
+if not defined REMOTE (
+    for /f %%a in ('git rev-parse origin/master 2^>nul') do set REMOTE=%%a
+)
+if not defined REMOTE (
+    echo [SKIP] Could not determine remote branch
+    goto :eof
+)
+if "%LOCAL%"=="%REMOTE%" (
+    echo [OK] Already up to date
+) else (
+    for /f %%a in ('git rev-list --count HEAD..origin/main 2^>nul') do set BEHIND=%%a
+    if not defined BEHIND (
+        for /f %%a in ('git rev-list --count HEAD..origin/master 2^>nul') do set BEHIND=%%a
+    )
+    echo [UPDATE] %BEHIND% new commit(s) available
+    set /p update_response="Update now? (Y/n): "
+    if /i not "%update_response%"=="n" (
+        git pull --ff-only >nul 2>&1
+        if %errorLevel% == 0 (
+            echo [OK] Updated successfully!
+        ) else (
+            echo [WARN] Auto-update failed, trying with rebase...
+            git pull --rebase >nul 2>&1
+            if %errorLevel% == 0 (
+                echo [OK] Updated successfully!
+            ) else (
+                echo [ERROR] Update failed. You may have local conflicts.
+                echo You can manually update with: git pull
+            )
+        )
+    ) else (
+        echo [SKIP] Update skipped
+    )
+)
+echo.
+goto :eof

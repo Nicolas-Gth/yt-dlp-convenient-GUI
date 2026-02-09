@@ -345,8 +345,15 @@ launch_app() {
 
 # Function to check for updates from GitHub
 check_for_updates() {
-    # Only check if we're in a git repo
-    if ! command_exists git || ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    # Only check if git is available and we're in a git repo
+    if ! command_exists git; then
+        echo -e "${YELLOW}[SKIP]${NC} git is not installed, skipping update check"
+        echo
+        return
+    fi
+    if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        echo -e "${YELLOW}[SKIP]${NC} Not a git repository, skipping update check"
+        echo
         return
     fi
 
