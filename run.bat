@@ -112,6 +112,9 @@ if exist "ffmpeg\bin" set "PATH=%CD%\ffmpeg\bin;%PATH%"
 :: Check for updates from GitHub
 call :check_updates
 
+:: Update yt-dlp (critical to avoid 403 errors from YouTube)
+call :update_ytdlp
+
 :: Final verification before launch
 python --version >nul 2>&1
 if %errorLevel% neq 0 (
@@ -179,6 +182,16 @@ if "%LOCAL%"=="%REMOTE%" (
     ) else (
         echo [SKIP] Update skipped
     )
+)
+echo.
+goto :eof
+:update_ytdlp
+echo Checking for yt-dlp updates...
+pip install --upgrade yt-dlp >nul 2>&1
+if %errorLevel% == 0 (
+    echo [OK] yt-dlp is up to date
+) else (
+    echo [WARN] Could not update yt-dlp
 )
 echo.
 goto :eof

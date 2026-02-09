@@ -403,8 +403,29 @@ check_for_updates() {
     echo
 }
 
+# Function to update yt-dlp
+update_ytdlp() {
+    echo -e "${YELLOW}Checking for yt-dlp updates...${NC}"
+    if [[ -d "venv" ]]; then
+        source venv/bin/activate
+        pip install --upgrade yt-dlp >/dev/null 2>&1
+        local result=$?
+        deactivate
+    else
+        pip3 install --upgrade yt-dlp >/dev/null 2>&1 || pip install --upgrade yt-dlp >/dev/null 2>&1
+        local result=$?
+    fi
+    if [ $result -eq 0 ]; then
+        echo -e "${GREEN}[OK]${NC} yt-dlp is up to date"
+    else
+        echo -e "${YELLOW}[WARN]${NC} Could not update yt-dlp"
+    fi
+    echo
+}
+
 # Main script logic
 check_for_updates
+update_ytdlp
 echo -e "${YELLOW}Checking system components...${NC}"
 echo
 
