@@ -19,12 +19,13 @@ class SettingsManager:
             "last_download_directory": "",
             "window_geometry": "",
             "last_format": "mp3",  # "mp3" or "mp4"
-            "last_bitrate": "192Kbps",
+            "last_bitrate": "Best",
             "last_quality": "720p",
             "last_playlist_mode": False,  # True for playlist, False for single video
             "last_format_var": 1,  # 1 for MP3, 2 for MP4
             "last_normalize_volume": False,
-            "last_normalize_target": -14.0
+            "last_normalize_target": -14.0,
+            "last_enrich_metadata": False
         }
         
     def _get_config_directory(self) -> Path:
@@ -104,15 +105,17 @@ class SettingsManager:
         settings = self.load_settings()
         return {
             "format_var": settings.get("last_format_var", 1),
-            "bitrate": settings.get("last_bitrate", "192Kbps"),
+            "bitrate": settings.get("last_bitrate", "Best"),
             "quality": settings.get("last_quality", "720p"),
             "playlist_mode": settings.get("last_playlist_mode", False),
             "normalize_volume": settings.get("last_normalize_volume", False),
-            "normalize_target": settings.get("last_normalize_target", -14.0)
+            "normalize_target": settings.get("last_normalize_target", -14.0),
+            "enrich_metadata": settings.get("last_enrich_metadata", False)
         }
     
     def save_format_preferences(self, format_var: int, bitrate: str, quality: str, playlist_mode: bool,
-                                normalize_volume: bool = False, normalize_target: float = -14.0):
+                                normalize_volume: bool = False, normalize_target: float = -14.0,
+                                enrich_metadata: bool = False):
         """Save format preferences."""
         settings = self.load_settings()
         settings["last_format_var"] = format_var
@@ -121,6 +124,7 @@ class SettingsManager:
         settings["last_playlist_mode"] = playlist_mode
         settings["last_normalize_volume"] = normalize_volume
         settings["last_normalize_target"] = normalize_target
+        settings["last_enrich_metadata"] = enrich_metadata
         self.save_settings(settings)
 
 

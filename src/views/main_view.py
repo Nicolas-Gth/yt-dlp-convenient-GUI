@@ -37,6 +37,7 @@ class MainApplicationView:
         self.on_convert_callback = None
         self.on_format_change_callback = None
         self.on_playlist_change_callback = None
+        self.on_stop_callback = None
     
     def setup_window(self):
         """Initialize the main window."""
@@ -44,6 +45,9 @@ class MainApplicationView:
         self.root.title(APP_TITLE)
         self.root.configure(bg=COLORS['background'])
         self.root.resizable(False, False)
+        
+        # Allow column 0 to expand so centered widgets work
+        self.root.columnconfigure(0, weight=1)
         
         # Set default background for all tk widgets
         self.root.option_add('*Background', COLORS['background'])
@@ -121,6 +125,9 @@ class MainApplicationView:
         # Normalize volume variables
         self.normalize_var = BooleanVar(value=preferences.get("normalize_volume", False))
         self.normalize_target_var = DoubleVar(value=preferences.get("normalize_target", DEFAULT_NORMALIZE_TARGET))
+        
+        # Enrich metadata variable
+        self.enrich_var = BooleanVar(value=preferences.get("enrich_metadata", False))
     
     def setup_widgets(self):
         """Create and layout all GUI widgets."""
@@ -129,6 +136,7 @@ class MainApplicationView:
         self.create_format_selection()
         self.create_playlist_selection()
         self.create_normalize_selection()
+        self.create_enrich_selection()
         self.create_convert_button()
         self.create_disclaimer()
         
@@ -322,7 +330,8 @@ class MainApplicationView:
             quality=self.quality_var.get(),
             playlist_mode=(self.playlist_var.get() == 0),
             normalize_volume=self.normalize_var.get(),
-            normalize_target=target
+            normalize_target=target,
+            enrich_metadata=self.enrich_var.get()
         )
     
     def _get_normalize_target(self) -> float:
@@ -333,6 +342,41 @@ class MainApplicationView:
             except ValueError:
                 return DEFAULT_NORMALIZE_TARGET
         return self.normalize_target_var.get()
+
+    def create_enrich_selection(self):
+        """Create metadata enrichment checkbox (HD cover + lyrics via MusicBrainz/LRCLIB)."""
+        self.frame_enrich = tk.LabelFrame(self.root, bg=COLORS['background'], border=0)
+        self.frame_enrich.grid(sticky=tk.W, row=5, column=0)
+        
+        self.enrich_check = ttk.Checkbutton(
+            self.frame_enrich,
+            text="  Enrich metadata (HD album cover + lyrics)",
+            variable=self.enrich_var,
+            command=self._on_enrich_toggled,
+            cursor="hand2"
+        )
+        self.enrich_check.grid(sticky=tk.W, row=0, column=0, padx=5, pady=5)
+        
+        # Info label
+        self.enrich_hint = ttk.Label(
+            self.frame_enrich,
+            text="via MusicBrainz, iTunes, LRCLIB, Genius",
+            font=("Arial", 7, "italic")
+        )
+        self.enrich_hint.grid(row=0, column=1, padx=2)
+    
+    def _on_enrich_toggled(self):
+        """Handle enrich metadata checkbox toggle."""
+        target = self._get_normalize_target()
+        settings_manager.save_format_preferences(
+            format_var=self.format_var.get(),
+            bitrate=self.bitrate_var.get(),
+            quality=self.quality_var.get(),
+            playlist_mode=(self.playlist_var.get() == 0),
+            normalize_volume=self.normalize_var.get(),
+            normalize_target=target,
+            enrich_metadata=self.enrich_var.get()
+        )
 
     def create_convert_button(self):
         """Create the main convert button."""
@@ -350,12 +394,12 @@ class MainApplicationView:
             activeforeground=COLORS['text_secondary'], 
             cursor="hand2"
         )
-        self.convert_button.grid(sticky=tk.W, row=5, column=0, pady=2, padx=110)
+        self.convert_button.grid(row=6, column=0, pady=2)
     
     def create_disclaimer(self):
         """Create the disclaimer text."""
         self.frame3 = tk.LabelFrame(self.root, bg=COLORS['background'], border=0)
-        self.frame3.grid(sticky=tk.W, row=7, column=0)
+        self.frame3.grid(sticky=tk.W, row=8, column=0)
         
         disclaimer_text = (
             "Legal Notice: This software is intended for downloading and converting YouTube content that is\n"
@@ -441,13 +485,113 @@ class MainApplicationView:
         )
         self.quality_menu.grid(row=0, column=4)
     
+    def disable_interactive_widgets(self):
+        """Disable all interactive widgets during download.
+        
+        For checkboxes and radiobuttons, we intercept click events
+        instead of using 'disabled' state, because the equilux theme hides
+        the checked indicator on disabled checkbuttons/radiobuttons.
+        """
+        self._widgets_locked = True
+        
+        # Truly disable entries, buttons, menus
+        for attr in ('url_entry', 'path_entry', 'browse_button', 'quality_menu'):
+            if hasattr(self, attr):
+                try:
+                    getattr(self, attr).configure(state='disabled')
+                except Exception:
+                    pass
+        
+        # For check/radio buttons: block interaction by intercepting clicks
+        self._lock_bind_ids = {}
+        lock_targets = [
+            'mp3_radio', 'mp4_radio',
+            'no_playlist_radio', 'yes_playlist_radio',
+            'normalize_check', 'enrich_check',
+        ]
+        for attr in lock_targets:
+            if hasattr(self, attr):
+                w = getattr(self, attr)
+                try:
+                    bid = w.bind('<Button-1>', lambda e: 'break')
+                    self._lock_bind_ids[attr] = bid
+                    w.configure(cursor='arrow')
+                except Exception:
+                    pass
+        
+        # Disable playlist spinboxes if visible
+        if hasattr(self, 'playlist_start_entry'):
+            try:
+                self.playlist_start_entry.configure(state='disabled')
+                self.playlist_end_entry.configure(state='disabled')
+            except Exception:
+                pass
+        # Disable normalize target entry if visible
+        if hasattr(self, 'normalize_target_entry'):
+            try:
+                self.normalize_target_entry.configure(state='disabled')
+            except Exception:
+                pass
+
+    def enable_interactive_widgets(self):
+        """Re-enable all interactive widgets after download."""
+        self._widgets_locked = False
+        
+        for attr in ('url_entry', 'path_entry', 'browse_button', 'quality_menu'):
+            if hasattr(self, attr):
+                try:
+                    getattr(self, attr).configure(state='normal')
+                except Exception:
+                    pass
+        
+        # Remove click-blocking binds from check/radio buttons
+        if hasattr(self, '_lock_bind_ids'):
+            for attr, bid in self._lock_bind_ids.items():
+                if hasattr(self, attr):
+                    try:
+                        getattr(self, attr).unbind('<Button-1>', bid)
+                        getattr(self, attr).configure(cursor='hand2')
+                    except Exception:
+                        pass
+            del self._lock_bind_ids
+        
+        if hasattr(self, 'playlist_start_entry'):
+            try:
+                self.playlist_start_entry.configure(state='normal')
+                self.playlist_end_entry.configure(state='normal')
+            except Exception:
+                pass
+        if hasattr(self, 'normalize_target_entry'):
+            try:
+                self.normalize_target_entry.configure(state='normal')
+            except Exception:
+                pass
+
     def show_progress_widgets(self, is_playlist: bool = False):
         """Show download progress widgets."""
+        self.disable_interactive_widgets()
         self.convert_button.destroy()
+        
+        # Create stop button where convert button was
+        self.stop_button = tk.Button(
+            self.root,
+            text="Stop download",
+            font=("Bahnschrift", 12),
+            command=self._on_stop_click,
+            border=0,
+            fg=COLORS['text_primary'],
+            bg="#a63333",
+            pady=5,
+            padx=10,
+            activebackground="#c94444",
+            activeforeground=COLORS['text_secondary'],
+            cursor="hand2"
+        )
+        self.stop_button.grid(row=6, column=0, pady=2)
         
         # Create progress frame
         self.progress_frame = tk.LabelFrame(self.root, bg=COLORS['background'], border=0)
-        self.progress_frame.grid(sticky=tk.W, row=6, column=0)
+        self.progress_frame.grid(sticky=tk.W, row=7, column=0)
         
         # Song name label
         self.song_label = ttk.Label(self.progress_frame, text="", anchor="w", justify="left")
@@ -515,15 +659,43 @@ class MainApplicationView:
     
     def hide_progress_widgets(self):
         """Hide progress widgets and restore convert button."""
+        # Remove stop button
+        if hasattr(self, 'stop_button') and self.stop_button.winfo_exists():
+            self.stop_button.destroy()
+            del self.stop_button
+        
         if hasattr(self, 'progress_frame'):
             for widget in self.progress_frame.winfo_children():
                 widget.destroy()
             self.progress_frame.grid_forget()
             del self.progress_frame
         
+        # Clean up normalize scrollable frame if it exists
+        if hasattr(self, 'normalize_outer_frame'):
+            self.normalize_outer_frame.destroy()
+            del self.normalize_outer_frame
+            if hasattr(self, '_normalize_labels'):
+                del self._normalize_labels
+            if hasattr(self, '_normalize_canvas'):
+                del self._normalize_canvas
+            if hasattr(self, '_normalize_inner_frame'):
+                del self._normalize_inner_frame
+            if hasattr(self, '_scroll_area'):
+                del self._scroll_area
+            if hasattr(self, '_info_item_count'):
+                del self._info_item_count
+        
         # Recreate convert button
         self.create_convert_button()
+        self.enable_interactive_widgets()
         self.adjust_window_size()  # Reset to base size
+    
+    def _on_stop_click(self):
+        """Handle stop button click."""
+        if hasattr(self, 'stop_button') and self.stop_button.winfo_exists():
+            self.stop_button.configure(state='disabled', text="Stopping...", bg="#666666", cursor="arrow")
+        if self.on_stop_callback:
+            self.on_stop_callback()
     
     def update_progress_info(self, video_info: VideoInfo, song_name: str, is_playlist: bool = False):
         """Update progress display with video information."""
@@ -580,45 +752,185 @@ class MainApplicationView:
                 self.total_progress_percent.configure(text=f" {percentage:.1f}%")
     
     def show_normalize_feedback(self, info: dict):
-        """Show normalization feedback below the progress widgets."""
+        """Show per-track summary feedback below the progress widgets.
+        
+        Each track gets one line combining: name, metadata, lyrics, volume.
+        Displays up to 5 items directly. After 5, a scrollbar appears
+        and the block stays at a fixed height.
+        """
         if not hasattr(self, 'progress_frame'):
             return
         
-        measured = info.get('measured_loudness', 0)
-        target = info.get('target', -14.0)
-        title = info.get('title', 'Unknown')
+        # Track item count for numbering
+        if not hasattr(self, '_info_item_count'):
+            self._info_item_count = 0
+        self._info_item_count += 1
+        num = self._info_item_count
         
-        # Determine the next available row in progress_frame
-        next_row = len(self.progress_frame.grid_slaves()) + 5
+        display_name = info.get('display_name', info.get('title', 'Unknown'))
         
-        # Build feedback text
-        diff = measured - target
-        if abs(diff) < 0.5:
-            feedback = f"🔊  \"{title}\" — Volume already close to target ({measured:.1f} LUFS ≈ {target:.1f} LUFS)"
-        elif diff > 0:
-            feedback = f"🔊  \"{title}\" — Volume reduced by {abs(diff):.1f} dB ({measured:.1f} → {target:.1f} LUFS)"
-        else:
-            feedback = f"🔊  \"{title}\" — Volume increased by {abs(diff):.1f} dB ({measured:.1f} → {target:.1f} LUFS)"
+        # Build parts list
+        parts = []
         
-        normalize_label = ttk.Label(
-            self.progress_frame,
+        # Metadata status
+        if info.get('metadata_found'):
+            parts.append("Metadatas")
+        elif info.get('type') == 'track_summary':
+            parts.append("No metadatas")
+        
+        # Lyrics status
+        if info.get('lyrics_found'):
+            parts.append("Lyrics")
+        elif info.get('type') == 'track_summary':
+            parts.append("No lyrics")
+        
+        # Volume status
+        volume = info.get('volume')
+        if volume:
+            measured = volume['measured']
+            target = volume['target']
+            diff = measured - target
+            if diff > 0:
+                parts.append(f"-{abs(diff):.1f} dB")
+            else:
+                parts.append(f"+{abs(diff):.1f} dB")
+        
+        separator = "  |  "
+        feedback = f"{num}. {display_name}{separator}{separator.join(parts)}" if parts else f"{num}. {display_name}"
+        
+        MAX_VISIBLE = 5
+        ITEM_HEIGHT = 22  # approximate height per label in pixels
+        
+        # Initialize the scrollable container on first call
+        if not hasattr(self, '_normalize_labels'):
+            self._normalize_labels = []
+            
+            # Determine the row for the normalize block (after progress widgets)
+            next_row = len(self.progress_frame.grid_slaves()) + 5
+            
+            # Outer frame holds header + canvas + scrollbar
+            self.normalize_outer_frame = tk.Frame(
+                self.progress_frame, bg=COLORS['background']
+            )
+            self.normalize_outer_frame.grid(
+                sticky=tk.W+tk.E, row=next_row, column=0, padx=5, pady=2
+            )
+            
+            # Header (fixed, does NOT scroll)
+            header_lbl = ttk.Label(
+                self.normalize_outer_frame,
+                text="Downloaded elements",
+                font=("Arial", 9, "bold"),
+                anchor="w",
+                justify="left"
+            )
+            header_lbl.pack(anchor='w', padx=2, pady=(2, 0))
+            sep = ttk.Separator(self.normalize_outer_frame, orient='horizontal')
+            sep.pack(fill='x', padx=2, pady=(1, 3))
+            
+            # Scrollable area frame (holds canvas + scrollbar side by side)
+            self._scroll_area = tk.Frame(
+                self.normalize_outer_frame, bg=COLORS['background']
+            )
+            self._scroll_area.pack(fill=tk.BOTH, expand=True)
+            
+            # Canvas for scrolling
+            self._normalize_canvas = tk.Canvas(
+                self._scroll_area,
+                bg=COLORS['background'],
+                highlightthickness=0,
+                borderwidth=0
+            )
+            self._normalize_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+            
+            # Inner frame inside the canvas
+            self._normalize_inner_frame = tk.Frame(
+                self._normalize_canvas, bg=COLORS['background']
+            )
+            self._normalize_canvas_window = self._normalize_canvas.create_window(
+                (0, 0), window=self._normalize_inner_frame, anchor='nw'
+            )
+            
+            # Scrollbar (hidden initially)
+            self._normalize_scrollbar = ttk.Scrollbar(
+                self._scroll_area,
+                orient=tk.VERTICAL,
+                command=self._normalize_canvas.yview
+            )
+            self._normalize_canvas.configure(yscrollcommand=self._normalize_scrollbar.set)
+            
+            # Bind resize
+            self._normalize_inner_frame.bind('<Configure>', self._on_normalize_frame_configure)
+            
+            # Bind mousewheel for scrolling
+            self._normalize_canvas.bind('<Enter>', self._bind_normalize_mousewheel)
+            self._normalize_canvas.bind('<Leave>', self._unbind_normalize_mousewheel)
+        
+        # Add the new label
+        lbl = ttk.Label(
+            self._normalize_inner_frame,
             text=feedback,
             font=("Arial", 8),
             anchor="w",
             justify="left"
         )
-        normalize_label.grid(sticky=tk.W, row=next_row, column=0, padx=7, pady=2)
+        lbl.pack(anchor='w', padx=2, pady=1)
+        self._normalize_labels.append(lbl)
         
-        # Refresh window size to accommodate new label
+        count = len(self._normalize_labels)
+        
+        if count <= MAX_VISIBLE:
+            # Grow canvas height to fit
+            new_height = count * ITEM_HEIGHT
+            self._normalize_canvas.configure(height=new_height, width=460)
+        else:
+            # Lock height at MAX_VISIBLE items and show scrollbar
+            self._normalize_canvas.configure(height=MAX_VISIBLE * ITEM_HEIGHT, width=445)
+            self._normalize_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        # Update scroll region and scroll to bottom
+        self._normalize_canvas.update_idletasks()
+        self._normalize_canvas.configure(scrollregion=self._normalize_canvas.bbox('all'))
+        self._normalize_canvas.yview_moveto(1.0)
+        
+        # Refresh window size
         self.adjust_window_size()
+    
+    def _on_normalize_frame_configure(self, event):
+        """Update scroll region when inner frame changes size."""
+        if hasattr(self, '_normalize_canvas'):
+            self._normalize_canvas.configure(scrollregion=self._normalize_canvas.bbox('all'))
+    
+    def _bind_normalize_mousewheel(self, event):
+        """Bind mousewheel to normalize canvas."""
+        if hasattr(self, '_normalize_canvas'):
+            self._normalize_canvas.bind_all('<Button-4>', self._on_normalize_mousewheel_up)
+            self._normalize_canvas.bind_all('<Button-5>', self._on_normalize_mousewheel_down)
+    
+    def _unbind_normalize_mousewheel(self, event):
+        """Unbind mousewheel from normalize canvas."""
+        if hasattr(self, '_normalize_canvas'):
+            self._normalize_canvas.unbind_all('<Button-4>')
+            self._normalize_canvas.unbind_all('<Button-5>')
+    
+    def _on_normalize_mousewheel_up(self, event):
+        """Scroll up."""
+        if hasattr(self, '_normalize_canvas'):
+            self._normalize_canvas.yview_scroll(-1, 'units')
+    
+    def _on_normalize_mousewheel_down(self, event):
+        """Scroll down."""
+        if hasattr(self, '_normalize_canvas'):
+            self._normalize_canvas.yview_scroll(1, 'units')
     
     def adjust_window_size(self, extra_height: int = 0):
         """Adjust window size to fit content automatically."""
         self.root.update_idletasks()
         req_width = self.root.winfo_reqwidth()
         req_height = self.root.winfo_reqheight() + extra_height
-        # Apply a minimum width so the window doesn't get too narrow
+        # Clamp width between minimum and maximum
         width = max(req_width, PLATFORM_SCALE['width_base'])
+        width = min(width, 560)  # Never wider than 560px
         self.root.geometry(f"{width}x{req_height}")
     
     def get_download_config(self) -> DownloadConfig:
@@ -641,6 +953,7 @@ class MainApplicationView:
         config.is_playlist = self.playlist_var.get() == 0
         config.normalize_volume = self.normalize_var.get()
         config.normalize_target = self._get_normalize_target()
+        config.enrich_metadata = self.enrich_var.get()
         
         # Save the output directory as the last used directory
         if config.output_directory and config.output_directory != 'Choose a path for your file':
@@ -653,13 +966,16 @@ class MainApplicationView:
             quality=self.quality_var.get(),
             playlist_mode=config.is_playlist,
             normalize_volume=config.normalize_volume,
-            normalize_target=config.normalize_target
+            normalize_target=config.normalize_target,
+            enrich_metadata=config.enrich_metadata
         )
         
         if config.file_format == "mp3":
-            config.bitrate = self.bitrate_var.get().split("Kbps")[0]
+            raw_bitrate = self.bitrate_var.get()
+            config.bitrate = "best" if raw_bitrate == "Best" else raw_bitrate.split("Kbps")[0]
         else:
-            config.quality = self.quality_var.get().split("p")[0]
+            raw_quality = self.quality_var.get()
+            config.quality = "best" if raw_quality == "Best" else raw_quality.split("p")[0]
         
         if config.is_playlist and hasattr(self, 'playlist_start_entry'):
             try:
@@ -696,13 +1012,16 @@ class MainApplicationView:
     
     def show_fetching_progress(self, is_playlist: bool = False):
         """Show fetching progress bar (determinate for playlists, indeterminate for single videos)."""
+        # Disable all interactive widgets
+        self.disable_interactive_widgets()
+        
         # Hide the convert button completely
         if hasattr(self, 'convert_button') and self.convert_button.winfo_exists():
             self.convert_button.grid_remove()
         
         # Create a progress frame where the button was
         self.fetching_frame = tk.LabelFrame(self.root, bg=COLORS['background'], border=0)
-        self.fetching_frame.grid(sticky=tk.W, row=5, column=0, pady=2, padx=110)
+        self.fetching_frame.grid(sticky=tk.W, row=6, column=0, pady=2, padx=110)
         
         # Progress label
         self.fetching_label = ttk.Label(
@@ -764,6 +1083,9 @@ class MainApplicationView:
                 widget.destroy()
             self.fetching_frame.grid_forget()
             del self.fetching_frame
+        
+        # Re-enable all interactive widgets
+        self.enable_interactive_widgets()
         
         # Restore the convert button
         if hasattr(self, 'convert_button') and self.convert_button.winfo_exists():
@@ -907,7 +1229,8 @@ class MainApplicationView:
             quality=self.quality_var.get(),
             playlist_mode=(self.playlist_var.get() == 0),
             normalize_volume=self.normalize_var.get(),
-            normalize_target=self._get_normalize_target()
+            normalize_target=self._get_normalize_target(),
+            enrich_metadata=self.enrich_var.get()
         )
         if self.on_format_change_callback:
             self.on_format_change_callback("mp3")
@@ -921,7 +1244,8 @@ class MainApplicationView:
             quality=self.quality_var.get(),
             playlist_mode=(self.playlist_var.get() == 0),
             normalize_volume=self.normalize_var.get(),
-            normalize_target=self._get_normalize_target()
+            normalize_target=self._get_normalize_target(),
+            enrich_metadata=self.enrich_var.get()
         )
         if self.on_format_change_callback:
             self.on_format_change_callback("mp4")
@@ -935,7 +1259,8 @@ class MainApplicationView:
             quality=self.quality_var.get(),
             playlist_mode=True,
             normalize_volume=self.normalize_var.get(),
-            normalize_target=self._get_normalize_target()
+            normalize_target=self._get_normalize_target(),
+            enrich_metadata=self.enrich_var.get()
         )
         if self.on_playlist_change_callback:
             self.on_playlist_change_callback(True)
@@ -949,7 +1274,8 @@ class MainApplicationView:
             quality=self.quality_var.get(),
             playlist_mode=False,
             normalize_volume=self.normalize_var.get(),
-            normalize_target=self._get_normalize_target()
+            normalize_target=self._get_normalize_target(),
+            enrich_metadata=self.enrich_var.get()
         )
         if self.on_playlist_change_callback:
             self.on_playlist_change_callback(False)
@@ -963,7 +1289,8 @@ class MainApplicationView:
             quality=self.quality_var.get(),
             playlist_mode=(self.playlist_var.get() == 0),
             normalize_volume=self.normalize_var.get(),
-            normalize_target=self._get_normalize_target()
+            normalize_target=self._get_normalize_target(),
+            enrich_metadata=self.enrich_var.get()
         )
     
     def _on_quality_changed(self, selected_value):
@@ -975,7 +1302,8 @@ class MainApplicationView:
             quality=selected_value,
             playlist_mode=(self.playlist_var.get() == 0),
             normalize_volume=self.normalize_var.get(),
-            normalize_target=self._get_normalize_target()
+            normalize_target=self._get_normalize_target(),
+            enrich_metadata=self.enrich_var.get()
         )
     
     def run(self):

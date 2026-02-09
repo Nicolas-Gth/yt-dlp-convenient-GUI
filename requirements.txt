@@ -2,5 +2,4 @@
 yt-dlp>=2023.12.30
 Pillow>=10.0.0
 ttkthemes>=3.2.2
-plyer>=2.1.0
 mutagen>=1.47.0

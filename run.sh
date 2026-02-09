@@ -59,13 +59,13 @@ check_python_deps() {
     # Check if venv exists and activate it
     if [[ -d "venv" ]]; then
         source venv/bin/activate
-        python -c "import yt_dlp, PIL, ttkthemes, plyer, mutagen" >/dev/null 2>&1
+        python -c "import yt_dlp, PIL, ttkthemes, mutagen" >/dev/null 2>&1
         local result=$?
         deactivate 2>/dev/null || true
         return $result
     else
         # If no venv, check system-wide
-        python3 -c "import yt_dlp, PIL, ttkthemes, plyer, mutagen" >/dev/null 2>&1
+        python3 -c "import yt_dlp, PIL, ttkthemes, mutagen" >/dev/null 2>&1
         return $?
     fi
 }
@@ -286,7 +286,7 @@ install_components() {
     if [[ -f "requirements.txt" ]]; then
         pip install -r requirements.txt
     else
-        pip install "yt-dlp>=2023.12.30" "Pillow>=10.0.0" "ttkthemes>=3.2.2" "plyer>=2.1.0" "mutagen>=1.47.0"
+        pip install "yt-dlp>=2023.12.30" "Pillow>=10.0.0" "ttkthemes>=3.2.2" "mutagen>=1.47.0"
     fi
     
     # Deactivate venv

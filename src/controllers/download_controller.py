@@ -5,28 +5,19 @@ import os
 import re
 import io
 import json
+import shutil
 import subprocess
 import threading
-import warnings
 from typing import Optional, Dict, Any, Callable
 import yt_dlp
 from config import (ICON_PATH)
-
-# Suppress plyer dbus warnings
-warnings.filterwarnings("ignore", message="The Python dbus package is not installed")
-
-try:
-    from plyer import notification
-    NOTIFICATIONS_AVAILABLE = True
-except ImportError:
-    NOTIFICATIONS_AVAILABLE = False
     
 from mutagen.id3 import ID3, APIC
 from mutagen.mp3 import MP3
 from mutagen.easyid3 import EasyID3
 
 from models import DownloadConfig, VideoInfo, PlaylistInfo, DownloadProgress
-from utils import crop_album_cover
+from utils import crop_album_cover, enrich_metadata, apply_enriched_metadata_mp3
 from config import get_ffmpeg_path, FILE_FORMATS
 
 
@@ -48,16 +39,33 @@ class CustomPostProcessor(yt_dlp.postprocessor.PostProcessor):
             print(f"Warning: File {file_path} not found. Conversion may have failed.")
             return [], video_infos
 
-        # Analyze loudness after normalization if enabled
-        if self.config.normalize_volume:
-            self._analyze_and_report_loudness(file_path, video_infos.get('title', 'Unknown'))
+        # --- Collect all info for this track's summary line ---
+        track_info = {
+            'type': 'track_summary',
+            'volume': None,
+            'metadata_found': False,
+            'lyrics_found': False,
+            'cover_found': False,
+        }
 
-        # Add metadata to the file
+        # Determine artist name
         try:
             artist_name = video_infos.get('artists', [video_infos.get('uploader', '').replace(" - Topic", "")])[0]
         except (KeyError, IndexError):
             artist_name = video_infos.get('uploader', '').replace(" - Topic", "")
-        
+
+        # Determine display name: "Artist - Track" for music, "Video Title" otherwise
+        track_name = video_infos.get('track')  # Only set on YT Music
+        if track_name and artist_name:
+            track_info['display_name'] = f"{artist_name} - {track_name}"
+        else:
+            track_info['display_name'] = video_infos.get('title', 'Unknown')
+
+        # Analyze loudness after normalization if enabled
+        if self.config.normalize_volume:
+            track_info['volume'] = self._analyze_loudness(file_path)
+
+        # Add metadata to the file
         if file_format == "mp3":
             self._add_mp3_metadata(file_path, video_infos, artist_name)
         
@@ -66,7 +74,11 @@ class CustomPostProcessor(yt_dlp.postprocessor.PostProcessor):
         
         # Add album cover for MP3 files
         if file_format == "mp3" and os.path.exists(new_file_path):
-            self._add_album_cover(new_file_path, video_infos)
+            self._add_album_cover(new_file_path, video_infos, track_info)
+
+        # Send combined summary line to UI
+        if self.normalize_callback:
+            self.normalize_callback(track_info)
 
         return [], video_infos
     
@@ -84,8 +96,8 @@ class CustomPostProcessor(yt_dlp.postprocessor.PostProcessor):
         except Exception as e:
             print(f"Warning: Could not add metadata to MP3 file: {e}")
     
-    def _analyze_and_report_loudness(self, file_path: str, title: str):
-        """Analyze the file loudness using ffmpeg and report via callback."""
+    def _analyze_loudness(self, file_path: str) -> dict:
+        """Analyze the file loudness using ffmpeg. Returns loudness info dict or None."""
         try:
             from config import get_ffmpeg_path
             ffmpeg_dir = get_ffmpeg_path()
@@ -110,19 +122,11 @@ class CustomPostProcessor(yt_dlp.postprocessor.PostProcessor):
                 loudness_data = json.loads(stderr[json_start:json_end])
                 input_i = float(loudness_data.get('input_i', 0))
                 target = self.config.normalize_target
-                
-                normalize_info = {
-                    'title': title,
-                    'measured_loudness': input_i,
-                    'target': target,
-                }
-                
-                print(f"Normalization: \"{title}\" measured at {input_i:.1f} LUFS (target: {target:.1f} LUFS)")
-                
-                if self.normalize_callback:
-                    self.normalize_callback(normalize_info)
+                print(f"Normalization: measured at {input_i:.1f} LUFS (target: {target:.1f} LUFS)")
+                return {'measured': input_i, 'target': target}
         except Exception as e:
             print(f"Warning: Could not analyze loudness: {e}")
+        return None
     
     def _sanitize_and_rename_file(self, file_path: str, video_infos: Dict, artist_name: str, file_format: str) -> str:
         """Sanitize filename and rename the file."""
@@ -139,26 +143,58 @@ class CustomPostProcessor(yt_dlp.postprocessor.PostProcessor):
             print(f"Warning: Could not rename file: {e}")
             return file_path
     
-    def _add_album_cover(self, file_path: str, video_infos: Dict):
-        """Add album cover to MP3 file."""
+    def _add_album_cover(self, file_path: str, video_infos: Dict, track_info: dict = None):
+        """Add album cover to MP3 file, with optional metadata enrichment."""
         thumbnail_url = video_infos.get('thumbnail', '')
-        if not thumbnail_url:
-            return
         
-        try:
-            album_cover_data = crop_album_cover(thumbnail_url)
-            if album_cover_data:
+        # Prepare the YouTube thumbnail as fallback cover
+        fallback_cover = None
+        if thumbnail_url:
+            try:
+                fallback_cover = crop_album_cover(thumbnail_url)
+            except Exception as e:
+                print(f"Warning: Could not crop YouTube thumbnail: {e}")
+        
+        # Try metadata enrichment if enabled
+        if self.config.enrich_metadata:
+            enriched = enrich_metadata(video_infos)
+            
+            if enriched:
+                if enriched.cover_data:
+                    print(f"  [metadata] ✓ HD album cover")
+                if enriched.synced_lyrics:
+                    print(f"  [metadata] ✓ Synced lyrics (LRC) embedded")
+                elif enriched.lyrics:
+                    print(f"  [metadata] ✓ Lyrics embedded")
+                
+                if not enriched.cover_data and fallback_cover:
+                    print(f"  [metadata] No HD cover found, using YouTube thumbnail")
+                
+                # Update track_info for the combined summary
+                if track_info is not None:
+                    track_info['cover_found'] = bool(enriched.cover_data)
+                    track_info['lyrics_found'] = bool(enriched.synced_lyrics or enriched.lyrics)
+                    track_info['metadata_found'] = bool(
+                        enriched.cover_data or enriched.lyrics or enriched.synced_lyrics or enriched.album
+                    )
+                
+                apply_enriched_metadata_mp3(file_path, enriched, fallback_cover)
+                return
+        
+        # Fallback: just embed the YouTube thumbnail
+        if fallback_cover:
+            try:
                 audio = ID3(file_path)
                 audio['APIC'] = APIC(
                     encoding=0,
                     mime='image/jpeg',
                     type=3,
                     desc=u'Cover',
-                    data=album_cover_data
+                    data=fallback_cover
                 )
                 audio.save()
-        except Exception as e:
-            print(f"Warning: Could not add album cover to MP3: {e}")
+            except Exception as e:
+                print(f"Warning: Could not add album cover to MP3: {e}")
 
 
 class DownloadController:
@@ -170,7 +206,11 @@ class DownloadController:
         self.progress_callback: Optional[Callable] = None
         self.completion_callback: Optional[Callable] = None
         self.normalize_callback: Optional[Callable] = None
+        self.cancel_callback: Optional[Callable] = None
         self.video_infos: Optional[Dict] = None
+        self._cancelled = False
+        self._current_config: Optional[DownloadConfig] = None
+        self._ydl_instance: Optional[yt_dlp.YoutubeDL] = None
         
     def set_progress_callback(self, callback: Callable):
         """Set the callback function for progress updates."""
@@ -183,6 +223,41 @@ class DownloadController:
     def set_normalize_callback(self, callback: Callable):
         """Set the callback function for normalization info."""
         self.normalize_callback = callback
+    
+    def set_cancel_callback(self, callback: Callable):
+        """Set the callback function for when download is cancelled."""
+        self.cancel_callback = callback
+    
+    def cancel_download(self):
+        """Cancel the current download and clean up partial files."""
+        self._cancelled = True
+        print("Download cancellation requested...")
+        
+        # Abort the yt-dlp instance if running
+        if self._ydl_instance:
+            try:
+                # yt-dlp checks this flag between downloads
+                self._ydl_instance._download_retcode = 1
+                # For the current file being downloaded, raise in progress hook
+            except Exception:
+                pass
+        
+        # Clean up partial files in output directory
+        if self._current_config:
+            self._cleanup_partial_files(self._current_config.output_directory)
+    
+    def _cleanup_partial_files(self, output_dir: str):
+        """Remove .part, .ytdl, and other temporary download files."""
+        if not output_dir or not os.path.isdir(output_dir):
+            return
+        try:
+            for f in os.listdir(output_dir):
+                fp = os.path.join(output_dir, f)
+                if os.path.isfile(fp) and (f.endswith('.part') or f.endswith('.ytdl') or f.endswith('.temp')):
+                    print(f"  Removing partial file: {f}")
+                    os.remove(fp)
+        except Exception as e:
+            print(f"Warning: could not clean up partial files: {e}")
     
     def fetch_video_info(self, config: DownloadConfig, fetch_progress_callback: Optional[Callable] = None) -> tuple[Optional[Dict], Optional[str]]:
         """Fetch video information without downloading. Returns (info, error_message)."""
@@ -283,6 +358,8 @@ class DownloadController:
     
     def start_download(self, config: DownloadConfig):
         """Start the download process in a separate thread."""
+        self._cancelled = False
+        self._current_config = config
         thread = threading.Thread(target=self._download_process, args=(config,))
         thread.daemon = True
         thread.start()
@@ -293,11 +370,21 @@ class DownloadController:
             ydl_opts = self._build_ydl_options(config)
             
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                self._ydl_instance = ydl
                 ydl.add_post_processor(
                     CustomPostProcessor(config, normalize_callback=self.normalize_callback),
                     when='post_process'
                 )
                 ydl.download([config.url])
+            
+            self._ydl_instance = None
+            
+            if self._cancelled:
+                self._cleanup_partial_files(config.output_directory)
+                print("Download cancelled.")
+                if self.cancel_callback:
+                    self.cancel_callback()
+                return
             
             self._send_completion_notification(config)
             
@@ -305,7 +392,21 @@ class DownloadController:
             if self.completion_callback:
                 self.completion_callback()
             
+        except (yt_dlp.utils.ExistingVideoReached, yt_dlp.utils.RejectedVideoReached):
+            # Raised by progress hook to abort the entire playlist immediately
+            self._ydl_instance = None
+            self._cleanup_partial_files(config.output_directory)
+            print("Download cancelled.")
+            if self.cancel_callback:
+                self.cancel_callback()
         except yt_dlp.utils.DownloadError as error:
+            self._ydl_instance = None
+            if self._cancelled:
+                self._cleanup_partial_files(config.output_directory)
+                print("Download cancelled.")
+                if self.cancel_callback:
+                    self.cancel_callback()
+                return
             print(f"Download error: {error}")
             self._retry_download(config)
     
@@ -322,7 +423,8 @@ class DownloadController:
             'noplaylist': not config.is_playlist,
             'progress_hooks': [self._progress_hook],
             'playliststart': config.playlist_start,
-            'playlistend': config.playlist_end
+            'playlistend': config.playlist_end,
+            'match_filter': self._cancel_filter,
         }
         
         if config.file_format == "mp3":
@@ -338,12 +440,17 @@ class DownloadController:
         
         if self.ffmpeg_path is not None:
             opts['ffmpeg_location'] = self.ffmpeg_path
+            extract_audio_pp = {
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'mp3',
+            }
+            # "Best" means no quality cap — let yt-dlp use the highest available
+            if config.bitrate and config.bitrate.lower() != 'best':
+                extract_audio_pp['preferredquality'] = config.bitrate
+            else:
+                extract_audio_pp['preferredquality'] = '0'  # 0 = best quality (VBR)
             opts['postprocessors'] = [
-                {
-                    'key': 'FFmpegExtractAudio',
-                    'preferredcodec': 'mp3',
-                    'preferredquality': config.bitrate
-                },
+                extract_audio_pp,
                 {'key': 'FFmpegMetadata', 'add_metadata': True}
             ]
             
@@ -364,7 +471,10 @@ class DownloadController:
     
     def _add_mp4_options(self, opts: Dict, config: DownloadConfig) -> Dict:
         """Add MP4-specific options."""
-        format_string = f'bestvideo[height<={config.quality}][vbr<=12000][ext=mp4]+bestaudio[ext=m4a]/best[vbr<=12000][ext=mp4]/best'
+        if config.quality and config.quality.lower() == 'best':
+            format_string = 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best'
+        else:
+            format_string = f'bestvideo[height<={config.quality}][vbr<=12000][ext=mp4]+bestaudio[ext=m4a]/best[vbr<=12000][ext=mp4]/best'
         opts['format'] = format_string
         
         if self.ffmpeg_path is not None:
@@ -390,8 +500,24 @@ class DownloadController:
         
         return opts
     
+    def _cancel_filter(self, info_dict, *, incomplete):
+        """Match filter that rejects all entries once download is cancelled.
+        
+        This runs before yt-dlp starts extracting/downloading each entry,
+        so it prevents wasted network requests after cancellation.
+        Returning a string means 'reject this entry with this reason'.
+        """
+        if self._cancelled:
+            raise yt_dlp.utils.ExistingVideoReached()
+        return None
+
     def _progress_hook(self, d: Dict):
         """Handle progress updates from yt-dlp."""
+        if self._cancelled:
+            # Use ExistingVideoReached to make yt-dlp abort the entire
+            # playlist loop immediately, instead of DownloadError which
+            # is caught by ignoreerrors and moves to the next entry.
+            raise yt_dlp.utils.ExistingVideoReached()
         if self.progress_callback:
             self.progress_callback(d, self.video_infos, self.progress)
     
@@ -411,18 +537,20 @@ class DownloadController:
                 title = self.video_infos.get('title', 'Unknown')
                 message = f"Video \"{title}\" has been downloaded."
             
-            # Try to send desktop notification
-            if NOTIFICATIONS_AVAILABLE:
-                try:
-                    notification.notify(
-                        title='Download Complete!',
-                        message=message,
-                        app_icon=ICON_PATH,
-                        timeout=10
-                    )
-                except Exception:
-                    # Fallback to console if notification fails
+            try:
+                if shutil.which("notify-send"):
+                    cmd = [
+                        "notify-send",
+                        "--app-name=yt-dlp GUI",
+                        "--expire-time=5000",
+                        "Download Complete!",
+                        message,
+                    ]
+                    # Add icon if available
+                    if ICON_PATH and os.path.isfile(ICON_PATH):
+                        cmd.insert(1, f"--icon={ICON_PATH}")
+                    subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                else:
                     print(f"Download Complete! {message}")
-            else:
-                # No notification library available
+            except Exception:
                 print(f"Download Complete! {message}")

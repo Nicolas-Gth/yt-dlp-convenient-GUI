@@ -28,7 +28,7 @@ if %errorLevel% neq 0 set componentsOK=0
 
 :: Check critical Python dependencies
 if %componentsOK% == 1 (
-    python -c "import yt_dlp, PIL, ttkthemes, plyer, mutagen" >nul 2>&1
+    python -c "import yt_dlp, PIL, ttkthemes, mutagen" >nul 2>&1
     if %errorLevel% neq 0 set componentsOK=0
 )
 
@@ -36,14 +36,16 @@ goto :eof
 goto :launch
 
 :install
-echo ▗▖  ▗▖▗▄▄▄▖    ▗▄▄▄ ▗▖   ▗▄▄▖                                          
-echo  ▝▚▞▘   █      ▐▌  █▐▌   ▐▌ ▐▌                                         
-echo   ▐▌    █  ▀▀▘ ▐▌  █▐▌   ▐▛▀▘                                          
-echo   ▐▌    █      ▐▙▄▄▀▐▙▄▄▖▐▌                                            
-echo  ▗▄▄▖ ▗▄▖ ▗▖  ▗▖▗▖  ▗▖▗▄▄▄▖▗▖  ▗▖▗▄▄▄▖▗▄▄▄▖▗▖  ▗▖▗▄▄▄▖   ▗▄▄▖▗▖ ▗▖▗▄▄▄▖
-echo ▐▌   ▐▌ ▐▌▐▛▚▖▐▌▐▌  ▐▌▐▌   ▐▛▚▖▐▌  █  ▐▌   ▐▛▚▖▐▌  █    ▐▌   ▐▌ ▐▌  █  
-echo ▐▌   ▐▌ ▐▌▐▌ ▝▜▌▐▌  ▐▌▐▛▀▀▘▐▌ ▝▜▌  █  ▐▛▀▀▘▐▌ ▝▜▌  █    ▐▌▝▜▌▐▌ ▐▌  █  
-echo ▝▚▄▄▖▝▚▄▞▘▐▌  ▐▌ ▝▚▞▘ ▐▙▄▄▖▐▌  ▐▌▗▄█▄▖▐▙▄▄▖▐▌  ▐▌  █    ▝▚▄▞▘▝▚▄▞▘▗▄█▄▖
+echo  __   ______         ____  _     ____
+echo  \ \ / /_   _        |  _ \| |   |  _ \
+echo   \ V /  | |   _____ | | | | |   | |_) |
+echo    | |   | |  |_____|| |_| | |___|  __/
+echo    |_|   |_|         |____/|_____|_|
+echo   ____                            _            _      ____ _   _ ___
+echo  / ___| ___  _ ____   _____ _ __ (_) ___ _ __ | |_   / ___| | | |_ _|
+echo | |    / _ \| '_ \ \ / / _ \ '_ \| |/ _ \ '_ \| __| | |  _| | | || |
+echo | |___| (_) | | | \ V /  __/ | | | |  __/ | | | |_  | |_| | |_| || |
+echo  \____|\___/|_| |_|\_/ \___|_| |_|_|\___|_| |_|\__|  \____|\___/|___|
 echo.
 
 :: Python verification and installation
@@ -82,7 +84,7 @@ echo [3/4] Installing dependencies...
 if exist "requirements.txt" (
     pip install -r requirements.txt
 ) else (
-    pip install yt-dlp>=2023.12.30 Pillow>=10.0.0 ttkthemes>=3.2.2 plyer>=2.1.0 mutagen>=1.47.0
+    pip install yt-dlp>=2023.12.30 Pillow>=10.0.0 ttkthemes>=3.2.2 mutagen>=1.47.0
 )
 
 :: FFmpeg installation

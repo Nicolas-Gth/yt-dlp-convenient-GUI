@@ -44,9 +44,9 @@ COLORS = {
 }
 
 # Default values
-DEFAULT_BITRATES = ["32Kbps", "96Kbps", "128Kbps", "192Kbps", "256Kbps", "320Kbps"]
-DEFAULT_QUALITIES = ["144p", "360p", "480p", "720p", "1080p", "1440p", "2160p"]
-DEFAULT_BITRATE = "192Kbps"
+DEFAULT_BITRATES = ["Best", "32Kbps", "96Kbps", "128Kbps", "192Kbps", "256Kbps", "320Kbps"]
+DEFAULT_QUALITIES = ["Best", "144p", "360p", "480p", "720p", "1080p", "1440p", "2160p"]
+DEFAULT_BITRATE = "Best"
 DEFAULT_QUALITY = "720p"
 DEFAULT_NORMALIZE_TARGET = -14.0  # LUFS
 

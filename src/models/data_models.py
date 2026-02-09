@@ -66,9 +66,10 @@ class DownloadConfig:
     is_playlist: bool = False
     playlist_start: int = 1
     playlist_end: int = 1
-    verbose: bool = True
+    verbose: bool = False
     normalize_volume: bool = False
     normalize_target: float = -14.0  # Target loudness in LUFS
+    enrich_metadata: bool = False  # Fetch HD album cover + lyrics from MusicBrainz/LRCLIB
     
     @property
     def output_template(self) -> str:

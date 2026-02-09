@@ -30,6 +30,8 @@ class ApplicationController:
         self.download_controller.set_completion_callback(self.on_download_complete)
         # Set normalization info callback
         self.download_controller.set_normalize_callback(self.on_normalize_info)
+        # Set cancel callback
+        self.download_controller.set_cancel_callback(self.on_download_cancelled)
     
     def setup_callbacks(self):
         """Connect view callbacks to controller methods."""
@@ -37,6 +39,7 @@ class ApplicationController:
         self.view.on_format_change_callback = self.on_format_change
         self.view.on_playlist_change_callback = self.on_playlist_change
         self.view.on_browse_callback = self.on_browse_directory
+        self.view.on_stop_callback = self.on_stop_download
     
     def start_conversion(self):
         """Start the conversion process."""
@@ -120,19 +123,30 @@ class ApplicationController:
     def update_playlist_display(self, video_info: Dict, current_index: int):
         """Update display for playlist download."""
         try:
-            if 'entries' in video_info and len(video_info['entries']) > current_index:
+            playlist_length = (
+                video_info.get('playlist_count')
+                or 0
+            )
+            if not playlist_length:
+                try:
+                    playlist_length = len(video_info.get('entries', []))
+                except TypeError:
+                    playlist_length = 0
+            
+            if playlist_length > 0:
+                self._playlist_total = playlist_length
+            
+            if 'entries' in video_info and isinstance(video_info['entries'], list) and len(video_info['entries']) > current_index:
                 entry = video_info['entries'][current_index]
                 video = self.extract_video_info(entry)
-                playlist_title = video_info.get('title', 'Unknown Playlist')
-                playlist_length = len(video_info['entries'])
-                
-                song_name = f"Downloading video {current_index + 1} of {playlist_length} from the playlist \"{playlist_title}\""
-                self.view.update_progress_info(video, song_name, is_playlist=True)
             else:
-                # Fallback for invalid playlist data
                 video = VideoInfo()
-                song_name = "Processing playlist..."
-                self.view.update_progress_info(video, song_name, is_playlist=True)
+            
+            if playlist_length > 0:
+                song_name = f"Element {current_index + 1} out of {playlist_length} from the playlist"
+            else:
+                song_name = f"Downloading element {current_index + 1}..."
+            self.view.update_progress_info(video, song_name, is_playlist=True)
         except Exception as e:
             print(f"Error updating playlist display: {e}")
             video = VideoInfo()
@@ -142,18 +156,37 @@ class ApplicationController:
     def update_playlist_display_from_hook(self, video_info: Dict, info_dict: Dict, current_index: int):
         """Update display for playlist download using info_dict from progress hook (has full metadata)."""
         try:
-            playlist_title = video_info.get('title', 'Unknown Playlist')
-            playlist_length = len(video_info.get('entries', []))
+            # Get total from info_dict (reliable), then video_info fallbacks
+            playlist_length = (
+                info_dict.get('n_entries')
+                or info_dict.get('playlist_count')
+                or (video_info or {}).get('playlist_count')
+                or 0
+            )
+            if not playlist_length:
+                try:
+                    playlist_length = len(video_info.get('entries', []))
+                except TypeError:
+                    playlist_length = 0
+            
+            # Cache the total
+            if playlist_length > 0:
+                self._playlist_total = playlist_length
+            else:
+                playlist_length = getattr(self, '_playlist_total', 0)
             
             # info_dict from the progress hook has full metadata (thumbnail, categories, etc.)
             if info_dict and info_dict.get('title'):
                 video = self.extract_video_info(info_dict)
-            elif 'entries' in video_info and len(video_info['entries']) > current_index:
+            elif 'entries' in video_info and isinstance(video_info['entries'], list) and len(video_info['entries']) > current_index:
                 video = self.extract_video_info(video_info['entries'][current_index])
             else:
                 video = VideoInfo()
             
-            song_name = f"Downloading video {current_index + 1} of {playlist_length} from the playlist \"{playlist_title}\""
+            if playlist_length > 0:
+                song_name = f"Element {current_index + 1} out of {playlist_length} from the playlist"
+            else:
+                song_name = f"Downloading element {current_index + 1}..."
             self.view.update_progress_info(video, song_name, is_playlist=True)
         except Exception as e:
             print(f"Error updating playlist display: {e}")
@@ -228,26 +261,52 @@ class ApplicationController:
         # Update to processing mode
         self.view.update_video_progress(100.0, "processing")
         
+        # Get the title from info_dict (progress hook) which has full metadata,
+        # unlike flat-extracted playlist entries which may lack 'title'.
+        info_dict = progress_data.get('info_dict', {})
+        title = info_dict.get('title', '')
+        
+        # Fallback: try from playlist entries
+        if not title:
+            try:
+                if 'entries' in video_info and video_index < len(video_info['entries']):
+                    title = video_info['entries'][video_index].get('title', '')
+            except (KeyError, IndexError, TypeError):
+                pass
+        
+        # Final fallback
+        if not title:
+            title = video_info.get('title', 'Unknown') if video_info else 'Unknown'
+        
         # Update song name for finished video
         config = self._current_config
         if config and config.is_playlist:
-            try:
-                if 'entries' in video_info and video_index < len(video_info['entries']):
-                    title = video_info['entries'][video_index].get('title', 'Unknown')
-                else:
-                    title = 'Unknown'
-                song_name = f"Finished downloading \"{title}\""
-            except (KeyError, IndexError):
-                song_name = "Finished downloading video"
+            # Get total from info_dict (reliable), then video_info fallbacks
+            playlist_length = (
+                info_dict.get('n_entries')
+                or info_dict.get('playlist_count')
+                or (video_info or {}).get('playlist_count')
+                or len((video_info or {}).get('entries', []) or [])
+                or 0
+            )
+            
+            # Store the total once we get it so it persists across calls
+            if playlist_length > 0:
+                self._playlist_total = playlist_length
+            else:
+                playlist_length = getattr(self, '_playlist_total', 0)
+            
+            if playlist_length > 0:
+                song_name = f"Element {video_index + 1} out of {playlist_length} from the playlist"
+            else:
+                song_name = f"Processing element {video_index + 1}..."
                 
             # Update total progress for playlists
-            playlist_length = len(video_info.get('entries', []))
             if playlist_length > 0:
                 total_percentage = ((video_index + 1) / playlist_length) * 100
                 self.view.update_total_progress(total_percentage)
         else:
-            title = video_info.get('title', 'Unknown') if video_info else 'Unknown'
-            song_name = f"Finished downloading \"{title}\""
+            song_name = f"Processing \"{title}\""
         
         # Update the song label
         if hasattr(self.view, 'song_label'):
@@ -259,6 +318,14 @@ class ApplicationController:
         """Handle normalization info from post-processor."""
         self.view.root.after(0, lambda: self.view.show_normalize_feedback(info))
     
+    def on_stop_download(self):
+        """Handle stop button click — cancel the running download."""
+        self.download_controller.cancel_download()
+    
+    def on_download_cancelled(self):
+        """Handle download cancellation (called from download thread)."""
+        self.view.root.after(0, self._on_download_complete_ui)
+    
     def on_download_complete(self):
         """Handle download completion (called from download thread)."""
         self.view.root.after(0, self._on_download_complete_ui)
@@ -267,6 +334,7 @@ class ApplicationController:
         """Handle download completion UI updates (runs on main thread)."""
         # Reset progress
         self.download_controller.progress.reset()
+        self._playlist_total = 0
         
         # Hide progress widgets and show convert button
         self.view.hide_progress_widgets()
