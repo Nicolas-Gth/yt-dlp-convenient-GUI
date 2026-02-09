@@ -13,6 +13,8 @@ class VideoInfo:
     duration: int = 0
     thumbnail: str = ""
     categories: List[str] = None
+    album: str = ""
+    raw_uploader: str = ""  # Original uploader name before cleaning
     
     def __post_init__(self):
         if self.categories is None:
@@ -26,7 +28,17 @@ class VideoInfo:
     @property
     def is_music(self) -> bool:
         """Check if the video is categorized as music."""
-        return 'Music' in self.categories
+        # Check categories
+        if 'Music' in self.categories:
+            return True
+        # YouTube Music auto-generated channels end with ' - Topic'
+        uploader_to_check = self.raw_uploader or self.uploader
+        if uploader_to_check and uploader_to_check.endswith(' - Topic'):
+            return True
+        # Has an album field => it's a music track
+        if self.album:
+            return True
+        return False
 
 @dataclass
 class PlaylistInfo:
@@ -55,6 +67,8 @@ class DownloadConfig:
     playlist_start: int = 1
     playlist_end: int = 1
     verbose: bool = True
+    normalize_volume: bool = False
+    normalize_target: float = -14.0  # Target loudness in LUFS
     
     @property
     def output_template(self) -> str:

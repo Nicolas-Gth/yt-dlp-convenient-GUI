@@ -22,7 +22,9 @@ class SettingsManager:
             "last_bitrate": "192Kbps",
             "last_quality": "720p",
             "last_playlist_mode": False,  # True for playlist, False for single video
-            "last_format_var": 1  # 1 for MP3, 2 for MP4
+            "last_format_var": 1,  # 1 for MP3, 2 for MP4
+            "last_normalize_volume": False,
+            "last_normalize_target": -14.0
         }
         
     def _get_config_directory(self) -> Path:
@@ -104,16 +106,21 @@ class SettingsManager:
             "format_var": settings.get("last_format_var", 1),
             "bitrate": settings.get("last_bitrate", "192Kbps"),
             "quality": settings.get("last_quality", "720p"),
-            "playlist_mode": settings.get("last_playlist_mode", False)
+            "playlist_mode": settings.get("last_playlist_mode", False),
+            "normalize_volume": settings.get("last_normalize_volume", False),
+            "normalize_target": settings.get("last_normalize_target", -14.0)
         }
     
-    def save_format_preferences(self, format_var: int, bitrate: str, quality: str, playlist_mode: bool):
+    def save_format_preferences(self, format_var: int, bitrate: str, quality: str, playlist_mode: bool,
+                                normalize_volume: bool = False, normalize_target: float = -14.0):
         """Save format preferences."""
         settings = self.load_settings()
         settings["last_format_var"] = format_var
         settings["last_bitrate"] = bitrate
         settings["last_quality"] = quality
         settings["last_playlist_mode"] = playlist_mode
+        settings["last_normalize_volume"] = normalize_volume
+        settings["last_normalize_target"] = normalize_target
         self.save_settings(settings)
 
 

@@ -56,8 +56,18 @@ command_exists() {
 
 # Function to check Python dependencies
 check_python_deps() {
-    python3 -c "import yt_dlp, PIL, ttkthemes, plyer, mutagen" >/dev/null 2>&1
-    return $?
+    # Check if venv exists and activate it
+    if [[ -d "venv" ]]; then
+        source venv/bin/activate
+        python -c "import yt_dlp, PIL, ttkthemes, plyer, mutagen" >/dev/null 2>&1
+        local result=$?
+        deactivate 2>/dev/null || true
+        return $result
+    else
+        # If no venv, check system-wide
+        python3 -c "import yt_dlp, PIL, ttkthemes, plyer, mutagen" >/dev/null 2>&1
+        return $?
+    fi
 }
 
 # Function to check all components
@@ -254,11 +264,33 @@ install_components() {
     python3 -m pip install --upgrade pip
     
     echo -e "${YELLOW}[3/4] Installing Python dependencies...${NC}"
-    if [[ -f "requirements.txt" ]]; then
-        $pip_cmd install -r requirements.txt
-    else
-        $pip_cmd install "yt-dlp>=2023.12.30" "Pillow>=10.0.0" "ttkthemes>=3.2.2" "plyer>=2.1.0" "mutagen>=1.47.0"
+    
+    # Create virtual environment if it doesn't exist
+    if [[ ! -d "venv" ]]; then
+        echo -e "${YELLOW}Creating virtual environment...${NC}"
+        python3 -m venv venv
+        if [[ $? -ne 0 ]]; then
+            echo -e "${RED}[ERROR]${NC} Failed to create virtual environment"
+            echo -e "${YELLOW}[INFO]${NC} Make sure python3-venv is installed"
+            exit 1
+        fi
     fi
+    
+    # Activate virtual environment
+    source venv/bin/activate
+    
+    # Upgrade pip in venv
+    python -m pip install --upgrade pip
+    
+    # Install dependencies in venv
+    if [[ -f "requirements.txt" ]]; then
+        pip install -r requirements.txt
+    else
+        pip install "yt-dlp>=2023.12.30" "Pillow>=10.0.0" "ttkthemes>=3.2.2" "plyer>=2.1.0" "mutagen>=1.47.0"
+    fi
+    
+    # Deactivate venv
+    deactivate
     
     echo -e "${YELLOW}[4/4] Installing FFmpeg...${NC}"
     if ! command_exists ffmpeg; then
@@ -285,18 +317,84 @@ launch_app() {
         exit 1
     fi
     
-    # Launch the application
-    python3 run.py
-    
-    if [ $? -ne 0 ]; then
-        echo
-        echo -e "${RED}[ERROR]${NC} Application launch failed"
-        echo -e "${YELLOW}[INFO]${NC} Press any key to exit..."
-        read -n 1
+    # Launch the application using venv if it exists
+    if [[ -d "venv" ]]; then
+        source venv/bin/activate
+        python run.py
+        local exit_code=$?
+        deactivate
+        
+        if [ $exit_code -ne 0 ]; then
+            echo
+            echo -e "${RED}[ERROR]${NC} Application launch failed"
+            echo -e "${YELLOW}[INFO]${NC} Press any key to exit..."
+            read -n 1
+        fi
+    else
+        # Fallback to system python
+        python3 run.py
+        
+        if [ $? -ne 0 ]; then
+            echo
+            echo -e "${RED}[ERROR]${NC} Application launch failed"
+            echo -e "${YELLOW}[INFO]${NC} Press any key to exit..."
+            read -n 1
+        fi
     fi
 }
 
+# Function to check for updates from GitHub
+check_for_updates() {
+    # Only check if we're in a git repo
+    if ! command_exists git || ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        return
+    fi
+
+    echo -e "${YELLOW}Checking for updates...${NC}"
+
+    # Fetch latest changes without modifying working tree
+    if ! git fetch origin 2>/dev/null; then
+        echo -e "${YELLOW}[SKIP]${NC} Could not reach GitHub (no internet?)"
+        return
+    fi
+
+    # Compare local and remote
+    LOCAL=$(git rev-parse HEAD 2>/dev/null)
+    REMOTE=$(git rev-parse origin/main 2>/dev/null || git rev-parse origin/master 2>/dev/null)
+
+    if [[ -z "$REMOTE" ]]; then
+        echo -e "${YELLOW}[SKIP]${NC} Could not determine remote branch"
+        return
+    fi
+
+    if [[ "$LOCAL" == "$REMOTE" ]]; then
+        echo -e "${GREEN}[OK]${NC} Already up to date"
+    else
+        BEHIND=$(git rev-list --count HEAD..origin/main 2>/dev/null || git rev-list --count HEAD..origin/master 2>/dev/null)
+        echo -e "${YELLOW}[UPDATE]${NC} ${BEHIND} new commit(s) available"
+        echo -e "${YELLOW}Update now? (Y/n):${NC}"
+        read -r update_response
+        if [[ ! "$update_response" =~ ^[Nn]$ ]]; then
+            if git pull --ff-only 2>/dev/null; then
+                echo -e "${GREEN}[OK]${NC} Updated successfully!"
+            else
+                echo -e "${YELLOW}[WARN]${NC} Auto-update failed (local changes?). Trying with rebase..."
+                if git pull --rebase 2>/dev/null; then
+                    echo -e "${GREEN}[OK]${NC} Updated successfully!"
+                else
+                    echo -e "${RED}[ERROR]${NC} Update failed. You may have local conflicts."
+                    echo -e "${YELLOW}You can manually update with: git pull${NC}"
+                fi
+            fi
+        else
+            echo -e "${YELLOW}[SKIP]${NC} Update skipped"
+        fi
+    fi
+    echo
+}
+
 # Main script logic
+check_for_updates
 echo -e "${YELLOW}Checking system components...${NC}"
 echo
 

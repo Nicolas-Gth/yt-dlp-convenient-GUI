@@ -6,6 +6,75 @@ from io import BytesIO
 from PIL import Image, ImageTk
 from typing import Optional, Tuple
 
+
+def _crop_to_square_removing_bars(im: Image.Image) -> Image.Image:
+    """
+    Remove dark bars (black or near-black) from the edges of an image,
+    then center-crop the remaining content to a square.
+    
+    Uses PIL's point() + getbbox() for robust detection that handles
+    gradients, compression artifacts, and non-pure-black bars.
+    """
+    width, height = im.size
+    
+    # Convert to grayscale, then threshold: any pixel with brightness > 30
+    # is considered "content". This is generous enough to catch dark gradients
+    # that YouTube Music uses around album art.
+    gray = im.convert('L')
+    # Create binary mask: 0 for dark pixels, 255 for bright ones
+    threshold = 30
+    binary = gray.point(lambda p: 255 if p > threshold else 0)
+    
+    # getbbox() returns the bounding box of non-zero pixels: (left, top, right, bottom)
+    bbox = binary.getbbox()
+    
+    if bbox is None:
+        # Entire image is dark, just center-crop
+        side = min(width, height)
+        left = (width - side) // 2
+        top = (height - side) // 2
+        return im.crop((left, top, left + side, top + side))
+    
+    bleft, btop, bright, bbottom = bbox
+    
+    # Only crop if bars are significant (>5% of dimension on at least one side)
+    has_left_bar = bleft > width * 0.05
+    has_right_bar = (width - bright) > width * 0.05
+    has_top_bar = btop > height * 0.05
+    has_bottom_bar = (height - bbottom) > height * 0.05
+    
+    if has_left_bar or has_right_bar or has_top_bar or has_bottom_bar:
+        im = im.crop(bbox)
+    
+    # Center-crop to square
+    w, h = im.size
+    side = min(w, h)
+    crop_left = (w - side) // 2
+    crop_top = (h - side) // 2
+    return im.crop((crop_left, crop_top, crop_left + side, crop_top + side))
+
+
+def _has_dark_bars(im: Image.Image) -> bool:
+    """
+    Quickly check if an image has significant dark bars on any side.
+    Uses PIL's point() + getbbox() for reliable detection.
+    """
+    width, height = im.size
+    gray = im.convert('L')
+    binary = gray.point(lambda p: 255 if p > 30 else 0)
+    bbox = binary.getbbox()
+    
+    if bbox is None:
+        return False
+    
+    bleft, btop, bright, bbottom = bbox
+    # Check if any side has a bar > 5% of the dimension
+    return (bleft > width * 0.05 or
+            (width - bright) > width * 0.05 or
+            btop > height * 0.05 or
+            (height - bbottom) > height * 0.05)
+
+
 def load_thumbnail(thumbnail_url: str, size: Tuple[int, int] = (100, 60), is_music: bool = False) -> Optional[Image.Image]:
     """
     Load and process a thumbnail image from a URL.
@@ -27,15 +96,9 @@ def load_thumbnail(thumbnail_url: str, size: Tuple[int, int] = (100, 60), is_mus
         u.close()
         im = Image.open(BytesIO(raw_data))
         
+        # Crop to square for music content (removes black bars around album art)
         if is_music:
-            # Crop to square for music videos
-            width, height = im.size
-            left = int((width - height) / 2)
-            top = 0
-            right = width - int((width - height) / 2)
-            bottom = height
-            im = im.crop((left, top, right, bottom))
-            # Use square size for music
+            im = _crop_to_square_removing_bars(im)
             size = (60, 60)
         
         im.thumbnail(size)
@@ -90,13 +153,8 @@ def crop_album_cover(thumbnail_url: str) -> Optional[bytes]:
         u.close()
         im = Image.open(BytesIO(raw_data))
 
-        # Crop to square
-        width, height = im.size
-        left = int((width - height) / 2)
-        top = 0
-        right = width - int((width - height) / 2)
-        bottom = height
-        album_im = im.crop((left, top, right, bottom))
+        # Smart crop: remove dark bars then crop to square
+        album_im = _crop_to_square_removing_bars(im)
         
         # Convert to JPEG bytes
         with BytesIO() as output:

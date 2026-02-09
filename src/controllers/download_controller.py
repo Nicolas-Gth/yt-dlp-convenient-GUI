@@ -4,6 +4,8 @@ Download controller handling yt-dlp operations and metadata processing.
 import os
 import re
 import io
+import json
+import subprocess
 import threading
 import warnings
 from typing import Optional, Dict, Any, Callable
@@ -31,9 +33,10 @@ from config import get_ffmpeg_path, FILE_FORMATS
 class CustomPostProcessor(yt_dlp.postprocessor.PostProcessor):
     """Custom post-processor for handling metadata and file organization."""
     
-    def __init__(self, download_config: DownloadConfig):
+    def __init__(self, download_config: DownloadConfig, normalize_callback: Optional[Callable] = None):
         super().__init__()
         self.config = download_config
+        self.normalize_callback = normalize_callback
     
     def run(self, video_infos):
         """Process downloaded file: add metadata, rename, and set album cover."""
@@ -44,6 +47,10 @@ class CustomPostProcessor(yt_dlp.postprocessor.PostProcessor):
         if not os.path.exists(file_path):
             print(f"Warning: File {file_path} not found. Conversion may have failed.")
             return [], video_infos
+
+        # Analyze loudness after normalization if enabled
+        if self.config.normalize_volume:
+            self._analyze_and_report_loudness(file_path, video_infos.get('title', 'Unknown'))
 
         # Add metadata to the file
         try:
@@ -76,6 +83,46 @@ class CustomPostProcessor(yt_dlp.postprocessor.PostProcessor):
             metadatas.save()
         except Exception as e:
             print(f"Warning: Could not add metadata to MP3 file: {e}")
+    
+    def _analyze_and_report_loudness(self, file_path: str, title: str):
+        """Analyze the file loudness using ffmpeg and report via callback."""
+        try:
+            from config import get_ffmpeg_path
+            ffmpeg_dir = get_ffmpeg_path()
+            if ffmpeg_dir:
+                ffmpeg_bin = os.path.join(ffmpeg_dir, 'ffmpeg')
+                if not os.path.exists(ffmpeg_bin):
+                    ffmpeg_bin = 'ffmpeg'
+            else:
+                ffmpeg_bin = 'ffmpeg'
+            
+            result = subprocess.run(
+                [ffmpeg_bin, '-i', file_path, '-af', 'loudnorm=print_format=json', '-f', 'null', '-'],
+                capture_output=True, text=True, timeout=60
+            )
+            
+            # Parse the loudnorm JSON output from stderr
+            stderr = result.stderr
+            json_start = stderr.rfind('{')
+            json_end = stderr.rfind('}') + 1
+            
+            if json_start != -1 and json_end > json_start:
+                loudness_data = json.loads(stderr[json_start:json_end])
+                input_i = float(loudness_data.get('input_i', 0))
+                target = self.config.normalize_target
+                
+                normalize_info = {
+                    'title': title,
+                    'measured_loudness': input_i,
+                    'target': target,
+                }
+                
+                print(f"Normalization: \"{title}\" measured at {input_i:.1f} LUFS (target: {target:.1f} LUFS)")
+                
+                if self.normalize_callback:
+                    self.normalize_callback(normalize_info)
+        except Exception as e:
+            print(f"Warning: Could not analyze loudness: {e}")
     
     def _sanitize_and_rename_file(self, file_path: str, video_infos: Dict, artist_name: str, file_format: str) -> str:
         """Sanitize filename and rename the file."""
@@ -122,6 +169,7 @@ class DownloadController:
         self.ffmpeg_path = get_ffmpeg_path()
         self.progress_callback: Optional[Callable] = None
         self.completion_callback: Optional[Callable] = None
+        self.normalize_callback: Optional[Callable] = None
         self.video_infos: Optional[Dict] = None
         
     def set_progress_callback(self, callback: Callable):
@@ -132,7 +180,11 @@ class DownloadController:
         """Set the callback function for download completion."""
         self.completion_callback = callback
     
-    def fetch_video_info(self, config: DownloadConfig) -> tuple[Optional[Dict], Optional[str]]:
+    def set_normalize_callback(self, callback: Callable):
+        """Set the callback function for normalization info."""
+        self.normalize_callback = callback
+    
+    def fetch_video_info(self, config: DownloadConfig, fetch_progress_callback: Optional[Callable] = None) -> tuple[Optional[Dict], Optional[str]]:
         """Fetch video information without downloading. Returns (info, error_message)."""
         ydl_opts = {
             'verbose': config.verbose,
@@ -147,8 +199,36 @@ class DownloadController:
             'playlistend': config.playlist_end
         }
         
+        # For playlists, use extract_flat for much faster extraction
+        # (no per-video HTTP request, just playlist API pagination)
+        if config.is_playlist:
+            ydl_opts['extract_flat'] = 'in_playlist'
+        
         try:
-            self.video_infos = yt_dlp.YoutubeDL(ydl_opts).extract_info(config.url, download=False)
+            if config.is_playlist and fetch_progress_callback:
+                # Two-step extraction with progress tracking:
+                # 1) Get raw result without processing (entries stay as generator)
+                # 2) Wrap entries generator to count progress, then process
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    ie_result = ydl.extract_info(config.url, download=False, process=False)
+                    
+                    if ie_result and ie_result.get('_type') in ('playlist', 'multi_video') and 'entries' in ie_result:
+                        total_hint = ie_result.get('playlist_count')  # May be None
+                        original_entries = ie_result['entries']
+                        
+                        def counting_entries():
+                            count = 0
+                            for entry in original_entries:
+                                count += 1
+                                fetch_progress_callback(count, total_hint)
+                                yield entry
+                        
+                        ie_result['entries'] = counting_entries()
+                        self.video_infos = ydl.process_ie_result(ie_result, download=False)
+                    else:
+                        self.video_infos = ie_result
+            else:
+                self.video_infos = yt_dlp.YoutubeDL(ydl_opts).extract_info(config.url, download=False)
             
             # Check if video_infos is None or empty (which happens with ignoreerrors=True for DRM sites)
             if not self.video_infos:
@@ -213,7 +293,10 @@ class DownloadController:
             ydl_opts = self._build_ydl_options(config)
             
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                ydl.add_post_processor(CustomPostProcessor(config), when='post_process')
+                ydl.add_post_processor(
+                    CustomPostProcessor(config, normalize_callback=self.normalize_callback),
+                    when='post_process'
+                )
                 ydl.download([config.url])
             
             self._send_completion_notification(config)
@@ -263,6 +346,16 @@ class DownloadController:
                 },
                 {'key': 'FFmpegMetadata', 'add_metadata': True}
             ]
+            
+            # Add volume normalization if enabled
+            # Keys must be lowercase — yt-dlp's _configuration_args does .lower() lookups.
+            if config.normalize_volume:
+                target = config.normalize_target
+                opts['postprocessor_args'] = {
+                    'extractaudio': [
+                        '-af', f'loudnorm=I={target}:TP=-1.5:LRA=11'
+                    ]
+                }
         else:
             print("Warning: MP3 conversion disabled - ffmpeg not found")
             opts['format'] = 'bestaudio'
@@ -277,6 +370,21 @@ class DownloadController:
         if self.ffmpeg_path is not None:
             opts['ffmpeg_location'] = self.ffmpeg_path
             opts['postprocessors'] = [{'key': 'FFmpegVideoConvertor', 'preferedformat': 'mp4'}]
+            
+            # Add volume normalization if enabled
+            # For MP4, apply loudnorm during the merge step.
+            # We override the audio codec to re-encode audio with loudnorm
+            # while keeping video as stream copy.
+            # Key must be lowercase — yt-dlp's _configuration_args does .lower() lookups.
+            if config.normalize_volume:
+                target = config.normalize_target
+                opts['postprocessor_args'] = {
+                    'merger+ffmpeg_o': [
+                        '-c:v', 'copy',
+                        '-c:a', 'aac', '-b:a', '192k',
+                        '-af', f'loudnorm=I={target}:TP=-1.5:LRA=11'
+                    ]
+                }
         else:
             print("Warning: MP4 conversion disabled - ffmpeg not found")
         

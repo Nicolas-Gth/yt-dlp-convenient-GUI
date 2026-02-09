@@ -2,7 +2,7 @@
 Main application view and GUI components.
 """
 import tkinter as tk
-from tkinter import filedialog, StringVar, IntVar
+from tkinter import filedialog, StringVar, IntVar, DoubleVar, BooleanVar
 import tkinter.ttk as ttk
 from ttkthemes import ThemedTk
 from PIL import ImageTk
@@ -14,9 +14,10 @@ from typing import Optional, Dict, Any
 
 from config import (
     APP_TITLE, DEFAULT_WINDOW_SIZE, COLORS, DEFAULT_BITRATES, 
-    DEFAULT_QUALITIES, DEFAULT_BITRATE, DEFAULT_QUALITY, ICON_PATH
+    DEFAULT_QUALITIES, DEFAULT_BITRATE, DEFAULT_QUALITY, ICON_PATH,
+    DEFAULT_NORMALIZE_TARGET, PLATFORM_SCALE
 )
-from utils import get_platform_fonts, calculate_window_size, load_thumbnail, load_icon, settings_manager
+from utils import get_platform_fonts, load_thumbnail, load_icon, settings_manager
 from models import DownloadConfig, VideoInfo, PlaylistInfo
 
 
@@ -41,7 +42,6 @@ class MainApplicationView:
         """Initialize the main window."""
         self.root = ThemedTk(theme="equilux")
         self.root.title(APP_TITLE)
-        self.root.geometry(f"{DEFAULT_WINDOW_SIZE['width']}x{DEFAULT_WINDOW_SIZE['height']}")
         self.root.configure(bg=COLORS['background'])
         self.root.resizable(False, False)
         
@@ -117,6 +117,10 @@ class MainApplicationView:
         self.format_var.set(preferences.get("format_var", 1))  # MP3 by default
         # For playlist_var: 0 = Yes, 1 = No (inverted logic)
         self.playlist_var.set(0 if preferences.get("playlist_mode", False) else 1)
+        
+        # Normalize volume variables
+        self.normalize_var = BooleanVar(value=preferences.get("normalize_volume", False))
+        self.normalize_target_var = DoubleVar(value=preferences.get("normalize_target", DEFAULT_NORMALIZE_TARGET))
     
     def setup_widgets(self):
         """Create and layout all GUI widgets."""
@@ -124,6 +128,7 @@ class MainApplicationView:
         self.create_path_input()
         self.create_format_selection()
         self.create_playlist_selection()
+        self.create_normalize_selection()
         self.create_convert_button()
         self.create_disclaimer()
         
@@ -254,6 +259,81 @@ class MainApplicationView:
         if self.playlist_var.get() == 0:  # Playlist mode enabled
             self.show_playlist_options()
     
+    def create_normalize_selection(self):
+        """Create volume normalization checkbox and target input."""
+        self.frame_normalize = tk.LabelFrame(self.root, bg=COLORS['background'], border=0)
+        self.frame_normalize.grid(sticky=tk.W, row=4, column=0)
+        
+        # Normalize checkbox
+        self.normalize_check = ttk.Checkbutton(
+            self.frame_normalize,
+            text="  Normalize volume",
+            variable=self.normalize_var,
+            command=self._on_normalize_toggled,
+            cursor="hand2"
+        )
+        self.normalize_check.grid(sticky=tk.W, row=0, column=0, padx=5, pady=5)
+        
+        # Show target input if previously enabled
+        if self.normalize_var.get():
+            self.show_normalize_input()
+    
+    def show_normalize_input(self):
+        """Show the normalize target LUFS input."""
+        if hasattr(self, 'normalize_target_label'):
+            return  # Already shown
+        
+        self.normalize_target_label = ttk.Label(self.frame_normalize, text="  Target (LUFS) :")
+        self.normalize_target_label.grid(row=0, column=1, padx=2)
+        
+        self.normalize_target_entry = ttk.Entry(self.frame_normalize, width=6)
+        self.normalize_target_entry.insert(0, str(self.normalize_target_var.get()))
+        self.normalize_target_entry.grid(row=0, column=2, padx=2)
+        
+        self.normalize_hint_label = ttk.Label(
+            self.frame_normalize,
+            text="(-14 recommended)",
+            font=("Arial", 7, "italic")
+        )
+        self.normalize_hint_label.grid(row=0, column=3, padx=2)
+    
+    def hide_normalize_input(self):
+        """Hide the normalize target LUFS input."""
+        if hasattr(self, 'normalize_target_label'):
+            self.normalize_target_label.destroy()
+            self.normalize_target_entry.destroy()
+            self.normalize_hint_label.destroy()
+            del self.normalize_target_label
+            del self.normalize_target_entry
+            del self.normalize_hint_label
+    
+    def _on_normalize_toggled(self):
+        """Handle normalize checkbox toggle."""
+        if self.normalize_var.get():
+            self.show_normalize_input()
+        else:
+            self.hide_normalize_input()
+        
+        # Save preference
+        target = self._get_normalize_target()
+        settings_manager.save_format_preferences(
+            format_var=self.format_var.get(),
+            bitrate=self.bitrate_var.get(),
+            quality=self.quality_var.get(),
+            playlist_mode=(self.playlist_var.get() == 0),
+            normalize_volume=self.normalize_var.get(),
+            normalize_target=target
+        )
+    
+    def _get_normalize_target(self) -> float:
+        """Get the normalize target value from the entry, with validation."""
+        if hasattr(self, 'normalize_target_entry'):
+            try:
+                return float(self.normalize_target_entry.get())
+            except ValueError:
+                return DEFAULT_NORMALIZE_TARGET
+        return self.normalize_target_var.get()
+
     def create_convert_button(self):
         """Create the main convert button."""
         self.convert_button = tk.Button(
@@ -270,12 +350,12 @@ class MainApplicationView:
             activeforeground=COLORS['text_secondary'], 
             cursor="hand2"
         )
-        self.convert_button.grid(sticky=tk.W, row=4, column=0, pady=2, padx=110)
+        self.convert_button.grid(sticky=tk.W, row=5, column=0, pady=2, padx=110)
     
     def create_disclaimer(self):
         """Create the disclaimer text."""
         self.frame3 = tk.LabelFrame(self.root, bg=COLORS['background'], border=0)
-        self.frame3.grid(sticky=tk.W, row=6, column=0)
+        self.frame3.grid(sticky=tk.W, row=7, column=0)
         
         disclaimer_text = (
             "Legal Notice: This software is intended for downloading and converting YouTube content that is\n"
@@ -299,17 +379,25 @@ class MainApplicationView:
         self.playlist_from_label = ttk.Label(self.frame2, text="                  From video ")
         self.playlist_from_label.grid(row=0, column=4, padx=2)
         
-        self.playlist_start_entry = ttk.Entry(self.frame2, width=5)
-        self.playlist_start_entry.insert(0, '...')
-        self.playlist_start_entry.bind("<FocusIn>", lambda args: self.playlist_start_entry.delete('0', 'end'))
+        self.playlist_start_var = tk.StringVar(value='1')
+        self.playlist_start_entry = ttk.Spinbox(
+            self.frame2, width=5, from_=1, to=9999, increment=1,
+            textvariable=self.playlist_start_var,
+            validate='key',
+            validatecommand=(self.root.register(lambda v: v == '' or v.isdigit()), '%P')
+        )
         self.playlist_start_entry.grid(row=0, column=5)
         
         self.playlist_to_label = ttk.Label(self.frame2, text=" to ")
         self.playlist_to_label.grid(row=0, column=6)
         
-        self.playlist_end_entry = ttk.Entry(self.frame2, width=5)
-        self.playlist_end_entry.insert(0, '...')
-        self.playlist_end_entry.bind("<FocusIn>", lambda args: self.playlist_end_entry.delete('0', 'end'))
+        self.playlist_end_var = tk.StringVar(value='999')
+        self.playlist_end_entry = ttk.Spinbox(
+            self.frame2, width=5, from_=1, to=9999, increment=1,
+            textvariable=self.playlist_end_var,
+            validate='key',
+            validatecommand=(self.root.register(lambda v: v == '' or v.isdigit()), '%P')
+        )
         self.playlist_end_entry.grid(row=0, column=7)
     
     def hide_playlist_options(self):
@@ -324,6 +412,10 @@ class MainApplicationView:
             del self.playlist_start_entry
             del self.playlist_to_label
             del self.playlist_end_entry
+            if hasattr(self, 'playlist_start_var'):
+                del self.playlist_start_var
+            if hasattr(self, 'playlist_end_var'):
+                del self.playlist_end_var
     
     def switch_to_quality_menu(self):
         """Switch from bitrate to quality menu (MP4)."""
@@ -355,7 +447,7 @@ class MainApplicationView:
         
         # Create progress frame
         self.progress_frame = tk.LabelFrame(self.root, bg=COLORS['background'], border=0)
-        self.progress_frame.grid(sticky=tk.W, row=5, column=0)
+        self.progress_frame.grid(sticky=tk.W, row=6, column=0)
         
         # Song name label
         self.song_label = ttk.Label(self.progress_frame, text="", anchor="w", justify="left")
@@ -451,15 +543,16 @@ class MainApplicationView:
         
         # Update thumbnail
         if video_info.thumbnail:
-            thumbnail_size = (60, 60) if video_info.is_music else (100, 60)
-            thumbnail = load_thumbnail(video_info.thumbnail, thumbnail_size, video_info.is_music)
+            thumbnail = load_thumbnail(video_info.thumbnail, (100, 60), video_info.is_music)
             if thumbnail:
                 photo = ImageTk.PhotoImage(thumbnail)
                 self.thumbnail_label.configure(image=photo)
                 self.thumbnail_label.image = photo  # Keep a reference
                 
-                # Adjust info label position based on thumbnail size
-                padx = 74 if video_info.is_music else 114
+                # Adjust info label position based on actual thumbnail size
+                # If the thumbnail ended up square, it was cropped (music/black bars)
+                is_square = abs(thumbnail.size[0] - thumbnail.size[1]) < 5
+                padx = 74 if is_square else 114
                 self.info_label.grid_configure(padx=padx)
     
     def update_video_progress(self, percentage: float, status: str = ""):
@@ -486,10 +579,47 @@ class MainApplicationView:
             else:
                 self.total_progress_percent.configure(text=f" {percentage:.1f}%")
     
+    def show_normalize_feedback(self, info: dict):
+        """Show normalization feedback below the progress widgets."""
+        if not hasattr(self, 'progress_frame'):
+            return
+        
+        measured = info.get('measured_loudness', 0)
+        target = info.get('target', -14.0)
+        title = info.get('title', 'Unknown')
+        
+        # Determine the next available row in progress_frame
+        next_row = len(self.progress_frame.grid_slaves()) + 5
+        
+        # Build feedback text
+        diff = measured - target
+        if abs(diff) < 0.5:
+            feedback = f"🔊  \"{title}\" — Volume already close to target ({measured:.1f} LUFS ≈ {target:.1f} LUFS)"
+        elif diff > 0:
+            feedback = f"🔊  \"{title}\" — Volume reduced by {abs(diff):.1f} dB ({measured:.1f} → {target:.1f} LUFS)"
+        else:
+            feedback = f"🔊  \"{title}\" — Volume increased by {abs(diff):.1f} dB ({measured:.1f} → {target:.1f} LUFS)"
+        
+        normalize_label = ttk.Label(
+            self.progress_frame,
+            text=feedback,
+            font=("Arial", 8),
+            anchor="w",
+            justify="left"
+        )
+        normalize_label.grid(sticky=tk.W, row=next_row, column=0, padx=7, pady=2)
+        
+        # Refresh window size to accommodate new label
+        self.adjust_window_size()
+    
     def adjust_window_size(self, extra_height: int = 0):
-        """Adjust window size based on content."""
-        width, height = calculate_window_size(extra_height=extra_height)
-        self.root.geometry(f"{width}x{height}")
+        """Adjust window size to fit content automatically."""
+        self.root.update_idletasks()
+        req_width = self.root.winfo_reqwidth()
+        req_height = self.root.winfo_reqheight() + extra_height
+        # Apply a minimum width so the window doesn't get too narrow
+        width = max(req_width, PLATFORM_SCALE['width_base'])
+        self.root.geometry(f"{width}x{req_height}")
     
     def get_download_config(self) -> DownloadConfig:
         """Create DownloadConfig from current UI state."""
@@ -509,6 +639,8 @@ class MainApplicationView:
         config.output_directory = self.folder_path.get()
         config.file_format = "mp3" if self.format_var.get() == 1 else "mp4"
         config.is_playlist = self.playlist_var.get() == 0
+        config.normalize_volume = self.normalize_var.get()
+        config.normalize_target = self._get_normalize_target()
         
         # Save the output directory as the last used directory
         if config.output_directory and config.output_directory != 'Choose a path for your file':
@@ -519,7 +651,9 @@ class MainApplicationView:
             format_var=self.format_var.get(),
             bitrate=self.bitrate_var.get(),
             quality=self.quality_var.get(),
-            playlist_mode=config.is_playlist
+            playlist_mode=config.is_playlist,
+            normalize_volume=config.normalize_volume,
+            normalize_target=config.normalize_target
         )
         
         if config.file_format == "mp3":
@@ -529,11 +663,13 @@ class MainApplicationView:
         
         if config.is_playlist and hasattr(self, 'playlist_start_entry'):
             try:
-                config.playlist_start = int(self.playlist_start_entry.get())
-                config.playlist_end = int(self.playlist_end_entry.get())
+                start_val = self.playlist_start_entry.get().strip()
+                end_val = self.playlist_end_entry.get().strip()
+                config.playlist_start = int(start_val) if start_val else 1
+                config.playlist_end = int(end_val) if end_val else 9999
             except ValueError:
                 config.playlist_start = 1
-                config.playlist_end = 1
+                config.playlist_end = 9999
         
         return config
     
@@ -559,14 +695,14 @@ class MainApplicationView:
                 )
     
     def show_fetching_progress(self, is_playlist: bool = False):
-        """Show fetching progress with indeterminate progress bar."""
+        """Show fetching progress bar (determinate for playlists, indeterminate for single videos)."""
         # Hide the convert button completely
         if hasattr(self, 'convert_button') and self.convert_button.winfo_exists():
             self.convert_button.grid_remove()
         
         # Create a progress frame where the button was
         self.fetching_frame = tk.LabelFrame(self.root, bg=COLORS['background'], border=0)
-        self.fetching_frame.grid(sticky=tk.W, row=4, column=0, pady=2, padx=110)
+        self.fetching_frame.grid(sticky=tk.W, row=5, column=0, pady=2, padx=110)
         
         # Progress label
         self.fetching_label = ttk.Label(
@@ -577,15 +713,44 @@ class MainApplicationView:
         )
         self.fetching_label.grid(row=0, column=0, pady=5)
         
-        # Indeterminate progress bar
-        self.fetching_progress = ttk.Progressbar(
-            self.fetching_frame, 
-            orient=tk.HORIZONTAL, 
-            length=300, 
-            mode='indeterminate'
-        )
-        self.fetching_progress.grid(row=1, column=0, pady=5)
-        self.fetching_progress.start(10)  # Start the animation
+        # Progress bar: determinate for playlists, indeterminate for single videos
+        if is_playlist:
+            self.fetching_progress = ttk.Progressbar(
+                self.fetching_frame, 
+                orient=tk.HORIZONTAL, 
+                length=300, 
+                mode='determinate',
+                maximum=100
+            )
+            self.fetching_progress.grid(row=1, column=0, pady=5)
+        else:
+            self.fetching_progress = ttk.Progressbar(
+                self.fetching_frame, 
+                orient=tk.HORIZONTAL, 
+                length=300, 
+                mode='indeterminate'
+            )
+            self.fetching_progress.grid(row=1, column=0, pady=5)
+            self.fetching_progress.start(10)
+    
+    def update_fetching_progress(self, current: int, total: int = None):
+        """Update the fetching progress bar and label for playlist extraction."""
+        if not hasattr(self, 'fetching_label') or not hasattr(self, 'fetching_progress'):
+            return
+        
+        if total and total > 0:
+            percentage = (current / total) * 100
+            self.fetching_progress['value'] = percentage
+            self.fetching_label.configure(
+                text=f"Retrieving playlist information... ({current}/{total})"
+            )
+        else:
+            # Total unknown — show count only and pulse the bar
+            self.fetching_label.configure(
+                text=f"Retrieving playlist information... ({current} titles found)"
+            )
+            # Advance bar in small steps to show activity
+            self.fetching_progress['value'] = min(current % 100, 95)
     
     def hide_fetching_progress(self):
         """Hide fetching progress widgets and restore convert button."""
@@ -740,7 +905,9 @@ class MainApplicationView:
             format_var=1,
             bitrate=self.bitrate_var.get(),
             quality=self.quality_var.get(),
-            playlist_mode=(self.playlist_var.get() == 0)
+            playlist_mode=(self.playlist_var.get() == 0),
+            normalize_volume=self.normalize_var.get(),
+            normalize_target=self._get_normalize_target()
         )
         if self.on_format_change_callback:
             self.on_format_change_callback("mp3")
@@ -752,7 +919,9 @@ class MainApplicationView:
             format_var=2,
             bitrate=self.bitrate_var.get(),
             quality=self.quality_var.get(),
-            playlist_mode=(self.playlist_var.get() == 0)
+            playlist_mode=(self.playlist_var.get() == 0),
+            normalize_volume=self.normalize_var.get(),
+            normalize_target=self._get_normalize_target()
         )
         if self.on_format_change_callback:
             self.on_format_change_callback("mp4")
@@ -764,7 +933,9 @@ class MainApplicationView:
             format_var=self.format_var.get(),
             bitrate=self.bitrate_var.get(),
             quality=self.quality_var.get(),
-            playlist_mode=True
+            playlist_mode=True,
+            normalize_volume=self.normalize_var.get(),
+            normalize_target=self._get_normalize_target()
         )
         if self.on_playlist_change_callback:
             self.on_playlist_change_callback(True)
@@ -776,7 +947,9 @@ class MainApplicationView:
             format_var=self.format_var.get(),
             bitrate=self.bitrate_var.get(),
             quality=self.quality_var.get(),
-            playlist_mode=False
+            playlist_mode=False,
+            normalize_volume=self.normalize_var.get(),
+            normalize_target=self._get_normalize_target()
         )
         if self.on_playlist_change_callback:
             self.on_playlist_change_callback(False)
@@ -788,7 +961,9 @@ class MainApplicationView:
             format_var=self.format_var.get(),
             bitrate=selected_value,
             quality=self.quality_var.get(),
-            playlist_mode=(self.playlist_var.get() == 0)
+            playlist_mode=(self.playlist_var.get() == 0),
+            normalize_volume=self.normalize_var.get(),
+            normalize_target=self._get_normalize_target()
         )
     
     def _on_quality_changed(self, selected_value):
@@ -798,7 +973,9 @@ class MainApplicationView:
             format_var=self.format_var.get(),
             bitrate=self.bitrate_var.get(),
             quality=selected_value,
-            playlist_mode=(self.playlist_var.get() == 0)
+            playlist_mode=(self.playlist_var.get() == 0),
+            normalize_volume=self.normalize_var.get(),
+            normalize_target=self._get_normalize_target()
         )
     
     def run(self):
