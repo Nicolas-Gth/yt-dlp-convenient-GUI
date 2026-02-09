@@ -5,6 +5,8 @@ __pycache__
 external/
 dist
 build
+ffmpeg
+temp
 
 # Custom config files
 src/config/cookies.txt

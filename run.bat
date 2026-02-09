@@ -1,4 +1,5 @@
 @echo off
+chcp 65001 >nul
 title yt-dlp Convenient GUI - Automatic Installation and Launch
 color 0F
 
