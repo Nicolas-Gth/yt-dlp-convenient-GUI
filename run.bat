@@ -1,11 +1,13 @@
 @echo off
+setlocal enabledelayedexpansion
+cd /d "%~dp0"
 chcp 65001 >nul
 title yt-dlp Convenient GUI - Automatic Installation and Launch
 color 0F
 
 :: Check if all components are installed
 call :check_components
-if %componentsOK% == 0 goto :install
+if !componentsOK! == 0 goto :install
 goto :launch
 
 :check_components
@@ -27,31 +29,30 @@ ffmpeg -version >nul 2>&1
 if %errorLevel% neq 0 set componentsOK=0
 
 :: Check critical Python dependencies
-if %componentsOK% == 1 (
+if !componentsOK! == 1 (
     python -c "import yt_dlp, PIL, ttkthemes, mutagen" >nul 2>&1
-    if %errorLevel% neq 0 set componentsOK=0
+    if !errorLevel! neq 0 set componentsOK=0
 )
 
 goto :eof
-goto :launch
 
 :install
 echo  __   ______         ____  _     ____
-echo  \ \ / /_   _        |  _ \| |   |  _ \
-echo   \ V /  | |   _____ | | | | |   | |_) |
-echo    | |   | |  |_____|| |_| | |___|  __/
-echo    |_|   |_|         |____/|_____|_|
+echo  \ \ / /_   _        ^|  _ \^| ^|   ^|  _ \
+echo   \ V /  ^| ^|   _____ ^| ^| ^| ^| ^|   ^| ^|_^) ^|
+echo    ^| ^|   ^| ^|  ^|_____^|^| ^|_^| ^| ^|___^|  __/
+echo    ^|_^|   ^|_^|         ^|____/^|_____^|_^|
 echo   ____                            _            _      ____ _   _ ___
-echo  / ___| ___  _ ____   _____ _ __ (_) ___ _ __ | |_   / ___| | | |_ _|
-echo | |    / _ \| '_ \ \ / / _ \ '_ \| |/ _ \ '_ \| __| | |  _| | | || |
-echo | |___| (_) | | | \ V /  __/ | | | |  __/ | | | |_  | |_| | |_| || |
-echo  \____|\___/|_| |_|\_/ \___|_| |_|_|\___|_| |_|\__|  \____|\___/|___|
+echo  / ___^| ___  _ ____   _____ _ __ ^(_^) ___ _ __ ^| ^|_   / ___^| ^| ^| ^|_ _^|
+echo ^| ^|    / _ \^| '_ \ \ / / _ \ '_ \^| ^|/ _ \ '_ \^| __^| ^| ^|  _^| ^| ^| ^|^| ^|
+echo ^| ^|___^| ^(_^) ^| ^| ^| \ V /  __/ ^| ^| ^| ^|  __/ ^| ^| ^| ^|_  ^| ^|_^| ^| ^|_^| ^|^| ^|
+echo  \____^|\___/^|_^| ^|_^|\_/ \___^|_^| ^|_^|_^|\___^|_^| ^|_^|\__^|  \____^|\___/^|___^|
 echo.
 
 :: Python verification and installation
 echo [1/4] Checking Python...
 python --version >nul 2>&1
-if %errorLevel% == 0 (
+if !errorLevel! == 0 (
     echo [OK] Python is installed
     python --version
 ) else (
@@ -71,7 +72,7 @@ if %errorLevel% == 0 (
 :: pip verification and update
 echo [2/4] Checking pip...
 pip --version >nul 2>&1
-if %errorLevel% == 0 (
+if !errorLevel! == 0 (
     echo [OK] pip available - Updating...
     python -m pip install --upgrade pip
 ) else (
@@ -90,7 +91,7 @@ if exist "requirements.txt" (
 :: FFmpeg installation
 echo [4/4] Installing FFmpeg...
 ffmpeg -version >nul 2>&1
-if %errorLevel% neq 0 (
+if !errorLevel! neq 0 (
     if not exist "temp" mkdir temp
     if not exist "ffmpeg\bin" mkdir ffmpeg\bin
     echo Downloading FFmpeg...
@@ -119,20 +120,26 @@ call :update_ytdlp
 
 :: Final verification before launch
 python --version >nul 2>&1
-if %errorLevel% neq 0 (
+if !errorLevel! neq 0 (
     echo [ERROR] Python not accessible - Relaunch after restart
     pause
     exit /b 1
 )
 
 echo Launching yt-dlp Convenient GUI...
+echo.
 python run.py
-
-if %errorLevel% neq 0 (
+set launch_error=!errorLevel!
+echo.
+if !launch_error! neq 0 (
+    echo [ERROR] Launch error (code: !launch_error!)
     echo.
-    echo [ERROR] Launch error
-    pause
+    echo If the problem persists, check that all dependencies are installed:
+    echo   pip install -r requirements.txt
 )
+echo.
+echo Press any key to close this window...
+pause >nul
 goto :eof
 
 :check_updates
@@ -190,7 +197,7 @@ goto :eof
 :update_ytdlp
 echo Checking for yt-dlp updates...
 pip install --upgrade yt-dlp >nul 2>&1
-if %errorLevel% == 0 (
+if !errorLevel! == 0 (
     echo [OK] yt-dlp is up to date
 ) else (
     echo [WARN] Could not update yt-dlp
