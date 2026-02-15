@@ -20,6 +20,8 @@ class ApplicationController:
         self.current_video_info: Optional[Dict] = None
         self._current_config = None
         self._last_progress_update: float = 0.0
+        self._playlist_start_time: float = 0.0
+        self._playlist_current_index: int = 0
         
         # Connect view callbacks to controller methods
         self.setup_callbacks()
@@ -94,12 +96,18 @@ class ApplicationController:
         # Cache config for use during progress callbacks
         self._current_config = config
         self._last_progress_update = 0.0
+        self._playlist_start_time = time.monotonic()
+        self._playlist_current_index = 0
         
         # Hide fetching progress
         self.view.hide_fetching_progress()
         
         # Show download progress widgets
         self.view.show_progress_widgets(config.is_playlist)
+        
+        # Wire up ETA callback for playlist timer
+        if config.is_playlist:
+            self.view.set_eta_callback(self._compute_eta_for_timer)
         
         # Show skipped entries panel if any were detected
         hidden = self.download_controller._hidden_entries
@@ -147,8 +155,9 @@ class ApplicationController:
             else:
                 video = VideoInfo()
             
+            playlist_title = video_info.get('title', '') or ''
             if playlist_length > 0:
-                song_name = f"Element {current_index + 1} out of {playlist_length} from the playlist"
+                song_name = f"Downloading element {current_index + 1} out of {playlist_length} from the playlist {playlist_title}"
             else:
                 song_name = f"Downloading element {current_index + 1}..."
             self.view.update_progress_info(video, song_name, is_playlist=True)
@@ -188,8 +197,9 @@ class ApplicationController:
             else:
                 video = VideoInfo()
             
+            playlist_title = info_dict.get('playlist_title', '') or (video_info or {}).get('title', '') or ''
             if playlist_length > 0:
-                song_name = f"Element {current_index + 1} out of {playlist_length} from the playlist"
+                song_name = f"Downloading element {current_index + 1} out of {playlist_length} from the playlist {playlist_title}"
             else:
                 song_name = f"Downloading element {current_index + 1}..."
             self.view.update_progress_info(video, song_name, is_playlist=True)
@@ -211,6 +221,51 @@ class ApplicationController:
             album=video_data.get('album', ''),
             raw_uploader=raw_uploader
         )
+    
+    def _compute_eta_for_timer(self) -> str:
+        """Callback for the view's 1-second timer."""
+        playlist_length = getattr(self, '_playlist_total', 0)
+        return self._compute_eta(self._playlist_current_index, playlist_length)
+    
+    def _compute_eta(self, current_index: int, playlist_length: int) -> str:
+        """Compute estimated remaining time for the playlist based on elapsed time."""
+        if playlist_length <= 0:
+            return ""
+        
+        completed = current_index  # number of fully completed elements
+        if completed < 1:
+            return "Estimated remaining time: calculating..."
+        
+        remaining_elements = playlist_length - current_index
+        if remaining_elements <= 0:
+            return ""
+        
+        elapsed = time.monotonic() - self._playlist_start_time
+        elapsed_int = int(elapsed)
+        if elapsed_int < 60:
+            elapsed_str = f"{elapsed_int}s"
+        elif elapsed_int < 3600:
+            em, es = divmod(elapsed_int, 60)
+            elapsed_str = f"{em}m {es:02d}s"
+        else:
+            eh, er = divmod(elapsed_int, 3600)
+            em, es = divmod(er, 60)
+            elapsed_str = f"{eh}h {em:02d}m {es:02d}s"
+        
+        avg_per_element = elapsed / completed
+        remaining_seconds = int(avg_per_element * remaining_elements)
+        
+        if remaining_seconds < 60:
+            eta_str = f"{remaining_seconds}s"
+        elif remaining_seconds < 3600:
+            minutes, secs = divmod(remaining_seconds, 60)
+            eta_str = f"{minutes}m {secs:02d}s"
+        else:
+            hours, remainder = divmod(remaining_seconds, 3600)
+            minutes, secs = divmod(remainder, 60)
+            eta_str = f"{hours}h {minutes:02d}m {secs:02d}s"
+        
+        return f"Elapsed time: {elapsed_str} — Estimated remaining time: ~{eta_str}"
     
     def on_download_progress(self, progress_data: Dict, video_info: Dict, progress: DownloadProgress):
         """Handle download progress updates (called from download thread)."""
@@ -301,8 +356,9 @@ class ApplicationController:
             else:
                 playlist_length = getattr(self, '_playlist_total', 0)
             
+            playlist_title = info_dict.get('playlist_title', '') or (video_info or {}).get('title', '') or ''
             if playlist_length > 0:
-                song_name = f"Element {video_index + 1} out of {playlist_length} from the playlist"
+                song_name = f"Downloading element {video_index + 1} out of {playlist_length} from the playlist {playlist_title}"
             else:
                 song_name = f"Processing element {video_index + 1}..."
                 
@@ -310,6 +366,7 @@ class ApplicationController:
             if playlist_length > 0:
                 total_percentage = ((video_index + 1) / playlist_length) * 100
                 self.view.update_total_progress(total_percentage)
+                self._playlist_current_index = video_index + 1
         else:
             song_name = f"Processing \"{title}\""
         
@@ -329,23 +386,46 @@ class ApplicationController:
     
     def on_download_cancelled(self):
         """Handle download cancellation (called from download thread)."""
-        self.view.root.after(0, self._on_download_complete_ui)
+        self.view.root.after(0, lambda: self._on_download_complete_ui(cancelled=True))
     
     def on_download_complete(self):
         """Handle download completion (called from download thread)."""
-        self.view.root.after(0, self._on_download_complete_ui)
+        self.view.root.after(0, lambda: self._on_download_complete_ui(cancelled=False))
     
-    def _on_download_complete_ui(self):
+    def _build_completion_message(self, cancelled: bool) -> str:
+        """Build the completion/cancellation message for playlists."""
+        config = self._current_config
+        downloaded_count = getattr(self.view, '_info_item_count', 0)
+        playlist_title = ''
+        if config and config.is_playlist and self.current_video_info:
+            playlist_title = self.current_video_info.get('title', '') or ''
+        
+        prefix = "Download aborted. " if cancelled else ""
+        
+        if downloaded_count > 0 and playlist_title:
+            msg = f"{downloaded_count} element{'s' if downloaded_count > 1 else ''} downloaded from playlist {playlist_title}."
+        elif downloaded_count > 0:
+            msg = f"{downloaded_count} element{'s' if downloaded_count > 1 else ''} downloaded."
+        elif playlist_title:
+            msg = f"Playlist {playlist_title} downloaded."
+        else:
+            msg = "Download complete."
+        
+        return f"{prefix}{msg}"
+    
+    def _on_download_complete_ui(self, cancelled: bool = False):
         """Handle download completion UI updates (runs on main thread)."""
+        # Show completion message
+        completion_msg = self._build_completion_message(cancelled)
+        if hasattr(self.view, 'song_label'):
+            self.view.song_label.configure(text=completion_msg)
+        
         # Reset progress
         self.download_controller.progress.reset()
         self._playlist_total = 0
         
-        # Hide progress widgets and show convert button
-        self.view.hide_progress_widgets()
-        
-        # Re-enable the convert button
-        self.view.set_convert_button_enabled(True)
+        # Show "Download again" button instead of immediately resetting
+        self.view.show_download_again_button()
     
     def on_format_change(self, format_type: str):
         """Handle format selection change."""
