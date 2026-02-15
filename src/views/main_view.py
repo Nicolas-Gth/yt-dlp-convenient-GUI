@@ -1054,6 +1054,13 @@ class MainApplicationView:
                 end_val = self.playlist_end_entry.get().strip()
                 config.playlist_start = int(start_val) if start_val else 1
                 config.playlist_end = int(end_val) if end_val else 9999
+                if config.playlist_end < config.playlist_start:
+                    import tkinter.messagebox as messagebox
+                    messagebox.showwarning(
+                        "Invalid range",
+                        f"The end value ({config.playlist_end}) cannot be less than the start value ({config.playlist_start})."
+                    )
+                    return None
             except ValueError:
                 config.playlist_start = 1
                 config.playlist_end = 9999
