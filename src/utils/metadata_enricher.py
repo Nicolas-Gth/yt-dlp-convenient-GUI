@@ -30,6 +30,7 @@ _GENIUS_BASE = "https://genius.com"
 _LYRICS_OVH_BASE = "https://api.lyrics.ovh/v1"
 _ITUNES_BASE = "https://itunes.apple.com"
 _TIMEOUT = 10  # seconds
+_itunes_last_genre: Optional[str] = None  # Set by fetch_cover_art_itunes
 
 
 @dataclass
@@ -46,6 +47,8 @@ class EnrichedMetadata:
     lyrics: Optional[str] = None        # Plain or synced lyrics
     synced_lyrics: Optional[str] = None # LRC format synced lyrics
     mb_release_id: Optional[str] = None
+    mb_release_group_id: Optional[str] = None
+    mb_recording_id: Optional[str] = None
     confidence: float = 0.0             # 0-100 match score
 
 
@@ -68,8 +71,18 @@ def _request(url: str, timeout: int = _TIMEOUT) -> Optional[bytes]:
 def _normalize(text: str) -> str:
     """Normalize a string for fuzzy comparison."""
     text = text.lower().strip()
-    # Remove common suffixes like (Official Video), [Lyrics], etc.
-    text = re.sub(r'\s*[\(\[](official\s*(music\s*)?video|lyrics?|audio|visualizer|hd|hq|remaster(ed)?|feat\.?[^\)\]]*|ft\.?[^\)\]]*|live)[\)\]]', '', text, flags=re.IGNORECASE)
+    # Remove common suffixes like (Official Video), [Lyrics], (2011 Remaster), etc.
+    # The optional (\d{4}\s+)? handles year prefixes like "(2011 Remaster)"
+    text = re.sub(
+        r'\s*[\(\[]'
+        r'(\d{4}\s+)?'
+        r'(official\s*(music\s*)?video|lyrics?|audio|visualizer|hd|hq'
+        r'|remaster(ed)?|deluxe(\s*edition)?|expanded(\s*edition)?'
+        r'|anniversary(\s*edition)?|special\s*edition|bonus\s*track(s)?'
+        r'|feat\.?[^\)\]]*|ft\.?[^\)\]]*|live)'
+        r'[\)\]]',
+        '', text, flags=re.IGNORECASE
+    )
     # Remove punctuation
     text = re.sub(r'[^\w\s]', '', text)
     # Collapse whitespace
@@ -267,6 +280,85 @@ def _pick_best_release(recording: Dict, album_from_yt: str) -> Optional[Dict]:
     return None
 
 
+def _extract_genres(data: dict, skip: set, limit: int = 3) -> List[str]:
+    """
+    Extract genre names from a MusicBrainz entity response (genres + tags).
+    Returns up to `limit` genre names, de-duplicated, title-cased.
+    """
+    seen = set()
+    results = []
+    
+    # Priority 1: official genres (curated by MusicBrainz editors)
+    genres = sorted(data.get("genres", []), key=lambda g: g.get("count", 0), reverse=True)
+    for g in genres:
+        name = g.get("name", "").strip().lower()
+        if name and name not in skip and name not in seen:
+            seen.add(name)
+            results.append(name.title())
+            if len(results) >= limit:
+                return results
+    
+    # Priority 2: community tags
+    tags = sorted(data.get("tags", []), key=lambda t: t.get("count", 0), reverse=True)
+    for t in tags:
+        name = t.get("name", "").strip().lower()
+        if name and name not in skip and name not in seen:
+            seen.add(name)
+            results.append(name.title())
+            if len(results) >= limit:
+                return results
+    
+    return results
+
+
+def fetch_genre_musicbrainz(recording_id: str = "", release_group_id: str = "") -> Optional[str]:
+    """
+    Fetch genre(s) from MusicBrainz, combining recording-level (track) and
+    release-group-level (album) tags.
+    
+    Recording tags are more specific (e.g. "rock" for a rock track on an
+    electronic album), so they take priority.
+    
+    Returns a semicolon-separated genre string (e.g. "Rock; Alternative Rock")
+    or None.
+    """
+    skip = {"music", "seen live", "favorites", "favourite", "favorite"}
+    all_genres = []
+    seen = set()
+    
+    # Priority 1: recording-level tags (per track — most specific)
+    if recording_id:
+        url = f"{_MB_BASE}/recording/{recording_id}?inc=genres+tags&fmt=json"
+        data = _request(url)
+        if data:
+            try:
+                result = json.loads(data)
+                for g in _extract_genres(result, skip, limit=2):
+                    if g.lower() not in seen:
+                        seen.add(g.lower())
+                        all_genres.append(g)
+            except json.JSONDecodeError:
+                pass
+    
+    # Priority 2: release-group-level tags (album — broader)
+    if release_group_id and len(all_genres) < 2:
+        url = f"{_MB_BASE}/release-group/{release_group_id}?inc=genres+tags&fmt=json"
+        data = _request(url)
+        if data:
+            try:
+                result = json.loads(data)
+                for g in _extract_genres(result, skip, limit=2):
+                    if g.lower() not in seen:
+                        seen.add(g.lower())
+                        all_genres.append(g)
+            except json.JSONDecodeError:
+                pass
+    
+    if all_genres:
+        return "; ".join(all_genres[:3])
+    return None
+
+
 def fetch_cover_art(release_id: str, release_group_id: str = "", 
                     fallback_release_ids: Optional[List[str]] = None) -> Optional[bytes]:
     """
@@ -319,10 +411,13 @@ def fetch_cover_art_itunes(artist: str, album: str, title: str = "") -> Optional
          artist + track name.
     
     Returns JPEG bytes or None.
+    Also stores the genre in _itunes_last_genre (module-level) for the caller.
     """
+    global _itunes_last_genre
+    _itunes_last_genre = None
     best_url = None
     
-    # --- Strategy 1: search by album ---
+    # --- Strategy 1: search by album (for cover art) ---
     if album:
         query = f"{artist} {album}"
         params = urllib.parse.urlencode({
@@ -349,8 +444,10 @@ def fetch_cover_art_itunes(artist: str, album: str, title: str = "") -> Optional
             except (json.JSONDecodeError, KeyError):
                 pass
     
-    # --- Strategy 2: search by song (fallback) ---
-    if not best_url and title:
+    # --- Strategy 2: search by song ---
+    # Always run this to get the per-track genre (more accurate than album genre).
+    # Also used as cover fallback if Strategy 1 didn't find a cover.
+    if title:
         query = f"{artist} {title}"
         params = urllib.parse.urlencode({
             "term": query,
@@ -363,16 +460,25 @@ def fetch_cover_art_itunes(artist: str, album: str, title: str = "") -> Optional
         if data:
             try:
                 results = json.loads(data).get("results", [])
-                best_sim = 0.0
+                best_song_sim = 0.0
                 for item in results:
                     item_artist = item.get("artistName", "")
                     item_track = item.get("trackName", "")
                     artist_sim = _similarity(artist, item_artist)
                     track_sim = _similarity(title, item_track)
                     combined = artist_sim * 0.5 + track_sim * 0.5
-                    if combined > best_sim and artist_sim >= 0.4 and track_sim >= 0.4:
-                        best_sim = combined
-                        best_url = item.get("artworkUrl100", "")
+                    if combined > best_song_sim and artist_sim >= 0.4 and track_sim >= 0.4:
+                        # When we know the album, verify the result comes from
+                        # the correct album to avoid compilation covers
+                        if album:
+                            item_album = item.get("collectionName", "")
+                            if _similarity(album, item_album) < 0.4:
+                                continue
+                        best_song_sim = combined
+                        # Per-track genre is more accurate than album genre
+                        _itunes_last_genre = item.get("primaryGenreName")
+                        if not best_url:
+                            best_url = item.get("artworkUrl100", "")
             except (json.JSONDecodeError, KeyError):
                 pass
     
@@ -627,6 +733,7 @@ def enrich_metadata(video_infos: Dict) -> Optional[EnrichedMetadata]:
         
         if recording:
             enriched.confidence = recording.get("_match_score", 0)
+            enriched.mb_recording_id = recording.get("id", "")
             release = _pick_best_release(recording, yt_album)
             
             if release:
@@ -637,11 +744,16 @@ def enrich_metadata(video_infos: Dict) -> Optional[EnrichedMetadata]:
                 # Get release-group ID for cover art fallback
                 release_group = release.get("release-group", {})
                 release_group_id = release_group.get("id", "")
+                enriched.mb_release_group_id = release_group_id
                 
                 # Collect other release IDs as fallback for cover art
+                # ONLY include releases from the same release-group
+                # (= same album, different editions) to avoid getting
+                # covers from compilations or other unrelated albums
                 fallback_release_ids = [
                     r.get("id") for r in recording.get("releases", [])
                     if r.get("id") and r.get("id") != enriched.mb_release_id
+                    and r.get("release-group", {}).get("id") == release_group_id
                 ]
                 
                 # Get track number from the release media
@@ -657,6 +769,9 @@ def enrich_metadata(video_infos: Dict) -> Optional[EnrichedMetadata]:
                     for credit in release_group.get("artist-credit", []):
                         enriched.album_artist = credit.get("name", "") or credit.get("artist", {}).get("name", "")
                         break
+                
+                # Fetch genre: iTunes first (curated), MusicBrainz as fallback
+                # (iTunes genre is fetched later, after cover art)
                 
                 # Fetch HD cover art (release-group → release → fallback releases)
                 if enriched.mb_release_id:
@@ -679,6 +794,7 @@ def enrich_metadata(video_infos: Dict) -> Optional[EnrichedMetadata]:
                         if itunes_cover:
                             enriched.cover_data = itunes_cover
                             enriched.cover_mime = "image/jpeg"
+
             else:
                 print(f"  [metadata] No matching release for album \"{yt_album}\"")
                 # Fallback: try iTunes even without a MusicBrainz release match
@@ -688,6 +804,7 @@ def enrich_metadata(video_infos: Dict) -> Optional[EnrichedMetadata]:
                     enriched.cover_data = itunes_cover
                     enriched.cover_mime = "image/jpeg"
                     enriched.album = yt_album
+
         else:
             print(f"  [metadata] MusicBrainz search returned no match for album \"{yt_album}\"")
             # Fallback: try iTunes directly (doesn't need MusicBrainz)
@@ -697,6 +814,7 @@ def enrich_metadata(video_infos: Dict) -> Optional[EnrichedMetadata]:
                 enriched.cover_data = itunes_cover
                 enriched.cover_mime = "image/jpeg"
                 enriched.album = yt_album
+
     else:
         print(f"  [metadata] No album info from YouTube — skipping cover art lookup")
     
@@ -706,8 +824,28 @@ def enrich_metadata(video_infos: Dict) -> Optional[EnrichedMetadata]:
     enriched.lyrics = plain_lyrics
     enriched.synced_lyrics = synced_lyrics
     
+    # --- Step 3: Genre ---
+    # Priority 1: iTunes per-song genre (curated, standardized classification)
+    if not enriched.genre:
+        if not _itunes_last_genre:
+            # Trigger an iTunes song lookup for genre
+            fetch_cover_art_itunes(artist, yt_album or "", title)
+        if _itunes_last_genre:
+            enriched.genre = _itunes_last_genre
+            print(f"  [metadata] \u2713 Genre (iTunes): {enriched.genre}")
+    
+    # Priority 2: MusicBrainz recording + release-group tags (more detailed)
+    if not enriched.genre:
+        mb_genre = fetch_genre_musicbrainz(
+            recording_id=enriched.mb_recording_id or "",
+            release_group_id=enriched.mb_release_group_id or ""
+        )
+        if mb_genre:
+            enriched.genre = mb_genre
+            print(f"  [metadata] \u2713 Genre (MusicBrainz): {enriched.genre}")
+    
     # Only return if we actually found something useful
-    if enriched.cover_data or enriched.lyrics or enriched.synced_lyrics:
+    if enriched.cover_data or enriched.lyrics or enriched.synced_lyrics or enriched.genre:
         return enriched
     
     print("  [metadata] No enrichment data found")
@@ -754,6 +892,11 @@ def apply_enriched_metadata_mp3(file_path: str, enriched: EnrichedMetadata,
     if enriched.date:
         audio.delall("TDRC")
         audio["TDRC"] = TDRC(encoding=3, text=[enriched.date])
+    
+    # Genre (replaces the generic "Music" from FFmpegMetadata)
+    if enriched.genre:
+        audio.delall("TCON")
+        audio["TCON"] = TCON(encoding=3, text=[enriched.genre])
     
     # Lyrics — prefer synced (LRC) in USLT for maximum player compatibility
     # Most players (Tauon, foobar2000, etc.) read LRC-formatted text from USLT
