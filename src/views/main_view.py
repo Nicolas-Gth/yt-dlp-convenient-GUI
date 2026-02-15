@@ -668,10 +668,10 @@ class MainApplicationView:
             self.total_progress_percent.grid(sticky=tk.W, row=3, column=0, pady=10, padx=424)
             
             # Adjust window size for playlist
-            self.adjust_window_size(extra_height=135)
+            self.adjust_window_size()
         else:
             # Adjust window size for single video
-            self.adjust_window_size(extra_height=100)
+            self.adjust_window_size()
     
     def hide_progress_widgets(self):
         """Hide progress widgets and restore convert button."""
@@ -745,6 +745,8 @@ class MainApplicationView:
                 cursor="hand2",
                 command=self._on_download_again_click
             )
+        # Resize window to fit remaining content
+        self.adjust_window_size()
 
     def _on_download_again_click(self):
         """Handle 'Download again' button click — return to start screen."""
@@ -779,6 +781,9 @@ class MainApplicationView:
                 is_square = abs(thumbnail.size[0] - thumbnail.size[1]) < 5
                 padx = 74 if is_square else 114
                 self.info_label.grid_configure(padx=padx)
+        
+        # Resize window to fit updated content
+        self.adjust_window_size()
     
     def update_video_progress(self, percentage: float, status: str = ""):
         """Update video download progress."""
@@ -1035,6 +1040,10 @@ class MainApplicationView:
         # Clamp width between minimum and maximum
         width = max(req_width, PLATFORM_SCALE['width_base'])
         width = min(width, 560)  # Never wider than 560px
+        # Reset geometry to allow shrinking, then set final size
+        self.root.geometry("")
+        self.root.update_idletasks()
+        req_height = self.root.winfo_reqheight() + extra_height
         self.root.geometry(f"{width}x{req_height}")
     
     def get_download_config(self) -> DownloadConfig:
