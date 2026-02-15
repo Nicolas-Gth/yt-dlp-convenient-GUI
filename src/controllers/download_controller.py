@@ -32,7 +32,11 @@ class CustomPostProcessor(yt_dlp.postprocessor.PostProcessor):
     def run(self, video_infos):
         """Process downloaded file: add metadata, rename, and set album cover."""
         file_format = self.config.file_format
-        file_path = f"{self.config.output_directory}/{video_infos['title']}.{file_format}"
+        # Use yt-dlp's actual filepath — the title may contain characters
+        # (/ ? : ~ etc.) that yt-dlp sanitises when writing to disk,
+        # so reconstructing the path from the raw title would fail.
+        file_path = video_infos.get('filepath',
+                                    f"{self.config.output_directory}/{video_infos['title']}.{file_format}")
 
         # Check if the file actually exists
         if not os.path.exists(file_path):
@@ -131,8 +135,8 @@ class CustomPostProcessor(yt_dlp.postprocessor.PostProcessor):
     def _sanitize_and_rename_file(self, file_path: str, video_infos: Dict, artist_name: str, file_format: str) -> str:
         """Sanitize filename and rename the file."""
         title = video_infos.get('title', '')
-        sanitized_artist = re.sub(r'[!?:#%&{}<>|*/$@]', '', artist_name)
-        sanitized_title = re.sub(r'[!?:#%&{}<>|*/$@]', '', title)
+        sanitized_artist = re.sub(r'[!?:#%&{}<>|*/$@~]', '', artist_name)
+        sanitized_title = re.sub(r'[!?:#%&{}<>|*/$@~]', '', title)
         
         new_file_path = f"{self.config.output_directory}/{sanitized_artist} - {sanitized_title}.{file_format}"
         
