@@ -588,7 +588,11 @@ class MainApplicationView:
         self.disable_interactive_widgets()
         self.convert_button.destroy()
         
-        # Create stop button where convert button was
+        # Create progress frame where convert button was
+        self.progress_frame = tk.LabelFrame(self.root, bg=COLORS['background'], border=0)
+        self.progress_frame.grid(sticky=tk.W, row=6, column=0)
+        
+        # Create stop button below progress frame, just above disclaimer
         self.stop_button = tk.Button(
             self.root,
             text="Stop download",
@@ -603,11 +607,7 @@ class MainApplicationView:
             activeforeground=COLORS['text_secondary'],
             cursor="hand2"
         )
-        self.stop_button.grid(row=6, column=0, pady=2)
-        
-        # Create progress frame
-        self.progress_frame = tk.LabelFrame(self.root, bg=COLORS['background'], border=0)
-        self.progress_frame.grid(sticky=tk.W, row=7, column=0)
+        self.stop_button.grid(row=7, column=0, pady=2)
         
         # Song name label
         self.song_label = ttk.Label(self.progress_frame, text="", anchor="w", justify="left")
@@ -621,8 +621,8 @@ class MainApplicationView:
         self.info_label = ttk.Label(self.progress_frame, text="", anchor="w", justify="left")
         self.info_label.grid(sticky=tk.W, row=1, column=0, pady=5, padx=74)
         
-        # Video progress
-        self.progress_label = ttk.Label(self.progress_frame, text="Video progress :", anchor="w", justify="left")
+        # Element progress
+        self.progress_label = ttk.Label(self.progress_frame, text="Element progress :", anchor="w", justify="left")
         self.progress_label.grid(sticky=tk.W, row=2, column=0, pady=0, padx=7)
         
         self.video_progress = ttk.Progressbar(
@@ -716,6 +716,39 @@ class MainApplicationView:
             self.stop_button.configure(state='disabled', text="Stopping...", bg="#666666", cursor="arrow")
         if self.on_stop_callback:
             self.on_stop_callback()
+
+    def show_download_again_button(self):
+        """Transform the stop button into a 'Download again' button."""
+        # Hide element/total progress bars
+        for attr in ('progress_label', 'video_progress', 'video_progress_percent',
+                      'total_progress_label', 'total_progress', 'total_progress_percent'):
+            widget = getattr(self, attr, None)
+            if widget is not None:
+                try:
+                    widget.grid_remove()
+                except Exception:
+                    pass
+        # Clear last element info (thumbnail, title details)
+        for attr in ('thumbnail_label', 'info_label'):
+            widget = getattr(self, attr, None)
+            if widget is not None:
+                try:
+                    widget.grid_remove()
+                except Exception:
+                    pass
+        if hasattr(self, 'stop_button') and self.stop_button.winfo_exists():
+            self.stop_button.configure(
+                state='normal',
+                text="Download again",
+                bg="#3a7a3a",
+                activebackground="#4a9a4a",
+                cursor="hand2",
+                command=self._on_download_again_click
+            )
+
+    def _on_download_again_click(self):
+        """Handle 'Download again' button click — return to start screen."""
+        self.hide_progress_widgets()
     
     def update_progress_info(self, video_info: VideoInfo, song_name: str, is_playlist: bool = False):
         """Update progress display with video information."""

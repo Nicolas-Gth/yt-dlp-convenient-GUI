@@ -147,8 +147,9 @@ class ApplicationController:
             else:
                 video = VideoInfo()
             
+            playlist_title = video_info.get('title', '') or ''
             if playlist_length > 0:
-                song_name = f"Element {current_index + 1} out of {playlist_length} from the playlist"
+                song_name = f"Downloading element {current_index + 1} out of {playlist_length} from the playlist {playlist_title}"
             else:
                 song_name = f"Downloading element {current_index + 1}..."
             self.view.update_progress_info(video, song_name, is_playlist=True)
@@ -188,8 +189,9 @@ class ApplicationController:
             else:
                 video = VideoInfo()
             
+            playlist_title = info_dict.get('playlist_title', '') or (video_info or {}).get('title', '') or ''
             if playlist_length > 0:
-                song_name = f"Element {current_index + 1} out of {playlist_length} from the playlist"
+                song_name = f"Downloading element {current_index + 1} out of {playlist_length} from the playlist {playlist_title}"
             else:
                 song_name = f"Downloading element {current_index + 1}..."
             self.view.update_progress_info(video, song_name, is_playlist=True)
@@ -301,8 +303,9 @@ class ApplicationController:
             else:
                 playlist_length = getattr(self, '_playlist_total', 0)
             
+            playlist_title = info_dict.get('playlist_title', '') or (video_info or {}).get('title', '') or ''
             if playlist_length > 0:
-                song_name = f"Element {video_index + 1} out of {playlist_length} from the playlist"
+                song_name = f"Downloading element {video_index + 1} out of {playlist_length} from the playlist {playlist_title}"
             else:
                 song_name = f"Processing element {video_index + 1}..."
                 
@@ -337,15 +340,26 @@ class ApplicationController:
     
     def _on_download_complete_ui(self):
         """Handle download completion UI updates (runs on main thread)."""
+        # Show completion message for playlists
+        config = self._current_config
+        if config and config.is_playlist and self.current_video_info:
+            playlist_title = self.current_video_info.get('title', '') or ''
+            playlist_length = self._playlist_total or 0
+            if playlist_length > 0 and playlist_title:
+                completion_msg = f"Elements 1 to {playlist_length} from playlist {playlist_title} downloaded."
+            elif playlist_length > 0:
+                completion_msg = f"Elements 1 to {playlist_length} from playlist downloaded."
+            else:
+                completion_msg = "Playlist downloaded."
+            if hasattr(self.view, 'song_label'):
+                self.view.song_label.configure(text=completion_msg)
+        
         # Reset progress
         self.download_controller.progress.reset()
         self._playlist_total = 0
         
-        # Hide progress widgets and show convert button
-        self.view.hide_progress_widgets()
-        
-        # Re-enable the convert button
-        self.view.set_convert_button_enabled(True)
+        # Show "Download again" button instead of immediately resetting
+        self.view.show_download_again_button()
     
     def on_format_change(self, format_type: str):
         """Handle format selection change."""
