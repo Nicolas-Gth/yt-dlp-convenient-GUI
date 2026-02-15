@@ -61,11 +61,14 @@ if !errorLevel! == 0 (
     echo Downloading Python 3.11.9...
     powershell -Command "Invoke-WebRequest -Uri 'https://www.python.org/ftp/python/3.11.9/python-3.11.9-amd64.exe' -OutFile 'temp\python-installer.exe'"
     if exist "temp\python-installer.exe" (
-        echo Installing Python...
+        echo Installing Python ^(this may take a moment^)...
         temp\python-installer.exe /quiet InstallAllUsers=1 PrependPath=1
-        echo [INFO] Restart and relaunch this file
-        pause
-        exit /b 1
+        echo [OK] Python installed successfully
+        echo [INFO] Restarting script to apply new PATH...
+        if exist "temp" rmdir /s /q "temp"
+        timeout /t 3 /nocheck >nul
+        start "" "%~f0"
+        exit
     )
 )
 
@@ -143,16 +146,40 @@ pause >nul
 goto :eof
 
 :check_updates
+:: Check if Git is installed, offer to install if not
 git --version >nul 2>&1
-if %errorLevel% neq 0 (
-    echo [SKIP] git is not installed, skipping update check
+if !errorLevel! == 0 goto :git_available
+echo [INFO] Git is not installed.
+echo [INFO] Installing Git allows the app to automatically download updates.
+set /p "install_git=Install Git? (Y/n): "
+if /i "!install_git!"=="n" (
+    echo [SKIP] Skipping update check
+    echo.
     goto :eof
 )
+call :install_git
+git --version >nul 2>&1
+if !errorLevel! neq 0 (
+    echo [SKIP] Git not available, skipping update check
+    echo.
+    goto :eof
+)
+
+:git_available
+:: Set up Git repository if not already one
 git rev-parse --is-inside-work-tree >nul 2>&1
-if %errorLevel% neq 0 (
-    echo [SKIP] Not a git repository, skipping update check
-    goto :eof
-)
+if !errorLevel! == 0 goto :repo_available
+echo [INFO] Setting up Git repository for automatic updates...
+git init >nul 2>&1
+git remote add origin https://github.com/Nicolas-Gth/yt-dlp-convenient-GUI.git >nul 2>&1
+git fetch origin >nul 2>&1
+git checkout -f main >nul 2>&1
+if !errorLevel! neq 0 git checkout -f master >nul 2>&1
+echo [OK] Repository configured for automatic updates
+echo.
+goto :eof
+
+:repo_available
 echo Checking for updates...
 git fetch origin >nul 2>&1
 if %errorLevel% neq 0 (
@@ -194,6 +221,34 @@ if "%LOCAL%"=="%REMOTE%" (
 )
 echo.
 goto :eof
+
+:install_git
+echo Installing Git...
+:: Try winget first (Windows 10/11)
+where winget >nul 2>&1
+if !errorLevel! neq 0 goto :install_git_download
+winget install --id Git.Git -e --accept-source-agreements --accept-package-agreements >nul 2>&1
+if !errorLevel! neq 0 goto :install_git_download
+set "PATH=!PATH!;C:\Program Files\Git\bin;C:\Program Files\Git\cmd"
+echo [OK] Git installed via winget
+goto :eof
+
+:install_git_download
+if not exist "temp" mkdir temp
+echo Downloading Git for Windows...
+powershell -Command "$ProgressPreference='SilentlyContinue'; try { $r=Invoke-RestMethod 'https://api.github.com/repos/git-for-windows/git/releases/latest'; $a=$r.assets|Where-Object{$_.name -match '64-bit\.exe$' -and $_.name -notmatch 'portable'}|Select-Object -First 1; Invoke-WebRequest -Uri $a.browser_download_url -OutFile 'temp\git-installer.exe' } catch { exit 1 }"
+if not exist "temp\git-installer.exe" (
+    echo [ERROR] Could not download Git installer
+    echo [INFO] You can install Git manually from: https://git-scm.com/download/win
+    goto :eof
+)
+echo Installing Git ^(this may take a moment^)...
+temp\git-installer.exe /VERYSILENT /NORESTART /NOCANCEL /SP- /CLOSEAPPLICATIONS /RESTARTAPPLICATIONS /COMPONENTS="icons,ext\reg\shellhere,assoc,assoc_sh"
+set "PATH=!PATH!;C:\Program Files\Git\bin;C:\Program Files\Git\cmd"
+del "temp\git-installer.exe" >nul 2>&1
+echo [OK] Git installed
+goto :eof
+
 :update_ytdlp
 echo Checking for yt-dlp updates...
 pip install --upgrade yt-dlp >nul 2>&1
