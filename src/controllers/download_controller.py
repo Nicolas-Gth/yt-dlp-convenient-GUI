@@ -24,6 +24,25 @@ from config import get_ffmpeg_path, FILE_FORMATS
 class CustomPostProcessor(yt_dlp.postprocessor.PostProcessor):
     """Custom post-processor for handling metadata and file organization."""
     
+    # Patterns stripped from video titles for clean filenames/tags
+    _TITLE_NOISE_RE = re.compile(
+        r'\s*[\(\[]'
+        r'(official\s*(music\s*)?video|official\s*audio|official\s*lyric\s*video'
+        r'|lyrics?|lyric\s*video|audio|visualizer|hd|hq|4k'
+        r'|clip\s*officiel|video\s*oficial|videoclip'
+        r'|mv|m/v|music\s*video|live)'
+        r'[\)\]]',
+        re.IGNORECASE
+    )
+
+    @staticmethod
+    def _clean_title(title: str) -> str:
+        """Strip noise like (Official Video), [Lyrics], etc. from a video title."""
+        cleaned = CustomPostProcessor._TITLE_NOISE_RE.sub('', title).strip()
+        # Also strip trailing whitespace/dashes left over
+        cleaned = re.sub(r'[\s\-]+$', '', cleaned)
+        return cleaned if cleaned else title
+
     def __init__(self, download_config: DownloadConfig, normalize_callback: Optional[Callable] = None):
         super().__init__()
         self.config = download_config
@@ -92,6 +111,12 @@ class CustomPostProcessor(yt_dlp.postprocessor.PostProcessor):
             metadatas = MP3(file_path, ID3=EasyID3)
             metadatas['artist'] = artist_name
             
+            # Use clean track name as title tag
+            track_name = video_infos.get('track')  # YT Music: already clean
+            if not track_name:
+                track_name = self._clean_title(video_infos.get('title', ''))
+            metadatas['title'] = track_name
+            
             album_name = video_infos.get('album')
             if album_name:
                 metadatas['album'] = album_name
@@ -134,7 +159,8 @@ class CustomPostProcessor(yt_dlp.postprocessor.PostProcessor):
     
     def _sanitize_and_rename_file(self, file_path: str, video_infos: Dict, artist_name: str, file_format: str) -> str:
         """Sanitize filename and rename the file."""
-        title = video_infos.get('title', '')
+        # Prefer clean track name from YT Music, otherwise clean the video title
+        title = video_infos.get('track') or self._clean_title(video_infos.get('title', ''))
         sanitized_artist = re.sub(r'[!?:#%&{}<>|*/$@~]', '', artist_name)
         sanitized_title = re.sub(r'[!?:#%&{}<>|*/$@~]', '', title)
         
