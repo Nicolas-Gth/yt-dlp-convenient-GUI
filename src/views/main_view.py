@@ -842,13 +842,13 @@ class MainApplicationView:
         sep.pack(fill='x', padx=2, pady=(1, 3))
 
         # List each hidden entry
-        for entry in hidden_entries:
+        for i, entry in enumerate(hidden_entries, start=1):
             title = entry.get('title', 'Unknown')
             channel = entry.get('channel', '')
             if channel:
-                text = f"{title}  -  {channel}"
+                text = f"{i}. {channel} - {title}"
             else:
-                text = title
+                text = f"{i}. {title}"
             lbl = ttk.Label(
                 self._skipped_frame,
                 text=text,
