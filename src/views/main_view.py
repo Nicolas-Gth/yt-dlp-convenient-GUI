@@ -1097,8 +1097,9 @@ class MainApplicationView:
         self._normalize_canvas.configure(scrollregion=self._normalize_canvas.bbox('all'))
         self._normalize_canvas.yview_moveto(1.0)
         
-        # Refresh window size
-        self.adjust_window_size()
+        # Only resize window when the visible area is still growing
+        if count <= MAX_VISIBLE:
+            self.adjust_window_size()
     
     def _on_normalize_canvas_configure(self, event):
         """Stretch inner frame to match canvas width."""
@@ -1140,11 +1141,10 @@ class MainApplicationView:
         # Clamp width between minimum and maximum
         width = max(req_width, PLATFORM_SCALE['width_base'])
         width = min(width, 560)  # Never wider than 560px
-        # Reset geometry to allow shrinking, then set final size
-        self.root.geometry("")
-        self.root.update_idletasks()
-        req_height = self.root.winfo_reqheight() + extra_height
-        self.root.geometry(f"{width}x{req_height}")
+        # Force size via minsize/maxsize instead of geometry() to avoid
+        # WM repositioning the window on every resize (KDE/Wayland bug).
+        self.root.minsize(width, req_height)
+        self.root.maxsize(width, req_height)
     
     def get_download_config(self) -> DownloadConfig:
         """Create DownloadConfig from current UI state."""
