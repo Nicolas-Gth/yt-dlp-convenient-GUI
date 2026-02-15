@@ -824,8 +824,12 @@ class DownloadController:
         """Send completion notification."""
         if self.video_infos:
             if config.is_playlist:
-                title = self.video_infos.get('title', 'Unknown Playlist')
-                message = f"Playlist \"{title}\" has been downloaded."
+                playlist_title = self.video_infos.get('title', 'Unknown Playlist')
+                count = self.progress.current_song if self.progress else 0
+                if count > 0:
+                    message = f"{count} element{'s' if count > 1 else ''} downloaded from playlist {playlist_title}."
+                else:
+                    message = f"Playlist {playlist_title} downloaded."
             else:
                 title = self.video_infos.get('title', 'Unknown')
                 message = f"Video \"{title}\" has been downloaded."

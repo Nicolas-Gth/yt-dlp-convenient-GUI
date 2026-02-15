@@ -332,27 +332,39 @@ class ApplicationController:
     
     def on_download_cancelled(self):
         """Handle download cancellation (called from download thread)."""
-        self.view.root.after(0, self._on_download_complete_ui)
+        self.view.root.after(0, lambda: self._on_download_complete_ui(cancelled=True))
     
     def on_download_complete(self):
         """Handle download completion (called from download thread)."""
-        self.view.root.after(0, self._on_download_complete_ui)
+        self.view.root.after(0, lambda: self._on_download_complete_ui(cancelled=False))
     
-    def _on_download_complete_ui(self):
-        """Handle download completion UI updates (runs on main thread)."""
-        # Show completion message for playlists
+    def _build_completion_message(self, cancelled: bool) -> str:
+        """Build the completion/cancellation message for playlists."""
         config = self._current_config
+        downloaded_count = getattr(self.view, '_info_item_count', 0)
+        playlist_title = ''
         if config and config.is_playlist and self.current_video_info:
             playlist_title = self.current_video_info.get('title', '') or ''
-            playlist_length = self._playlist_total or 0
-            if playlist_length > 0 and playlist_title:
-                completion_msg = f"Elements 1 to {playlist_length} from playlist {playlist_title} downloaded."
-            elif playlist_length > 0:
-                completion_msg = f"Elements 1 to {playlist_length} from playlist downloaded."
-            else:
-                completion_msg = "Playlist downloaded."
-            if hasattr(self.view, 'song_label'):
-                self.view.song_label.configure(text=completion_msg)
+        
+        prefix = "Download aborted. " if cancelled else ""
+        
+        if downloaded_count > 0 and playlist_title:
+            msg = f"{downloaded_count} element{'s' if downloaded_count > 1 else ''} downloaded from playlist {playlist_title}."
+        elif downloaded_count > 0:
+            msg = f"{downloaded_count} element{'s' if downloaded_count > 1 else ''} downloaded."
+        elif playlist_title:
+            msg = f"Playlist {playlist_title} downloaded."
+        else:
+            msg = "Download complete."
+        
+        return f"{prefix}{msg}"
+    
+    def _on_download_complete_ui(self, cancelled: bool = False):
+        """Handle download completion UI updates (runs on main thread)."""
+        # Show completion message
+        completion_msg = self._build_completion_message(cancelled)
+        if hasattr(self.view, 'song_label'):
+            self.view.song_label.configure(text=completion_msg)
         
         # Reset progress
         self.download_controller.progress.reset()
