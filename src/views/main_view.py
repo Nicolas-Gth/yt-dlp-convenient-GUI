@@ -144,12 +144,28 @@ class MainApplicationView:
         self.adjust_window_size()
     
     def create_url_input(self):
-        """Create URL input field."""
-        self.url_entry = ttk.Entry(self.root, width=74, textvariable=self.url_var)
+        """Create URL input field with clear button."""
+        self.url_frame = tk.Frame(self.root, bg=COLORS['background'])
+        self.url_frame.grid(sticky=tk.W, row=0, column=0, pady=10, padx=5)
+
+        self.url_entry = ttk.Entry(self.url_frame, width=71, textvariable=self.url_var)
         self.url_entry.insert(0, 'Enter a video URL')
         self.url_entry.bind("<FocusIn>", self._on_url_focus_in)
         self.url_entry.bind("<FocusOut>", self._on_url_focus_out)
-        self.url_entry.grid(sticky=tk.W, row=0, column=0, pady=10, padx=5)
+        self.url_entry.pack(side=tk.LEFT)
+
+        self.url_clear_btn = tk.Button(
+            self.url_frame, text="✕", font=("Arial", 10, "bold"),
+            bg=COLORS['background'], fg=COLORS['text_primary'],
+            activebackground=COLORS['background'], activeforeground="red",
+            bd=0, padx=4, cursor="hand2",
+            highlightthickness=0, highlightbackground=COLORS['background'],
+            relief="flat",
+            command=self._clear_url_input
+        )
+        self.url_clear_btn.pack(side=tk.LEFT, padx=(4, 0))
+        self.url_clear_btn.bind("<Enter>", lambda e: self._show_tooltip(e, "Clear"))
+        self.url_clear_btn.bind("<Leave>", lambda e: self._hide_tooltip())
     
     def create_path_input(self):
         """Create path input and browse button."""
@@ -1231,6 +1247,35 @@ class MainApplicationView:
         if not self.url_var.get().strip():
             self.url_entry.delete('0', 'end')
             self.url_entry.insert(0, 'Enter a video URL')
+
+    def _clear_url_input(self):
+        """Clear the URL input field and restore placeholder."""
+        self.url_entry.delete('0', 'end')
+        self.url_entry.insert(0, 'Enter a video URL')
+        self.root.focus_set()
+
+    def _show_tooltip(self, event, text: str):
+        """Show a small tooltip near the widget on hover."""
+        self._hide_tooltip()
+        x = event.widget.winfo_rootx() + event.widget.winfo_width() // 2
+        y = event.widget.winfo_rooty() + event.widget.winfo_height() + 4
+        self._tooltip = tk.Toplevel(self.root)
+        self._tooltip.wm_overrideredirect(True)
+        self._tooltip.wm_geometry(f"+{x}+{y}")
+        label = tk.Label(
+            self._tooltip, text=text,
+            bg="#222222", fg="white",
+            font=("Arial", 9), padx=6, pady=2,
+            relief="solid", borderwidth=1
+        )
+        label.pack()
+
+    def _hide_tooltip(self):
+        """Destroy the current tooltip if any."""
+        tw = getattr(self, '_tooltip', None)
+        if tw:
+            tw.destroy()
+            self._tooltip = None
     
     def _validate_download_path(self) -> bool:
         """Validate that a download path has been selected."""
