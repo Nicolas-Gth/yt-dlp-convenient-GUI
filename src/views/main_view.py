@@ -112,6 +112,13 @@ class MainApplicationView:
         self.style.configure('TLabelframe', 
                            background=COLORS['background'])
         
+        # Configure scrollbar
+        self.style.configure('Vertical.TScrollbar',
+                           background=COLORS['background'],
+                           troughcolor=COLORS['background'],
+                           bordercolor=COLORS['background'],
+                           arrowcolor=COLORS['text_primary'])
+        
         # Configure progress bar
         self.style.configure('TProgressbar',
                            background=COLORS['button_normal'],
@@ -605,7 +612,8 @@ class MainApplicationView:
         
         # Create progress frame where convert button was
         self.progress_frame = tk.LabelFrame(self.root, bg=COLORS['background'], border=0)
-        self.progress_frame.grid(sticky=tk.W, row=6, column=0)
+        self.progress_frame.grid(sticky=tk.W+tk.E, row=6, column=0)
+        self.progress_frame.columnconfigure(0, weight=1)
         
         # Create stop button below progress frame, just above disclaimer
         self.stop_button = tk.Button(
@@ -626,30 +634,21 @@ class MainApplicationView:
         self.stop_button.grid(row=7, column=0, pady=2)
         
         # Song name label
-        self.song_label = ttk.Label(self.progress_frame, text="", anchor="w", justify="left")
+        self.song_label = ttk.Label(self.progress_frame, text="", anchor="w", justify="left",
+                                    font=("Arial", 9, "bold"))
         self.song_label.grid(sticky=tk.W, row=0, column=0, pady=(10, 0), padx=7)
-        
-        # ETA label (playlist only)
-        if is_playlist:
-            self.eta_label = ttk.Label(
-                self.progress_frame, text="", anchor="w", justify="left"
-            )
-            self.eta_label.grid(sticky=tk.W, row=1, column=0, pady=(0, 5), padx=7)
-            self._eta_callback = None
-            self._eta_timer_id = None
-            self._start_eta_timer()
         
         # Thumbnail placeholder
         self.thumbnail_label = ttk.Label(self.progress_frame)
-        self.thumbnail_label.grid(sticky=tk.W, row=2, column=0, pady=5, padx=7)
+        self.thumbnail_label.grid(sticky=tk.W, row=1, column=0, pady=5, padx=7)
         
         # Video info label
         self.info_label = ttk.Label(self.progress_frame, text="", anchor="w", justify="left")
-        self.info_label.grid(sticky=tk.W, row=2, column=0, pady=5, padx=74)
+        self.info_label.grid(sticky=tk.W, row=1, column=0, pady=5, padx=74)
         
         # Element progress
         self.progress_label = ttk.Label(self.progress_frame, text="Element progress :", anchor="w", justify="left")
-        self.progress_label.grid(sticky=tk.W, row=3, column=0, pady=0, padx=7)
+        self.progress_label.grid(sticky=tk.W, row=2, column=0, pady=0, padx=7)
         
         self.video_progress = ttk.Progressbar(
             self.progress_frame, 
@@ -657,7 +656,7 @@ class MainApplicationView:
             length=316, 
             mode='determinate'
         )
-        self.video_progress.grid(sticky=tk.W, row=3, column=0, pady=0, padx=106)
+        self.video_progress.grid(sticky=tk.W, row=2, column=0, pady=0, padx=106)
         
         self.video_progress_percent = ttk.Label(
             self.progress_frame, 
@@ -665,7 +664,7 @@ class MainApplicationView:
             anchor="w", 
             justify="left"
         )
-        self.video_progress_percent.grid(sticky=tk.W, row=3, column=0, pady=10, padx=424)
+        self.video_progress_percent.grid(sticky=tk.W, row=2, column=0, pady=10, padx=424)
         
         # Total progress (for playlists)
         if is_playlist:
@@ -675,7 +674,7 @@ class MainApplicationView:
                 anchor="w", 
                 justify="left"
             )
-            self.total_progress_label.grid(sticky=tk.W, row=4, column=0, pady=0, padx=7)
+            self.total_progress_label.grid(sticky=tk.W, row=3, column=0, pady=0, padx=7)
             
             self.total_progress = ttk.Progressbar(
                 self.progress_frame, 
@@ -683,7 +682,7 @@ class MainApplicationView:
                 length=316, 
                 mode='determinate'
             )
-            self.total_progress.grid(sticky=tk.W, row=4, column=0, pady=0, padx=106)
+            self.total_progress.grid(sticky=tk.W, row=3, column=0, pady=0, padx=106)
             
             self.total_progress_percent = ttk.Label(
                 self.progress_frame, 
@@ -691,7 +690,16 @@ class MainApplicationView:
                 anchor="w", 
                 justify="left"
             )
-            self.total_progress_percent.grid(sticky=tk.W, row=4, column=0, pady=10, padx=424)
+            self.total_progress_percent.grid(sticky=tk.W, row=3, column=0, pady=10, padx=424)
+            
+            # ETA label (below total progress)
+            self.eta_label = ttk.Label(
+                self.progress_frame, text="", anchor="w", justify="left"
+            )
+            self.eta_label.grid(sticky=tk.W, row=4, column=0, pady=(0, 5), padx=7)
+            self._eta_callback = None
+            self._eta_timer_id = None
+            self._start_eta_timer()
             
             # Adjust window size for playlist
             self.adjust_window_size()
@@ -987,7 +995,7 @@ class MainApplicationView:
                 self.progress_frame, bg=COLORS['background']
             )
             self.normalize_outer_frame.grid(
-                sticky=tk.W+tk.E, row=next_row, column=0, padx=5, pady=2
+                sticky=tk.W+tk.E, row=next_row, column=0, padx=5, pady=(2, 8)
             )
             
             # Header (fixed, does NOT scroll)
@@ -1024,6 +1032,9 @@ class MainApplicationView:
             self._normalize_canvas_window = self._normalize_canvas.create_window(
                 (0, 0), window=self._normalize_inner_frame, anchor='nw'
             )
+            
+            # Make inner frame stretch to canvas width
+            self._normalize_canvas.bind('<Configure>', self._on_normalize_canvas_configure)
             
             # Scrollbar (hidden initially)
             self._normalize_scrollbar = ttk.Scrollbar(
@@ -1075,10 +1086,10 @@ class MainApplicationView:
         if count <= MAX_VISIBLE:
             # Grow canvas height to fit
             new_height = count * ITEM_HEIGHT
-            self._normalize_canvas.configure(height=new_height, width=460)
+            self._normalize_canvas.configure(height=new_height)
         else:
             # Lock height at MAX_VISIBLE items and show scrollbar
-            self._normalize_canvas.configure(height=MAX_VISIBLE * ITEM_HEIGHT, width=445)
+            self._normalize_canvas.configure(height=MAX_VISIBLE * ITEM_HEIGHT)
             self._normalize_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         
         # Update scroll region and scroll to bottom
@@ -1088,6 +1099,11 @@ class MainApplicationView:
         
         # Refresh window size
         self.adjust_window_size()
+    
+    def _on_normalize_canvas_configure(self, event):
+        """Stretch inner frame to match canvas width."""
+        if hasattr(self, '_normalize_canvas_window'):
+            self._normalize_canvas.itemconfigure(self._normalize_canvas_window, width=event.width)
     
     def _on_normalize_frame_configure(self, event):
         """Update scroll region when inner frame changes size."""
