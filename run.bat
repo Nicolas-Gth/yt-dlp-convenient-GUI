@@ -5,6 +5,18 @@ chcp 65001 >nul
 title yt-dlp Convenient GUI - Automatic Installation and Launch
 color 0F
 
+echo  __   ______         ____  _     ____
+echo  \ \ / /_   _        ^|  _ \^| ^|   ^|  _ \
+echo   \ V /  ^| ^|   _____ ^| ^| ^| ^| ^|   ^| ^|_^) ^|
+echo    ^| ^|   ^| ^|  ^|_____^|^| ^|_^| ^| ^|___^|  __/
+echo    ^|_^|   ^|_^|         ^|____/^|_____^|_^|
+echo   ____                            _            _      ____ _   _ ___
+echo  / ___^| ___  _ ____   _____ _ __ ^(_^) ___ _ __ ^| ^|_   / ___^| ^| ^| ^|_ _^|
+echo ^| ^|    / _ \^| '_ \ \ / / _ \ '_ \^| ^|/ _ \ '_ \^| __^| ^| ^|  _^| ^| ^| ^|^| ^|
+echo ^| ^|___^| ^(_^) ^| ^| ^| \ V /  __/ ^| ^| ^| ^|  __/ ^| ^| ^| ^|_  ^| ^|_^| ^| ^|_^| ^|^| ^|
+echo  \____^|\___/^|_^| ^|_^|\_/ \___^|_^| ^|_^|_^|\___^|_^| ^|_^|\__^|  \____^|\___/^|___^|
+echo.
+
 :: Check if all components are installed
 call :check_components
 if !componentsOK! == 0 goto :install
@@ -37,18 +49,6 @@ if !componentsOK! == 1 (
 goto :eof
 
 :install
-echo  __   ______         ____  _     ____
-echo  \ \ / /_   _        ^|  _ \^| ^|   ^|  _ \
-echo   \ V /  ^| ^|   _____ ^| ^| ^| ^| ^|   ^| ^|_^) ^|
-echo    ^| ^|   ^| ^|  ^|_____^|^| ^|_^| ^| ^|___^|  __/
-echo    ^|_^|   ^|_^|         ^|____/^|_____^|_^|
-echo   ____                            _            _      ____ _   _ ___
-echo  / ___^| ___  _ ____   _____ _ __ ^(_^) ___ _ __ ^| ^|_   / ___^| ^| ^| ^|_ _^|
-echo ^| ^|    / _ \^| '_ \ \ / / _ \ '_ \^| ^|/ _ \ '_ \^| __^| ^| ^|  _^| ^| ^| ^|^| ^|
-echo ^| ^|___^| ^(_^) ^| ^| ^| \ V /  __/ ^| ^| ^| ^|  __/ ^| ^| ^| ^|_  ^| ^|_^| ^| ^|_^| ^|^| ^|
-echo  \____^|\___/^|_^| ^|_^|\_/ \___^|_^| ^|_^|_^|\___^|_^| ^|_^|\__^|  \____^|\___/^|___^|
-echo.
-
 :: Python verification and installation
 echo [1/4] Checking Python...
 python --version >nul 2>&1
@@ -66,7 +66,7 @@ if !errorLevel! == 0 (
         echo [OK] Python installed successfully
         echo [INFO] Restarting script to apply new PATH...
         if exist "temp" rmdir /s /q "temp"
-        timeout /t 3 /nocheck >nul
+        timeout /t 3 /nobreak >nul
         start "" "%~f0"
         exit
     )
@@ -173,48 +173,43 @@ echo [INFO] Setting up Git repository for automatic updates...
 git init >nul 2>&1
 git remote add origin https://github.com/Nicolas-Gth/yt-dlp-convenient-GUI.git >nul 2>&1
 git fetch origin >nul 2>&1
-git checkout -f main >nul 2>&1
-if !errorLevel! neq 0 git checkout -f master >nul 2>&1
-echo [OK] Repository configured for automatic updates
-echo.
-goto :eof
+echo [OK] Fetched remote repository
+echo [INFO] Applying latest version and restarting...
+call :write_updater "checkout"
+exit
 
 :repo_available
 echo Checking for updates...
 git fetch origin >nul 2>&1
-if %errorLevel% neq 0 (
-    echo [SKIP] Could not reach GitHub (no internet?)
+if !errorLevel! neq 0 (
+    echo [SKIP] Could not reach GitHub ^(no internet?^)
     goto :eof
 )
-for /f %%a in ('git rev-parse HEAD') do set LOCAL=%%a
-for /f %%a in ('git rev-parse origin/main 2^>nul') do set REMOTE=%%a
+for /f %%a in ('git rev-parse HEAD') do set "LOCAL=%%a"
+set "REMOTE="
+for /f %%a in ('git rev-parse origin/main 2^>nul') do set "REMOTE=%%a"
 if not defined REMOTE (
-    for /f %%a in ('git rev-parse origin/master 2^>nul') do set REMOTE=%%a
+    for /f %%a in ('git rev-parse origin/master 2^>nul') do set "REMOTE=%%a"
 )
 if not defined REMOTE (
     echo [SKIP] Could not determine remote branch
     goto :eof
 )
-if "%LOCAL%"=="%REMOTE%" (
+if "!LOCAL!"=="!REMOTE!" (
     echo [OK] Already up to date
 ) else (
-    for /f %%a in ('git rev-list --count HEAD..origin/main 2^>nul') do set BEHIND=%%a
+    set "BEHIND="
+    for /f %%a in ('git rev-list --count HEAD..origin/main 2^>nul') do set "BEHIND=%%a"
     if not defined BEHIND (
-        for /f %%a in ('git rev-list --count HEAD..origin/master 2^>nul') do set BEHIND=%%a
+        for /f %%a in ('git rev-list --count HEAD..origin/master 2^>nul') do set "BEHIND=%%a"
     )
-    echo [UPDATE] %BEHIND% new commit(s) available
-    set /p update_response="Update now? (Y/n): "
-    if /i not "%update_response%"=="n" (
-        rem Force reset to remote (overwrites all local changes)
-        git reset --hard origin/main >nul 2>&1
-        if %errorLevel% neq 0 (
-            git reset --hard origin/master >nul 2>&1
-        )
-        if %errorLevel% == 0 (
-            echo [OK] Updated successfully!
-        ) else (
-            echo [ERROR] Update failed.
-        )
+    echo [UPDATE] !BEHIND! new commit^(s^) available
+    set /p "update_response=Update now? (Y/n): "
+    if /i not "!update_response!"=="n" (
+        rem Use trampoline script to avoid run.bat being overwritten mid-execution
+        echo [INFO] Updating and restarting...
+        call :write_updater "reset"
+        exit
     ) else (
         echo [SKIP] Update skipped
     )
@@ -247,6 +242,26 @@ temp\git-installer.exe /VERYSILENT /NORESTART /NOCANCEL /SP- /CLOSEAPPLICATIONS 
 set "PATH=!PATH!;C:\Program Files\Git\bin;C:\Program Files\Git\cmd"
 del "temp\git-installer.exe" >nul 2>&1
 echo [OK] Git installed
+goto :eof
+
+:write_updater
+set "_mode=%~1"
+set "_bat=%~dp0_updater.bat"
+echo @echo off>"!_bat!"
+echo cd /d "%~dp0">>"!_bat!"
+echo ping -n 2 127.0.0.1 ^>nul>>"!_bat!"
+if "!_mode!"=="checkout" (
+    echo git checkout -f main>>"!_bat!"
+    echo if errorlevel 1 git checkout -f master>>"!_bat!"
+) else (
+    echo git reset --hard origin/main>>"!_bat!"
+    echo if errorlevel 1 git reset --hard origin/master>>"!_bat!"
+)
+echo echo [OK] Done. Restarting...>>"!_bat!"
+echo ping -n 2 127.0.0.1 ^>nul>>"!_bat!"
+echo start "" "%~f0">>"!_bat!"
+echo del "%%~f0" ^& exit>>"!_bat!"
+start /min "" "!_bat!"
 goto :eof
 
 :update_ytdlp
