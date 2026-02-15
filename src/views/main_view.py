@@ -627,19 +627,29 @@ class MainApplicationView:
         
         # Song name label
         self.song_label = ttk.Label(self.progress_frame, text="", anchor="w", justify="left")
-        self.song_label.grid(sticky=tk.W, row=0, column=0, pady=10, padx=7)
+        self.song_label.grid(sticky=tk.W, row=0, column=0, pady=(10, 0), padx=7)
+        
+        # ETA label (playlist only)
+        if is_playlist:
+            self.eta_label = ttk.Label(
+                self.progress_frame, text="", anchor="w", justify="left"
+            )
+            self.eta_label.grid(sticky=tk.W, row=1, column=0, pady=(0, 5), padx=7)
+            self._eta_callback = None
+            self._eta_timer_id = None
+            self._start_eta_timer()
         
         # Thumbnail placeholder
         self.thumbnail_label = ttk.Label(self.progress_frame)
-        self.thumbnail_label.grid(sticky=tk.W, row=1, column=0, pady=5, padx=7)
+        self.thumbnail_label.grid(sticky=tk.W, row=2, column=0, pady=5, padx=7)
         
         # Video info label
         self.info_label = ttk.Label(self.progress_frame, text="", anchor="w", justify="left")
-        self.info_label.grid(sticky=tk.W, row=1, column=0, pady=5, padx=74)
+        self.info_label.grid(sticky=tk.W, row=2, column=0, pady=5, padx=74)
         
         # Element progress
         self.progress_label = ttk.Label(self.progress_frame, text="Element progress :", anchor="w", justify="left")
-        self.progress_label.grid(sticky=tk.W, row=2, column=0, pady=0, padx=7)
+        self.progress_label.grid(sticky=tk.W, row=3, column=0, pady=0, padx=7)
         
         self.video_progress = ttk.Progressbar(
             self.progress_frame, 
@@ -647,7 +657,7 @@ class MainApplicationView:
             length=316, 
             mode='determinate'
         )
-        self.video_progress.grid(sticky=tk.W, row=2, column=0, pady=0, padx=106)
+        self.video_progress.grid(sticky=tk.W, row=3, column=0, pady=0, padx=106)
         
         self.video_progress_percent = ttk.Label(
             self.progress_frame, 
@@ -655,7 +665,7 @@ class MainApplicationView:
             anchor="w", 
             justify="left"
         )
-        self.video_progress_percent.grid(sticky=tk.W, row=2, column=0, pady=10, padx=424)
+        self.video_progress_percent.grid(sticky=tk.W, row=3, column=0, pady=10, padx=424)
         
         # Total progress (for playlists)
         if is_playlist:
@@ -665,7 +675,7 @@ class MainApplicationView:
                 anchor="w", 
                 justify="left"
             )
-            self.total_progress_label.grid(sticky=tk.W, row=3, column=0, pady=0, padx=7)
+            self.total_progress_label.grid(sticky=tk.W, row=4, column=0, pady=0, padx=7)
             
             self.total_progress = ttk.Progressbar(
                 self.progress_frame, 
@@ -673,7 +683,7 @@ class MainApplicationView:
                 length=316, 
                 mode='determinate'
             )
-            self.total_progress.grid(sticky=tk.W, row=3, column=0, pady=0, padx=106)
+            self.total_progress.grid(sticky=tk.W, row=4, column=0, pady=0, padx=106)
             
             self.total_progress_percent = ttk.Label(
                 self.progress_frame, 
@@ -681,7 +691,7 @@ class MainApplicationView:
                 anchor="w", 
                 justify="left"
             )
-            self.total_progress_percent.grid(sticky=tk.W, row=3, column=0, pady=10, padx=424)
+            self.total_progress_percent.grid(sticky=tk.W, row=4, column=0, pady=10, padx=424)
             
             # Adjust window size for playlist
             self.adjust_window_size()
@@ -695,6 +705,9 @@ class MainApplicationView:
         if hasattr(self, 'stop_button') and self.stop_button.winfo_exists():
             self.stop_button.destroy()
             del self.stop_button
+        
+        # Stop ETA timer
+        self._stop_eta_timer()
         
         if hasattr(self, '_skipped_frame'):
             self._skipped_frame.destroy()
@@ -737,7 +750,8 @@ class MainApplicationView:
         """Transform the stop button into a 'Download again' button."""
         # Hide element/total progress bars
         for attr in ('progress_label', 'video_progress', 'video_progress_percent',
-                      'total_progress_label', 'total_progress', 'total_progress_percent'):
+                      'total_progress_label', 'total_progress', 'total_progress_percent',
+                      'eta_label'):
             widget = getattr(self, attr, None)
             if widget is not None:
                 try:
@@ -767,6 +781,29 @@ class MainApplicationView:
     def _on_download_again_click(self):
         """Handle 'Download again' button click — return to start screen."""
         self.hide_progress_widgets()
+    
+    def set_eta_callback(self, callback):
+        """Set the callback used to compute the ETA string."""
+        self._eta_callback = callback
+    
+    def _start_eta_timer(self):
+        """Refresh the ETA label every second."""
+        if hasattr(self, 'eta_label') and self.eta_label.winfo_exists():
+            if callable(getattr(self, '_eta_callback', None)):
+                eta_text = self._eta_callback()
+                self.eta_label.configure(text=eta_text)
+            self._eta_timer_id = self.root.after(1000, self._start_eta_timer)
+    
+    def _stop_eta_timer(self):
+        """Stop the ETA refresh timer."""
+        if hasattr(self, '_eta_timer_id') and self._eta_timer_id is not None:
+            self.root.after_cancel(self._eta_timer_id)
+            self._eta_timer_id = None
+    
+    def update_eta(self, eta_text: str):
+        """Update the estimated remaining time label."""
+        if hasattr(self, 'eta_label'):
+            self.eta_label.configure(text=eta_text)
     
     def update_progress_info(self, video_info: VideoInfo, song_name: str, is_playlist: bool = False):
         """Update progress display with video information."""
