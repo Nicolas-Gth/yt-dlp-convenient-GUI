@@ -101,6 +101,11 @@ class ApplicationController:
         # Show download progress widgets
         self.view.show_progress_widgets(config.is_playlist)
         
+        # Show skipped entries panel if any were detected
+        hidden = self.download_controller._hidden_entries
+        if hidden:
+            self.view.show_skipped_entries(hidden)
+        
         # Update initial progress display
         self.update_initial_progress_display(video_info, config)
         

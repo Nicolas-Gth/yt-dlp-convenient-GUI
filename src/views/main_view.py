@@ -664,6 +664,10 @@ class MainApplicationView:
             self.stop_button.destroy()
             del self.stop_button
         
+        if hasattr(self, '_skipped_frame'):
+            self._skipped_frame.destroy()
+            del self._skipped_frame
+        
         if hasattr(self, 'progress_frame'):
             for widget in self.progress_frame.winfo_children():
                 widget.destroy()
@@ -751,6 +755,57 @@ class MainApplicationView:
             else:
                 self.total_progress_percent.configure(text=f" {percentage:.1f}%")
     
+    def show_skipped_entries(self, hidden_entries: list):
+        """Show a panel listing entries that YouTube hides but the API returned.
+
+        Displayed above the 'Downloaded elements' section so the user can
+        see which videos were skipped due to numbering offset.
+        """
+        if not hasattr(self, 'progress_frame') or not hidden_entries:
+            return
+
+        # Determine the row — place it after the last progress widget row
+        next_row = len(self.progress_frame.grid_slaves()) + 5
+
+        self._skipped_frame = tk.Frame(
+            self.progress_frame, bg=COLORS['background']
+        )
+        self._skipped_frame.grid(
+            sticky=tk.W + tk.E, row=next_row, column=0, padx=5, pady=2
+        )
+
+        # Header
+        header = ttk.Label(
+            self._skipped_frame,
+            text="Skipped unavailable elements",
+            font=("Arial", 9, "bold"),
+            anchor="w",
+            justify="left",
+        )
+        header.pack(anchor='w', padx=2, pady=(2, 0))
+
+        sep = ttk.Separator(self._skipped_frame, orient='horizontal')
+        sep.pack(fill='x', padx=2, pady=(1, 3))
+
+        # List each hidden entry
+        for entry in hidden_entries:
+            title = entry.get('title', 'Unknown')
+            channel = entry.get('channel', '')
+            if channel:
+                text = f"{title}  -  {channel}"
+            else:
+                text = title
+            lbl = ttk.Label(
+                self._skipped_frame,
+                text=text,
+                font=("Arial", 8),
+                anchor="w",
+                justify="left",
+            )
+            lbl.pack(anchor='w', padx=2, pady=1)
+
+        self.adjust_window_size()
+
     def show_normalize_feedback(self, info: dict):
         """Show per-track summary feedback below the progress widgets.
         
