@@ -92,6 +92,20 @@ class MainApplicationView:
                            background=COLORS['background'],
                            foreground=COLORS['text_primary'])
         
+        self.style.configure('TCheckbutton',
+                           font=self.fonts['default'],
+                           background=COLORS['background'],
+                           foreground=COLORS['text_primary'])
+        
+        self.style.configure('TMenubutton',
+                           background=COLORS['background'],
+                           foreground=COLORS['text_primary'])
+        
+        self.style.configure('TSpinbox',
+                           background=COLORS['background'],
+                           fieldbackground=COLORS['background'],
+                           foreground=COLORS['text_primary'])
+        
         self.style.configure('TFrame', 
                            background=COLORS['background'])
         
