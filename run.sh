@@ -345,14 +345,40 @@ launch_app() {
 
 # Function to check for updates from GitHub
 check_for_updates() {
-    # Only check if git is available and we're in a git repo
+    # Check if Git is installed, offer to install if not
     if ! command_exists git; then
-        echo -e "${YELLOW}[SKIP]${NC} git is not installed, skipping update check"
-        echo
-        return
+        echo -e "${YELLOW}[INFO]${NC} Git is not installed."
+        echo -e "${YELLOW}[INFO]${NC} Installing Git allows the app to automatically download updates."
+        echo -ne "${YELLOW}Install Git? (Y/n): ${NC}"
+        read -r install_git_response
+        if [[ "$install_git_response" =~ ^[Nn]$ ]]; then
+            echo -e "${YELLOW}[SKIP]${NC} Skipping update check (Git not installed)"
+            echo
+            return
+        fi
+        # Detect OS if not already done
+        if [[ -z "$DISTRO" ]]; then
+            detect_os
+        fi
+        echo -e "${YELLOW}Installing Git...${NC}"
+        install_packages git
+        if ! command_exists git; then
+            echo -e "${RED}[ERROR]${NC} Git installation failed, skipping update check"
+            echo -e "${YELLOW}[INFO]${NC} Install Git manually and relaunch"
+            echo
+            return
+        fi
+        echo -e "${GREEN}[OK]${NC} Git installed successfully"
     fi
+
+    # Set up Git repository if not already one
     if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-        echo -e "${YELLOW}[SKIP]${NC} Not a git repository, skipping update check"
+        echo -e "${YELLOW}[INFO]${NC} Setting up Git repository for automatic updates..."
+        git init >/dev/null 2>&1
+        git remote add origin https://github.com/Nicolas-Gth/yt-dlp-convenient-GUI.git >/dev/null 2>&1
+        git fetch origin >/dev/null 2>&1
+        git checkout -f main >/dev/null 2>&1 || git checkout -f master >/dev/null 2>&1
+        echo -e "${GREEN}[OK]${NC} Repository configured for automatic updates"
         echo
         return
     fi
