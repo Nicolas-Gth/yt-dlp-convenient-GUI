@@ -402,6 +402,7 @@ class MainApplicationView:
             font=("Bahnschrift", 12), 
             command=self._on_convert_click,
             border=0, 
+            highlightthickness=0,
             fg=COLORS['text_primary'], 
             bg=COLORS['button_normal'], 
             pady=5, 
@@ -599,6 +600,7 @@ class MainApplicationView:
             font=("Bahnschrift", 12),
             command=self._on_stop_click,
             border=0,
+            highlightthickness=0,
             fg=COLORS['text_primary'],
             bg="#a63333",
             pady=5,
@@ -740,8 +742,8 @@ class MainApplicationView:
             self.stop_button.configure(
                 state='normal',
                 text="Download again",
-                bg="#3a7a3a",
-                activebackground="#4a9a4a",
+                bg=COLORS['button_normal'],
+                activebackground=COLORS['button_active'],
                 cursor="hand2",
                 command=self._on_download_again_click
             )
@@ -841,22 +843,34 @@ class MainApplicationView:
         sep = ttk.Separator(self._skipped_frame, orient='horizontal')
         sep.pack(fill='x', padx=2, pady=(1, 3))
 
-        # List each hidden entry
+        # Build text content
+        lines = []
         for i, entry in enumerate(hidden_entries, start=1):
             title = entry.get('title', 'Unknown')
             channel = entry.get('channel', '')
             if channel:
-                text = f"{i}. {channel} - {title}"
+                lines.append(f"{i}. {channel} - {title}")
             else:
-                text = f"{i}. {title}"
-            lbl = ttk.Label(
-                self._skipped_frame,
-                text=text,
-                font=("Arial", 8),
-                anchor="w",
-                justify="left",
-            )
-            lbl.pack(anchor='w', padx=2, pady=1)
+                lines.append(f"{i}. {title}")
+        
+        # Selectable readonly text widget
+        text_content = "\n".join(lines)
+        num_lines = len(lines)
+        self._skipped_text = tk.Text(
+            self._skipped_frame,
+            font=("Arial", 8),
+            bg=COLORS['background'],
+            fg=COLORS['text_primary'],
+            relief='flat',
+            borderwidth=0,
+            highlightthickness=0,
+            wrap='none',
+            height=num_lines,
+            cursor='arrow',
+        )
+        self._skipped_text.insert('1.0', text_content)
+        self._skipped_text.configure(state='disabled')
+        self._skipped_text.pack(anchor='w', padx=2, pady=1)
 
         self.adjust_window_size()
 
@@ -974,19 +988,38 @@ class MainApplicationView:
             # Bind mousewheel for scrolling
             self._normalize_canvas.bind('<Enter>', self._bind_normalize_mousewheel)
             self._normalize_canvas.bind('<Leave>', self._unbind_normalize_mousewheel)
+            
+            # Selectable readonly text widget instead of labels
+            self._normalize_text = tk.Text(
+                self._normalize_inner_frame,
+                font=("Arial", 8),
+                bg=COLORS['background'],
+                fg=COLORS['text_primary'],
+                relief='flat',
+                borderwidth=0,
+                highlightthickness=0,
+                wrap='none',
+                height=1,
+                cursor='arrow',
+            )
+            self._normalize_text.pack(anchor='w', padx=2, pady=1, fill='x')
+            self._normalize_text.configure(state='disabled')
         
-        # Add the new label
-        lbl = ttk.Label(
-            self._normalize_inner_frame,
-            text=feedback,
-            font=("Arial", 8),
-            anchor="w",
-            justify="left"
-        )
-        lbl.pack(anchor='w', padx=2, pady=1)
-        self._normalize_labels.append(lbl)
+        # Append the new line to the text widget
+        self._normalize_text.configure(state='normal')
+        if len(self._normalize_labels) > 0:
+            self._normalize_text.insert('end', f"\n{feedback}")
+        else:
+            self._normalize_text.insert('end', feedback)
+        self._normalize_text.configure(state='disabled')
+        self._normalize_labels.append(feedback)
         
         count = len(self._normalize_labels)
+        
+        # Update text widget height to match line count
+        self._normalize_text.configure(state='normal')
+        self._normalize_text.configure(height=count)
+        self._normalize_text.configure(state='disabled')
         
         if count <= MAX_VISIBLE:
             # Grow canvas height to fit
