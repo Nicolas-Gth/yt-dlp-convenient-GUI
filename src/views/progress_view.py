@@ -79,7 +79,7 @@ class ProgressMixin:
             anchor="w",
             justify="left"
         )
-        self.video_progress_percent.grid(sticky=tk.W, row=2, column=0, pady=10, padx=424)
+        self.video_progress_percent.grid(sticky=tk.W, row=2, column=0, pady=10, padx=(424, 0))
 
         # Total progress (for playlists)
         if is_playlist:
@@ -105,7 +105,7 @@ class ProgressMixin:
                 anchor="w",
                 justify="left"
             )
-            self.total_progress_percent.grid(sticky=tk.W, row=3, column=0, pady=10, padx=424)
+            self.total_progress_percent.grid(sticky=tk.W, row=3, column=0, pady=10, padx=(424, 0))
 
             # ETA label (below total progress)
             self.eta_label = ttk.Label(
