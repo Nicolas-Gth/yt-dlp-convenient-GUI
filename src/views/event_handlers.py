@@ -11,7 +11,7 @@ import subprocess
 import shutil
 import os
 
-from config import COLORS, DEFAULT_NORMALIZE_TARGET
+from config import DEFAULT_NORMALIZE_TARGET
 from utils import settings_manager
 
 
@@ -280,9 +280,8 @@ class EventHandlersMixin:
         messagebox.showwarning("Invalid URL", error_message)
 
     def show_ytdlp_error(self, error_message: str):
-        """Show yt-dlp error in a tooltip/messagebox."""
+        """Show yt-dlp error in a standard popup dialog."""
         import tkinter.messagebox as messagebox
-        # Clean up the error message for better presentation
         clean_message = error_message.replace("ERROR: ", "").strip()
         messagebox.showerror("Download Error", clean_message)
 

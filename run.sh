@@ -21,6 +21,11 @@ echo -e "${BLUE}▐▌   ▐▌ ▐▌▐▌ ▝▜▌▐▌  ▐▌▐▛▀▀
 echo -e "${BLUE}▝▚▄▄▖▝▚▄▞▘▐▌  ▐▌ ▝▚▞▘ ▐▙▄▄▖▐▌  ▐▌▗▄█▄▖▐▙▄▄▖▐▌  ▐▌  █    ▝▚▄▞▘▝▚▄▞▘▗▄█▄▖${NC}"
 echo
 
+# Add Deno to PATH if installed (required for yt-dlp YouTube signature solving)
+if [[ -d "$HOME/.deno/bin" ]]; then
+    export PATH="$HOME/.deno/bin:$PATH"
+fi
+
 # Function to detect OS and distribution
 detect_os() {
     if [[ "$OSTYPE" == "darwin"* ]]; then
@@ -108,6 +113,15 @@ check_components() {
             echo -e "${RED}[MISSING]${NC} Some Python dependencies are missing"
             all_ok=0
         fi
+    fi
+
+    # Check Deno (required for yt-dlp YouTube signature solving with cookies)
+    if command_exists deno; then
+        echo -e "${GREEN}[OK]${NC} Deno is installed"
+        deno --version 2>/dev/null | head -1
+    else
+        echo -e "${RED}[MISSING]${NC} Deno not found (required for YouTube signature solving)"
+        all_ok=0
     fi
     
     # Return 0 for success (all OK), 1 for failure (something missing)
@@ -218,7 +232,7 @@ install_components() {
     detect_os
     get_package_names
     
-    echo -e "${YELLOW}[1/4] Installing Python 3 and system dependencies...${NC}"
+    echo -e "${YELLOW}[1/5] Installing Python 3 and system dependencies...${NC}"
     if ! command_exists python3; then
         install_packages $PYTHON_PACKAGE
         if ! command_exists python3; then
@@ -250,7 +264,7 @@ install_components() {
     fi
     
     # Ensure pip is available and updated
-    echo -e "${YELLOW}[2/4] Ensuring pip is available and updated...${NC}"
+    echo -e "${YELLOW}[2/5] Ensuring pip is available and updated...${NC}"
     if ! command_exists pip3 && ! command_exists pip; then
         python3 -m ensurepip --upgrade 2>/dev/null || true
     fi
@@ -263,7 +277,7 @@ install_components() {
     
     python3 -m pip install --upgrade pip
     
-    echo -e "${YELLOW}[3/4] Installing Python dependencies...${NC}"
+    echo -e "${YELLOW}[3/5] Installing Python dependencies...${NC}"
     
     # Create virtual environment if it doesn't exist
     if [[ ! -d "venv" ]]; then
@@ -286,13 +300,13 @@ install_components() {
     if [[ -f "requirements.txt" ]]; then
         pip install -r requirements.txt
     else
-        pip install "yt-dlp>=2023.12.30" "Pillow>=10.0.0" "ttkthemes>=3.2.2" "mutagen>=1.47.0"
+        pip install "yt-dlp>=2023.12.30" "yt-dlp-ejs>=0.4.0" "Pillow>=10.0.0" "ttkthemes>=3.2.2" "mutagen>=1.47.0"
     fi
     
     # Deactivate venv
     deactivate
     
-    echo -e "${YELLOW}[4/4] Installing FFmpeg...${NC}"
+    echo -e "${YELLOW}[4/5] Installing FFmpeg...${NC}"
     if ! command_exists ffmpeg; then
         install_packages $FFMPEG_PACKAGE
         if ! command_exists ffmpeg; then
@@ -303,6 +317,24 @@ install_components() {
         echo -e "${GREEN}[OK]${NC} FFmpeg is already installed"
     fi
     
+    echo -e "${YELLOW}[5/5] Installing Deno (JavaScript runtime for YouTube signature solving)...${NC}"
+    if ! command_exists deno; then
+        echo -e "${YELLOW}Downloading and installing Deno...${NC}"
+        curl -fsSL https://deno.land/install.sh | sh >/dev/null 2>&1
+        # Add Deno to PATH for the current session
+        if [[ -d "$HOME/.deno/bin" ]]; then
+            export PATH="$HOME/.deno/bin:$PATH"
+        fi
+        if command_exists deno; then
+            echo -e "${GREEN}[OK]${NC} Deno installed successfully"
+        else
+            echo -e "${YELLOW}[WARNING]${NC} Deno installation may have failed"
+            echo -e "${YELLOW}Install Deno manually: curl -fsSL https://deno.land/install.sh | sh${NC}"
+        fi
+    else
+        echo -e "${GREEN}[OK]${NC} Deno is already installed"
+    fi
+
     echo -e "${GREEN}[OK] Installation completed!${NC}"
     echo
 }
@@ -434,11 +466,11 @@ update_ytdlp() {
     echo -e "${YELLOW}Checking for yt-dlp updates...${NC}"
     if [[ -d "venv" ]]; then
         source venv/bin/activate
-        pip install --upgrade yt-dlp >/dev/null 2>&1
+        pip install --upgrade yt-dlp yt-dlp-ejs >/dev/null 2>&1
         local result=$?
         deactivate
     else
-        pip3 install --upgrade yt-dlp >/dev/null 2>&1 || pip install --upgrade yt-dlp >/dev/null 2>&1
+        pip3 install --upgrade yt-dlp yt-dlp-ejs >/dev/null 2>&1 || pip install --upgrade yt-dlp yt-dlp-ejs >/dev/null 2>&1
         local result=$?
     fi
     if [ $result -eq 0 ]; then

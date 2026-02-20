@@ -22,6 +22,11 @@ class ApplicationController:
         self._last_progress_update: float = 0.0
         self._playlist_start_time: float = 0.0
         self._playlist_current_index: int = 0
+        self._completed_elapsed: float = 0.0      # total time for completed elements
+        self._completed_duration: float = 0.0     # total video duration for completed elements
+        self._element_start_time: float = 0.0      # when current element started
+        self._current_dl_percent: float = 0.0      # latest download % for current element
+        self._current_element_duration: float = 0.0  # duration of video currently being processed
         
         # Connect view callbacks to controller methods
         self.setup_callbacks()
@@ -34,6 +39,12 @@ class ApplicationController:
         self.download_controller.set_normalize_callback(self.on_normalize_info)
         # Set cancel callback
         self.download_controller.set_cancel_callback(self.on_download_cancelled)
+        # Set error callback for errors during download
+        self.download_controller.set_error_callback(self.on_download_error)
+        # Set age-restricted callback for live skipped entry display
+        self.download_controller.set_age_restricted_callback(self.on_age_restricted_entry)
+        # Set format-unavailable callback for live skipped entry display
+        self.download_controller.set_format_unavailable_callback(self.on_format_unavailable_entry)
     
     def setup_callbacks(self):
         """Connect view callbacks to controller methods."""
@@ -98,6 +109,11 @@ class ApplicationController:
         self._last_progress_update = 0.0
         self._playlist_start_time = time.monotonic()
         self._playlist_current_index = 0
+        self._completed_elapsed = 0.0
+        self._completed_duration = 0.0
+        self._element_start_time = time.monotonic()
+        self._current_dl_percent = 0.0
+        self._current_element_duration = 0.0
         
         # Hide fetching progress
         self.view.hide_fetching_progress()
@@ -225,22 +241,21 @@ class ApplicationController:
     def _compute_eta_for_timer(self) -> str:
         """Callback for the view's 1-second timer."""
         playlist_length = getattr(self, '_playlist_total', 0)
-        return self._compute_eta(self._playlist_current_index, playlist_length)
+        # Subtract skipped entries (hidden + age-restricted) from the effective total
+        skipped = (len(self.download_controller._hidden_entries)
+                   + len(self.download_controller._age_restricted_entries)
+                   + len(self.download_controller._format_unavailable_entries))
+        effective_length = max(0, playlist_length - skipped)
+        return self._compute_eta(self._playlist_current_index, effective_length)
     
     def _compute_eta(self, current_index: int, playlist_length: int) -> str:
-        """Compute estimated remaining time for the playlist based on elapsed time."""
+        """Compute estimated remaining time for the playlist based on elapsed time,
+        weighted by video duration when available."""
         if playlist_length <= 0:
             return ""
         
-        completed = current_index  # number of fully completed elements
-        if completed < 1:
-            return "Estimated remaining time: calculating..."
-        
-        remaining_elements = playlist_length - current_index
-        if remaining_elements <= 0:
-            return ""
-        
-        elapsed = time.monotonic() - self._playlist_start_time
+        now = time.monotonic()
+        elapsed = now - self._playlist_start_time
         elapsed_int = int(elapsed)
         if elapsed_int < 60:
             elapsed_str = f"{elapsed_int}s"
@@ -252,8 +267,88 @@ class ApplicationController:
             em, es = divmod(er, 60)
             elapsed_str = f"{eh}h {em:02d}m {es:02d}s"
         
-        avg_per_element = elapsed / completed
-        remaining_seconds = int(avg_per_element * remaining_elements)
+        completed = current_index  # number of fully completed elements (download + processing)
+        remaining_count = playlist_length - current_index
+        
+        if remaining_count <= 0:
+            return f"Elapsed time: {elapsed_str} — Finishing..."
+        
+        # Collect durations of remaining entries (current + future)
+        remaining_durations = []
+        entries = []
+        if self.current_video_info and 'entries' in self.current_video_info:
+            entries = self.current_video_info.get('entries', []) or []
+        for i in range(current_index, min(current_index + remaining_count, len(entries))):
+            try:
+                d = entries[i].get('duration', 0) or 0
+                remaining_durations.append(d)
+            except (IndexError, AttributeError):
+                remaining_durations.append(0)
+        
+        # Current element elapsed and duration
+        current_element_elapsed = now - self._element_start_time
+        current_dur = self._current_element_duration
+        
+        # Try duration-weighted estimation if we have enough duration data
+        use_weighted = (
+            self._completed_duration > 0
+            and completed >= 1
+            and sum(1 for d in remaining_durations if d > 0) > 0
+        )
+        
+        if completed >= 1 and use_weighted:
+            # Ratio: real seconds spent per second of video duration
+            ratio = self._completed_elapsed / self._completed_duration
+            
+            # Remaining time for current element
+            if current_dur > 0:
+                estimated_current_total = ratio * current_dur
+                remaining_for_current = max(0, estimated_current_total - current_element_elapsed)
+            else:
+                avg = self._completed_elapsed / completed
+                remaining_for_current = max(0, avg - current_element_elapsed)
+            
+            # Remaining time for future elements
+            avg_per_element = self._completed_elapsed / completed
+            remaining_for_rest = 0.0
+            for d in remaining_durations[1:]:
+                if d > 0:
+                    remaining_for_rest += ratio * d
+                else:
+                    remaining_for_rest += avg_per_element
+            # If we have fewer durations than remaining elements, fill with average
+            missing = (remaining_count - 1) - len(remaining_durations[1:])
+            if missing > 0:
+                remaining_for_rest += avg_per_element * missing
+            
+            remaining_seconds = int(remaining_for_current + remaining_for_rest)
+        elif completed >= 1:
+            # Fallback: simple average (no duration data)
+            avg_per_element = self._completed_elapsed / completed
+            remaining_for_current = max(0, avg_per_element - current_element_elapsed)
+            remaining_for_rest = avg_per_element * (remaining_count - 1)
+            remaining_seconds = int(remaining_for_current + remaining_for_rest)
+        elif self._current_dl_percent > 3:
+            # First element: estimate from download progress percentage
+            estimated_element_total = current_element_elapsed / (self._current_dl_percent / 100)
+            remaining_for_current = max(0, estimated_element_total - current_element_elapsed)
+            # Estimate future elements using duration ratio if possible
+            if current_dur > 0 and len(remaining_durations) > 1:
+                ratio = estimated_element_total / current_dur
+                remaining_for_rest = 0.0
+                for d in remaining_durations[1:]:
+                    if d > 0:
+                        remaining_for_rest += ratio * d
+                    else:
+                        remaining_for_rest += estimated_element_total
+                missing = (remaining_count - 1) - len(remaining_durations[1:])
+                if missing > 0:
+                    remaining_for_rest += estimated_element_total * missing
+            else:
+                remaining_for_rest = estimated_element_total * (remaining_count - 1)
+            remaining_seconds = int(remaining_for_current + remaining_for_rest)
+        else:
+            return f"Elapsed time: {elapsed_str} — Estimated remaining time: calculating..."
         
         if remaining_seconds < 60:
             eta_str = f"{remaining_seconds}s"
@@ -300,6 +395,8 @@ class ApplicationController:
                 # The flat-extracted playlist entries lack this data.
                 info_dict = progress_data.get('info_dict', {})
                 self.update_playlist_display_from_hook(video_info, info_dict, video_index)
+                # Track the current element's duration for ETA weighting
+                self._current_element_duration = info_dict.get('duration', 0) or 0
             else:
                 self.update_single_video_display(video_info)
             
@@ -313,6 +410,7 @@ class ApplicationController:
             progress_str = progress_str.strip()
             percentage = float(progress_str.replace('%', ''))
             self.view.update_video_progress(percentage)
+            self._current_dl_percent = percentage
         except (ValueError, KeyError):
             pass  # Don't reset to 0.0, just skip this update
     
@@ -366,7 +464,6 @@ class ApplicationController:
             if playlist_length > 0:
                 total_percentage = ((video_index + 1) / playlist_length) * 100
                 self.view.update_total_progress(total_percentage)
-                self._playlist_current_index = video_index + 1
         else:
             song_name = f"Processing \"{title}\""
         
@@ -378,6 +475,17 @@ class ApplicationController:
     
     def on_normalize_info(self, info: Dict):
         """Handle normalization info from post-processor."""
+        # Record stable completion time for this element (download + processing)
+        now = time.monotonic()
+        element_time = now - self._element_start_time
+        self._completed_elapsed += element_time
+        # Accumulate video duration for ratio-based ETA
+        vid_duration = info.get('duration', 0) or 0
+        self._completed_duration += vid_duration
+        self._element_start_time = now
+        self._current_dl_percent = 0.0
+        self._current_element_duration = 0.0
+        self._playlist_current_index += 1
         self.view.root.after(0, lambda: self.view.show_normalize_feedback(info))
     
     def on_stop_download(self):
@@ -387,6 +495,23 @@ class ApplicationController:
     def on_download_cancelled(self):
         """Handle download cancellation (called from download thread)."""
         self.view.root.after(0, lambda: self._on_download_complete_ui(cancelled=True))
+    
+    def on_download_error(self, error_message: str):
+        """Handle a download error that requires a popup (called from download thread)."""
+        self.view.root.after(0, lambda: self._on_download_error_ui(error_message))
+    
+    def _on_download_error_ui(self, error_message: str):
+        """Show an error popup and reset the UI (runs on main thread)."""
+        self.view.show_ytdlp_error(error_message)
+        self._on_download_complete_ui(cancelled=True)
+    
+    def on_age_restricted_entry(self, entry: dict):
+        """Handle a single age-restricted entry detected during download (called from download thread)."""
+        self.view.root.after(0, lambda e=entry: self.view.show_age_restricted_entries([e]))
+
+    def on_format_unavailable_entry(self, entry: dict):
+        """Handle a single format-unavailable entry detected during download (called from download thread)."""
+        self.view.root.after(0, lambda e=entry: self.view.show_format_unavailable_entries([e]))
     
     def on_download_complete(self):
         """Handle download completion (called from download thread)."""
@@ -424,8 +549,14 @@ class ApplicationController:
         self.download_controller.progress.reset()
         self._playlist_total = 0
         
-        # Show "Download again" button instead of immediately resetting
+        # Show "Download again" button (resets progress bar) BEFORE the popup
         self.view.show_download_again_button()
+        
+        # Show age-restricted popup after UI is reset (dialog is blocking)
+        age_restricted = self.download_controller._age_restricted_entries
+        if age_restricted:
+            from controllers.download_controller import DownloadController
+            self.view.show_ytdlp_error(DownloadController._age_restricted_error_message(age_restricted))
     
     def on_format_change(self, format_type: str):
         """Handle format selection change."""
