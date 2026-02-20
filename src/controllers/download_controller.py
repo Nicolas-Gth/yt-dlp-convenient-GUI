@@ -10,7 +10,7 @@ import subprocess
 import threading
 from typing import Optional, Dict, Any, Callable
 import yt_dlp
-from config import (ICON_PATH)
+from config import (ICON_PATH, COOKIES_PATH)
     
 from mutagen.id3 import ID3, APIC
 from mutagen.mp3 import MP3
@@ -69,6 +69,7 @@ class CustomPostProcessor(yt_dlp.postprocessor.PostProcessor):
             'metadata_found': False,
             'lyrics_found': False,
             'cover_found': False,
+            'duration': video_infos.get('duration', 0) or 0,
         }
 
         # Determine artist name
@@ -237,6 +238,8 @@ class DownloadController:
         self.completion_callback: Optional[Callable] = None
         self.normalize_callback: Optional[Callable] = None
         self.cancel_callback: Optional[Callable] = None
+        self.error_callback: Optional[Callable] = None
+        self.age_restricted_callback: Optional[Callable] = None
         self.video_infos: Optional[Dict] = None
         self._cancelled = False
         self._current_config: Optional[DownloadConfig] = None
@@ -245,6 +248,7 @@ class DownloadController:
         self._current_playlist_index: int = 0
         self._playlist_total_count: int = 0
         self._hidden_entries: list = []  # Entries in API but hidden on YouTube
+        self._age_restricted_entries: list = []  # Entries skipped due to age restriction
     
     # ------------------------------------------------------------------
     # YouTube innertube helpers – resolve displayed playlist positions
@@ -462,6 +466,14 @@ class DownloadController:
         """Set the callback function for when download is cancelled."""
         self.cancel_callback = callback
     
+    def set_error_callback(self, callback: Callable):
+        """Set the callback function for download errors that need UI display."""
+        self.error_callback = callback
+    
+    def set_age_restricted_callback(self, callback: Callable):
+        """Set the callback for age-restricted entries detected during download."""
+        self.age_restricted_callback = callback
+    
     def cancel_download(self):
         """Cancel the current download and clean up partial files."""
         self._cancelled = True
@@ -496,6 +508,23 @@ class DownloadController:
     def fetch_video_info(self, config: DownloadConfig, fetch_progress_callback: Optional[Callable] = None) -> tuple[Optional[Dict], Optional[str]]:
         """Fetch video information without downloading. Returns (info, error_message)."""
         self._playlist_urls = []
+
+        # Lightweight logger that captures error messages so we can detect
+        # specific errors even when ignoreerrors=True swallows exceptions.
+        class _ErrorCapture:
+            def __init__(self):
+                self.errors: list[str] = []
+            def debug(self, msg):
+                pass
+            def info(self, msg):
+                pass
+            def warning(self, msg):
+                pass
+            def error(self, msg):
+                self.errors.append(str(msg))
+
+        error_capture = _ErrorCapture()
+
         ydl_opts = {
             'verbose': config.verbose,
             'quiet': True,
@@ -505,7 +534,12 @@ class DownloadController:
             'simulate': True,
             'cachedir': False,
             'noplaylist': not config.is_playlist,
+            'logger': error_capture,
         }
+        
+        # Use cookies file if available
+        if os.path.isfile(COOKIES_PATH):
+            ydl_opts['cookiefile'] = COOKIES_PATH
         
         # For playlists, use extract_flat for much faster extraction
         # (no per-video HTTP request, just playlist API pagination)
@@ -540,6 +574,10 @@ class DownloadController:
             
             # Check if video_infos is None or empty (which happens with ignoreerrors=True for DRM sites)
             if not self.video_infos:
+                # Check captured errors for cookie / bot-check
+                for err in error_capture.errors:
+                    if "Sign in to confirm" in err and "bot" in err:
+                        return None, self._cookie_error_message()
                 # Check if this is a known DRM-protected site
                 if ("spotify.com" in config.url.lower() or 
                     "netflix.com" in config.url.lower() or
@@ -593,8 +631,11 @@ class DownloadController:
         except yt_dlp.utils.ExtractorError as error:
             error_message = str(error)
             
+            # Handle cookie / bot-check errors
+            if "Sign in to confirm" in error_message and "bot" in error_message:
+                return None, self._cookie_error_message()
             # Handle ExtractorError specifically (includes DRM errors)
-            if ("DRM protection" in error_message or "DRM protected" in error_message or 
+            elif ("DRM protection" in error_message or "DRM protected" in error_message or 
                 "use DRM protection" in error_message or "known to use DRM" in error_message):
                 return None, "This content is protected by DRM and cannot be downloaded.\n\nDRM (Digital Rights Management) prevents downloading from services like Spotify, Netflix, etc."
             else:
@@ -617,6 +658,8 @@ class DownloadController:
                 return None, "Video not found. Please check the URL."
             elif "Unsupported URL" in error_message:
                 return None, "Unsupported URL format. Please check the URL."
+            elif "Sign in to confirm" in error_message and "bot" in error_message:
+                return None, self._cookie_error_message()
             elif "Sign in to confirm your age" in error_message:
                 return None, "This video requires age verification and cannot be downloaded."
             elif "This video is not available" in error_message:
@@ -638,9 +681,54 @@ class DownloadController:
     
     def _download_process(self, config: DownloadConfig):
         """Main download process."""
+        self._age_restricted_entries = []
         try:
             ydl_opts = self._build_ydl_options(config)
-            
+
+            # Logger that captures error messages to detect cookie/bot errors
+            # even when ignoreerrors=True swallows the exception.
+            class _ErrorCapture:
+                def __init__(self):
+                    self.errors: list[str] = []
+                def debug(self, msg):
+                    pass
+                def info(self, msg):
+                    pass
+                def warning(self, msg):
+                    pass
+                def error(self, msg):
+                    self.errors.append(str(msg))
+
+            error_capture = _ErrorCapture()
+            ydl_opts['logger'] = error_capture
+
+            def _check_cookie_error():
+                """Return True and fire error callback if a cookie/bot error was logged."""
+                for err in error_capture.errors:
+                    if "Sign in to confirm" in err and "bot" in err:
+                        print("Cookie authentication required.")
+                        self._cleanup_partial_files(config.output_directory)
+                        if self.error_callback:
+                            self.error_callback(self._cookie_error_message())
+                        return True
+                return False
+
+            def _check_age_restricted(video_title: str = '', video_channel: str = ''):
+                """Check captured errors for age-restriction and track the entry."""
+                for err in error_capture.errors:
+                    if "Sign in to confirm your age" in err:
+                        entry = {
+                            'title': video_title or 'Unknown',
+                            'channel': video_channel or '',
+                        }
+                        self._age_restricted_entries.append(entry)
+                        # Notify UI immediately so entry appears live
+                        if self.age_restricted_callback:
+                            self.age_restricted_callback(entry)
+                        error_capture.errors.clear()
+                        return True
+                return False
+
             if config.is_playlist and self._playlist_urls:
                 # Download individual videos by URL to avoid playlist
                 # indexing offset caused by deleted/unavailable entries.
@@ -657,7 +745,20 @@ class DownloadController:
                         if self._cancelled:
                             break
                         self._current_playlist_index = i
+                        # Resolve video title/channel from fetched info for error tracking
+                        video_title = ''
+                        video_channel = ''
+                        if self.video_infos and 'entries' in self.video_infos:
+                            entries = self.video_infos['entries']
+                            if isinstance(entries, list) and i - 1 < len(entries) and entries[i - 1]:
+                                video_title = entries[i - 1].get('title', '')
+                                video_channel = (entries[i - 1].get('channel')
+                                                 or entries[i - 1].get('uploader', ''))
                         ydl.download([url])
+                        if _check_cookie_error():
+                            self._ydl_instance = None
+                            return
+                        _check_age_restricted(video_title, video_channel)
             else:
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     self._ydl_instance = ydl
@@ -666,8 +767,18 @@ class DownloadController:
                         when='post_process'
                     )
                     ydl.download([config.url])
+                    # For single videos, check age restriction
+                    vi = self.video_infos or {}
+                    _check_age_restricted(
+                        vi.get('title', ''),
+                        vi.get('channel') or vi.get('uploader', '')
+                    )
             
             self._ydl_instance = None
+
+            # Check for cookie errors that were swallowed by ignoreerrors
+            if _check_cookie_error():
+                return
             
             if self._cancelled:
                 self._cleanup_partial_files(config.output_directory)
@@ -697,6 +808,14 @@ class DownloadController:
                 if self.cancel_callback:
                     self.cancel_callback()
                 return
+            error_message = str(error)
+            # Handle cookie / bot-check errors during download
+            if "Sign in to confirm" in error_message and "bot" in error_message:
+                print("Cookie authentication required.")
+                self._cleanup_partial_files(config.output_directory)
+                if self.error_callback:
+                    self.error_callback(self._cookie_error_message())
+                return
             print(f"Download error: {error}")
             self._retry_download(config)
     
@@ -714,6 +833,10 @@ class DownloadController:
             'progress_hooks': [self._progress_hook],
             'match_filter': self._cancel_filter,
         }
+        
+        # Use cookies file if available
+        if os.path.isfile(COOKIES_PATH):
+            base_opts['cookiefile'] = COOKIES_PATH
         
         if config.file_format == "mp3":
             return self._add_mp3_options(base_opts, config)
@@ -814,6 +937,46 @@ class DownloadController:
         if self.progress_callback:
             self.progress_callback(d, self.video_infos, self.progress)
     
+    @staticmethod
+    def _cookie_error_message() -> str:
+        """Return a user-friendly error message for cookie / bot-check errors."""
+        cookies_dir = os.path.dirname(COOKIES_PATH)
+        return (
+            "YouTube is asking you to prove you're not a bot.\n\n"
+            "To fix this, you need to provide your browser cookies:\n\n"
+            "1. Install the \"Get cookies.txt LOCALLY\" extension\n"
+            "    in your browser (Chrome / Firefox / Edge).\n\n"
+            "2. Sign in to YouTube in your browser.\n\n"
+            "3. On youtube.com, click the extension icon and\n"
+            "    export your cookies (\"Export as cookies.txt\").\n\n"
+            "4. Place the cookies.txt file in the folder:\n"
+            f"  {cookies_dir}{os.sep}\n\n"
+            "5. Restart the download."
+        )
+
+    @staticmethod
+    def _age_restricted_error_message(entries: list) -> str:
+        """Return a user-friendly popup message when videos were skipped due to age restriction."""
+        cookies_dir = os.path.dirname(COOKIES_PATH)
+        count = len(entries)
+        plural = 's' if count > 1 else ''
+
+        them = 'them' if count > 1 else 'it'
+
+        return (
+            f"{count} video{plural} could not be downloaded because "
+            f"{'they require' if count > 1 else 'it requires'} age verification.\n\n"
+            f"To download {them}, you need to provide your browser cookies:\n\n"
+            "1. Install the \"Get cookies.txt LOCALLY\" extension\n"
+            "    in your browser (Chrome / Firefox / Edge).\n\n"
+            "2. Sign in to YouTube in your browser.\n\n"
+            "3. On youtube.com, click the extension icon and\n"
+            "    export your cookies (\"Export as cookies.txt\").\n\n"
+            "4. Place the cookies.txt file in the folder:\n"
+            f"  {cookies_dir}{os.sep}\n\n"
+            "5. Restart the download."
+        )
+
     def _retry_download(self, config: DownloadConfig):
         """Retry download on error."""
         print("There was a problem during the download, automatically restarting!")

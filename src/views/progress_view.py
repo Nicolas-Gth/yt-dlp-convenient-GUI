@@ -46,7 +46,7 @@ class ProgressMixin:
             activeforeground=COLORS['text_secondary'],
             cursor="hand2"
         )
-        self.stop_button.grid(row=7, column=0, pady=2)
+        self.stop_button.grid(row=7, column=0, pady=(8, 2))
 
         # Song name label
         self.song_label = ttk.Label(self.progress_frame, text="", anchor="w", justify="left",
@@ -68,10 +68,10 @@ class ProgressMixin:
         self.video_progress = ttk.Progressbar(
             self.progress_frame,
             orient=tk.HORIZONTAL,
-            length=316,
+            length=300,
             mode='determinate'
         )
-        self.video_progress.grid(sticky=tk.W, row=2, column=0, pady=0, padx=106)
+        self.video_progress.grid(sticky=tk.W, row=2, column=0, pady=0, padx=120)
 
         self.video_progress_percent = ttk.Label(
             self.progress_frame,
@@ -79,7 +79,7 @@ class ProgressMixin:
             anchor="w",
             justify="left"
         )
-        self.video_progress_percent.grid(sticky=tk.W, row=2, column=0, pady=10, padx=(424, 0))
+        self.video_progress_percent.grid(sticky=tk.W, row=2, column=0, pady=10, padx=(422, 0))
 
         # Total progress (for playlists)
         if is_playlist:
@@ -94,10 +94,10 @@ class ProgressMixin:
             self.total_progress = ttk.Progressbar(
                 self.progress_frame,
                 orient=tk.HORIZONTAL,
-                length=316,
+                length=300,
                 mode='determinate'
             )
-            self.total_progress.grid(sticky=tk.W, row=3, column=0, pady=0, padx=106)
+            self.total_progress.grid(sticky=tk.W, row=3, column=0, pady=0, padx=120)
 
             self.total_progress_percent = ttk.Label(
                 self.progress_frame,
@@ -105,7 +105,7 @@ class ProgressMixin:
                 anchor="w",
                 justify="left"
             )
-            self.total_progress_percent.grid(sticky=tk.W, row=3, column=0, pady=10, padx=(424, 0))
+            self.total_progress_percent.grid(sticky=tk.W, row=3, column=0, pady=10, padx=(422, 0))
 
             # ETA label (below total progress)
             self.eta_label = ttk.Label(
@@ -327,10 +327,11 @@ class ProgressMixin:
         for i, entry in enumerate(hidden_entries, start=1):
             title = entry.get('title', 'Unknown')
             channel = entry.get('channel', '')
+            suffix = '  [Age-restricted]' if entry.get('age_restricted') else ''
             if channel:
-                lines.append(f"{i}. {channel} - {title}")
+                lines.append(f"{i}. {channel} - {title}{suffix}")
             else:
-                lines.append(f"{i}. {title}")
+                lines.append(f"{i}. {title}{suffix}")
 
         # Selectable readonly text widget
         text_content = "\n".join(lines)
@@ -352,6 +353,46 @@ class ProgressMixin:
         self._skipped_text.pack(anchor='w', padx=2, pady=1)
 
         self.adjust_window_size()
+
+    def show_age_restricted_entries(self, entries: list):
+        """Show age-restricted entries in the skipped unavailable elements panel.
+
+        If the skipped panel already exists, appends to it. Otherwise creates it.
+        Format: \"channel - title  [Age-restricted]\"
+        """
+        if not entries:
+            return
+
+        # Build entries in the same format as hidden_entries for show_skipped_entries
+        formatted = []
+        for entry in entries:
+            title = entry.get('title', 'Unknown')
+            channel = entry.get('channel', '')
+            if channel:
+                formatted.append({'title': title, 'channel': channel, 'age_restricted': True})
+            else:
+                formatted.append({'title': title, 'channel': '', 'age_restricted': True})
+
+        if hasattr(self, '_skipped_frame') and hasattr(self, '_skipped_text'):
+            # Append to existing skipped panel
+            self._skipped_text.configure(state='normal')
+            current_lines = int(self._skipped_text.index('end-1c').split('.')[0])
+            for entry in formatted:
+                title = entry['title']
+                channel = entry['channel']
+                if channel:
+                    line = f"{current_lines}. {channel} - {title}  [Age-restricted]"
+                else:
+                    line = f"{current_lines}. {title}  [Age-restricted]"
+                self._skipped_text.insert('end', f"\n{line}")
+                current_lines += 1
+            new_height = int(self._skipped_text.index('end-1c').split('.')[0])
+            self._skipped_text.configure(height=new_height)
+            self._skipped_text.configure(state='disabled')
+            self.adjust_window_size()
+        else:
+            # Create the skipped panel with age-restricted entries
+            self.show_skipped_entries(formatted)
 
     # ------------------------------------------------------------------
     # Normalize feedback (per-track summary)
