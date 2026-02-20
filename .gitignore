@@ -12,7 +12,7 @@ ffmpeg
 temp
 
 # Custom config files
-src/config/cookies.txt
+cookies.txt
 
 # User settings and configuration
 yt-dlp-gui-config.json

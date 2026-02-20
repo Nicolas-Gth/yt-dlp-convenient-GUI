@@ -979,7 +979,7 @@ class DownloadController:
             "2. Sign in to YouTube in your browser.\n\n"
             "3. On youtube.com, click the extension icon and\n"
             "    export your cookies (\"Export as cookies.txt\").\n\n"
-            "4. Place the cookies.txt file in the folder:\n"
+            "4. Place the cookies.txt file at the application root:\n"
             f"  {cookies_dir}{os.sep}\n\n"
             "5. Restart the download."
         )
@@ -1002,7 +1002,7 @@ class DownloadController:
             "2. Sign in to YouTube in your browser.\n\n"
             "3. On youtube.com, click the extension icon and\n"
             "    export your cookies (\"Export as cookies.txt\").\n\n"
-            "4. Place the cookies.txt file in the folder:\n"
+            "4. Place the cookies.txt file at the application root:\n"
             f"  {cookies_dir}{os.sep}\n\n"
             "5. Restart the download."
         )

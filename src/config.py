@@ -59,7 +59,7 @@ FILE_FORMATS = {
 # Paths
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 ICON_PATH = os.path.join(SCRIPT_DIR, '..', 'assets', 'icon.ico')
-COOKIES_PATH = os.path.join(SCRIPT_DIR, 'config', 'cookies.txt')
+COOKIES_PATH = os.path.join(SCRIPT_DIR, '..', 'cookies.txt')
 
 # FFmpeg configuration
 def get_ffmpeg_path():
