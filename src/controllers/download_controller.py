@@ -12,7 +12,7 @@ from typing import Optional, Dict, Any, Callable
 import yt_dlp
 from config import (ICON_PATH, COOKIES_PATH)
     
-from mutagen.id3 import ID3, APIC
+from mutagen.id3 import ID3, APIC, TDRC
 from mutagen.mp3 import MP3
 from mutagen.easyid3 import EasyID3
 
@@ -125,6 +125,26 @@ class CustomPostProcessor(yt_dlp.postprocessor.PostProcessor):
             metadatas.save()
         except Exception as e:
             print(f"Warning: Could not add metadata to MP3 file: {e}")
+        
+        # Fix year tag: FFmpegMetadata writes upload_date (YYYYMMDD) into TDRC.
+        # We want only the 4-digit year, and prefer yt-dlp's release_year
+        # (original release) over the upload date.
+        try:
+            audio = ID3(file_path)
+            release_year = video_infos.get('release_year')
+            if release_year:
+                audio.delall("TDRC")
+                audio["TDRC"] = TDRC(encoding=3, text=[str(release_year)])
+            else:
+                existing_tdrc = audio.get("TDRC")
+                if existing_tdrc:
+                    existing_text = str(existing_tdrc)
+                    if len(existing_text) > 4 and existing_text[:4].isdigit():
+                        audio.delall("TDRC")
+                        audio["TDRC"] = TDRC(encoding=3, text=[existing_text[:4]])
+            audio.save()
+        except Exception as e:
+            print(f"Warning: Could not fix year tag: {e}")
     
     def _analyze_loudness(self, file_path: str) -> dict:
         """Analyze the file loudness using ffmpeg. Returns loudness info dict or None."""

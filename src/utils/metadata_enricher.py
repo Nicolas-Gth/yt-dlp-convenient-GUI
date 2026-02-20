@@ -40,7 +40,8 @@ class EnrichedMetadata:
     album_artist: Optional[str] = None
     track_number: Optional[str] = None
     total_tracks: Optional[str] = None
-    date: Optional[str] = None          # Release year/date
+    date: Optional[str] = None          # Release year (4 digits)
+    full_date: Optional[str] = None     # Full release date (YYYY-MM-DD)
     genre: Optional[str] = None
     cover_data: Optional[bytes] = None  # JPEG bytes (HD album cover)
     cover_mime: str = "image/jpeg"
@@ -270,7 +271,13 @@ def _pick_best_release(recording: Dict, album_from_yt: str) -> Optional[Dict]:
         if release.get("country"):
             priority += 1
         
-        if priority > best_priority:
+        # When priorities are equal, prefer the oldest release (original)
+        # over reissues/remasters which have later dates
+        release_date = release.get("date", "9999")
+        if priority > best_priority or (
+            priority == best_priority
+            and release_date < (best.get("date", "9999") if best else "9999")
+        ):
             best_priority = priority
             best = release
     
@@ -707,6 +714,7 @@ def enrich_metadata(video_infos: Dict) -> Optional[EnrichedMetadata]:
     
     yt_track = video_infos.get('track')  # Only set on YT Music auto-generated
     yt_album = video_infos.get('album', '')  # Only set on YT Music auto-generated
+    yt_release_year = video_infos.get('release_year')  # Year from yt-dlp (YT Music)
     duration = video_infos.get('duration', 0)
     uploader = video_infos.get('uploader', '')
     video_title = video_infos.get('title', '')
@@ -739,7 +747,14 @@ def enrich_metadata(video_infos: Dict) -> Optional[EnrichedMetadata]:
             if release:
                 enriched.mb_release_id = release.get("id")
                 enriched.album = release.get("title")
-                enriched.date = release.get("date", "")
+                # Store full date for TDRL and year-only for TDRC
+                raw_date = release.get("date", "")
+                if raw_date and len(raw_date) >= 4 and raw_date[:4].isdigit():
+                    enriched.date = raw_date[:4]
+                    if len(raw_date) > 4:
+                        enriched.full_date = raw_date
+                else:
+                    enriched.date = raw_date
                 
                 # Get release-group ID for cover art fallback
                 release_group = release.get("release-group", {})
@@ -818,6 +833,15 @@ def enrich_metadata(video_infos: Dict) -> Optional[EnrichedMetadata]:
     else:
         print(f"  [metadata] No album info from YouTube — skipping cover art lookup")
     
+    # --- Year: yt-dlp's release_year is authoritative (from YouTube Music) ---
+    # It reflects the original release year, while MusicBrainz may return a
+    # reissue/remaster date. Use yt-dlp year as override when available.
+    if yt_release_year:
+        yt_year = str(yt_release_year)
+        if enriched.date and enriched.date != yt_year:
+            print(f"  [metadata] Overriding MusicBrainz year ({enriched.date}) with yt-dlp release year ({yt_year})")
+        enriched.date = yt_year
+
     # --- Step 2: Lyrics (always attempted, independent of album) ---
     album_for_lyrics = yt_album or enriched.album or ""
     plain_lyrics, synced_lyrics = fetch_lyrics(artist, title, album_for_lyrics, duration)
@@ -862,7 +886,7 @@ def apply_enriched_metadata_mp3(file_path: str, enriched: EnrichedMetadata,
         enriched: EnrichedMetadata from enrich_metadata()
         fallback_cover: If enriched has no HD cover, use this (YouTube thumbnail)
     """
-    from mutagen.id3 import ID3, APIC, USLT, Encoding, TALB, TDRC, TRCK, TPE2, TCON
+    from mutagen.id3 import ID3, APIC, USLT, Encoding, TALB, TDRC, TDRL, TRCK, TPE2, TCON
     
     try:
         audio = ID3(file_path)
@@ -888,10 +912,28 @@ def apply_enriched_metadata_mp3(file_path: str, enriched: EnrichedMetadata,
         audio.delall("TRCK")
         audio["TRCK"] = TRCK(encoding=3, text=[track_str])
     
-    # Date/Year
+    # Date/Year — TDRC gets the 4-digit year (widely read by players),
+    # TDRL gets the full release date (YYYY-MM-DD) when available.
+    # FFmpegMetadata may have written a full upload_date (YYYYMMDD) which is
+    # often the YouTube upload date, not the actual song release year.
     if enriched.date:
+        # Extract only the year from whatever we have
+        year = enriched.date[:4] if len(enriched.date) >= 4 else enriched.date
         audio.delall("TDRC")
-        audio["TDRC"] = TDRC(encoding=3, text=[enriched.date])
+        audio["TDRC"] = TDRC(encoding=3, text=[year])
+    else:
+        # No enriched date — clean up FFmpegMetadata's full upload_date to year only
+        existing_tdrc = audio.get("TDRC")
+        if existing_tdrc:
+            existing_text = str(existing_tdrc)
+            if len(existing_text) > 4 and existing_text[:4].isdigit():
+                audio.delall("TDRC")
+                audio["TDRC"] = TDRC(encoding=3, text=[existing_text[:4]])
+    
+    # Full release date in TDRL (Release time) — ISO 8601 format
+    if enriched.full_date:
+        audio.delall("TDRL")
+        audio["TDRL"] = TDRL(encoding=3, text=[enriched.full_date])
     
     # Genre (replaces the generic "Music" from FFmpegMetadata)
     if enriched.genre:
