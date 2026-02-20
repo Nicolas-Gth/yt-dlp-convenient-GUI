@@ -26,6 +26,7 @@ The script automatically:
 - Detects your OS and distribution
 - Installs Python 3, pip, and FFmpeg using your system's package manager
 - Installs all Python dependencies
+- Updates the application automatically if Git is installed
 - Launches the application
 
 ## Features
@@ -33,6 +34,9 @@ The script automatically:
 - Download videos in various qualities (144p to 4K)
 - Extract audio in multiple bitrates (32Kbps to 320Kbps)
 - Support for MP3 and MP4 formats
+- Audio normalization for consistent playback volume
+- Advanced metadata search: automatically fetches and embeds rich track info (artist, album, cover art, etc.)
+- Synchronized lyrics search: embeds time-synced lyrics (LRC) directly into downloaded files
 - Simple and clean interface
 - Cross-platform compatibility
 
