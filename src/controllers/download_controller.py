@@ -12,7 +12,7 @@ from typing import Optional, Dict, Any, Callable
 import yt_dlp
 from config import (ICON_PATH, COOKIES_PATH)
     
-from mutagen.id3 import ID3, APIC, TDRC
+from mutagen.id3 import ID3, APIC, TDRC, TCON
 from mutagen.mp3 import MP3
 from mutagen.easyid3 import EasyID3
 
@@ -145,6 +145,18 @@ class CustomPostProcessor(yt_dlp.postprocessor.PostProcessor):
             audio.save()
         except Exception as e:
             print(f"Warning: Could not fix year tag: {e}")
+        
+        # Remove generic "Music" genre written by FFmpegMetadata (YouTube category).
+        # A real genre will be set by the enricher if enabled; otherwise leave empty
+        # rather than keeping a useless generic tag.
+        try:
+            audio = ID3(file_path)
+            existing_genre = audio.get("TCON")
+            if existing_genre and str(existing_genre).strip().lower() == "music":
+                audio.delall("TCON")
+                audio.save()
+        except Exception as e:
+            print(f"Warning: Could not clean genre tag: {e}")
     
     def _analyze_loudness(self, file_path: str) -> dict:
         """Analyze the file loudness using ffmpeg. Returns loudness info dict or None."""
