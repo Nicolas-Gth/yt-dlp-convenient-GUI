@@ -43,6 +43,8 @@ class ApplicationController:
         self.download_controller.set_error_callback(self.on_download_error)
         # Set age-restricted callback for live skipped entry display
         self.download_controller.set_age_restricted_callback(self.on_age_restricted_entry)
+        # Set format-unavailable callback for live skipped entry display
+        self.download_controller.set_format_unavailable_callback(self.on_format_unavailable_entry)
     
     def setup_callbacks(self):
         """Connect view callbacks to controller methods."""
@@ -240,7 +242,9 @@ class ApplicationController:
         """Callback for the view's 1-second timer."""
         playlist_length = getattr(self, '_playlist_total', 0)
         # Subtract skipped entries (hidden + age-restricted) from the effective total
-        skipped = len(self.download_controller._hidden_entries) + len(self.download_controller._age_restricted_entries)
+        skipped = (len(self.download_controller._hidden_entries)
+                   + len(self.download_controller._age_restricted_entries)
+                   + len(self.download_controller._format_unavailable_entries))
         effective_length = max(0, playlist_length - skipped)
         return self._compute_eta(self._playlist_current_index, effective_length)
     
@@ -504,6 +508,10 @@ class ApplicationController:
     def on_age_restricted_entry(self, entry: dict):
         """Handle a single age-restricted entry detected during download (called from download thread)."""
         self.view.root.after(0, lambda e=entry: self.view.show_age_restricted_entries([e]))
+
+    def on_format_unavailable_entry(self, entry: dict):
+        """Handle a single format-unavailable entry detected during download (called from download thread)."""
+        self.view.root.after(0, lambda e=entry: self.view.show_format_unavailable_entries([e]))
     
     def on_download_complete(self):
         """Handle download completion (called from download thread)."""

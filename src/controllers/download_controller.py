@@ -240,6 +240,7 @@ class DownloadController:
         self.cancel_callback: Optional[Callable] = None
         self.error_callback: Optional[Callable] = None
         self.age_restricted_callback: Optional[Callable] = None
+        self.format_unavailable_callback: Optional[Callable] = None
         self.video_infos: Optional[Dict] = None
         self._cancelled = False
         self._current_config: Optional[DownloadConfig] = None
@@ -249,6 +250,7 @@ class DownloadController:
         self._playlist_total_count: int = 0
         self._hidden_entries: list = []  # Entries in API but hidden on YouTube
         self._age_restricted_entries: list = []  # Entries skipped due to age restriction
+        self._format_unavailable_entries: list = []  # Entries skipped due to format errors
     
     # ------------------------------------------------------------------
     # YouTube innertube helpers – resolve displayed playlist positions
@@ -473,6 +475,10 @@ class DownloadController:
     def set_age_restricted_callback(self, callback: Callable):
         """Set the callback for age-restricted entries detected during download."""
         self.age_restricted_callback = callback
+
+    def set_format_unavailable_callback(self, callback: Callable):
+        """Set the callback for format-unavailable entries detected during download."""
+        self.format_unavailable_callback = callback
     
     def cancel_download(self):
         """Cancel the current download and clean up partial files."""
@@ -682,6 +688,7 @@ class DownloadController:
     def _download_process(self, config: DownloadConfig):
         """Main download process."""
         self._age_restricted_entries = []
+        self._format_unavailable_entries = []
         try:
             ydl_opts = self._build_ydl_options(config)
 
@@ -691,12 +698,15 @@ class DownloadController:
                 def __init__(self):
                     self.errors: list[str] = []
                 def debug(self, msg):
-                    pass
+                    if msg and isinstance(msg, str) and msg.startswith('[debug]'):
+                        print(f"  {msg}")
                 def info(self, msg):
                     pass
                 def warning(self, msg):
-                    pass
+                    if msg:
+                        print(f"  [warning] {msg}")
                 def error(self, msg):
+                    print(f"  [error] {msg}")
                     self.errors.append(str(msg))
 
             error_capture = _ErrorCapture()
@@ -725,6 +735,21 @@ class DownloadController:
                         # Notify UI immediately so entry appears live
                         if self.age_restricted_callback:
                             self.age_restricted_callback(entry)
+                        error_capture.errors.clear()
+                        return True
+                return False
+
+            def _check_format_unavailable(video_title: str = '', video_channel: str = ''):
+                """Check captured errors for format/signature issues and track the entry."""
+                for err in error_capture.errors:
+                    if "Requested format is not available" in err:
+                        entry = {
+                            'title': video_title or 'Unknown',
+                            'channel': video_channel or '',
+                        }
+                        self._format_unavailable_entries.append(entry)
+                        if self.format_unavailable_callback:
+                            self.format_unavailable_callback(entry)
                         error_capture.errors.clear()
                         return True
                 return False
@@ -759,6 +784,7 @@ class DownloadController:
                             self._ydl_instance = None
                             return
                         _check_age_restricted(video_title, video_channel)
+                        _check_format_unavailable(video_title, video_channel)
             else:
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     self._ydl_instance = ydl
@@ -767,9 +793,13 @@ class DownloadController:
                         when='post_process'
                     )
                     ydl.download([config.url])
-                    # For single videos, check age restriction
+                    # For single videos, check age restriction and format errors
                     vi = self.video_infos or {}
                     _check_age_restricted(
+                        vi.get('title', ''),
+                        vi.get('channel') or vi.get('uploader', '')
+                    )
+                    _check_format_unavailable(
                         vi.get('title', ''),
                         vi.get('channel') or vi.get('uploader', '')
                     )

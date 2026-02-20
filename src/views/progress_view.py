@@ -327,7 +327,7 @@ class ProgressMixin:
         for i, entry in enumerate(hidden_entries, start=1):
             title = entry.get('title', 'Unknown')
             channel = entry.get('channel', '')
-            suffix = '  [Age-restricted]' if entry.get('age_restricted') else ''
+            suffix = '  [Age-restricted]' if entry.get('age_restricted') else '  [Format unavailable]' if entry.get('format_unavailable') else ''
             if channel:
                 lines.append(f"{i}. {channel} - {title}{suffix}")
             else:
@@ -360,6 +360,21 @@ class ProgressMixin:
         If the skipped panel already exists, appends to it. Otherwise creates it.
         Format: \"channel - title  [Age-restricted]\"
         """
+        self._show_skipped_error_entries(entries, 'age_restricted', 'Age-restricted')
+
+    def show_format_unavailable_entries(self, entries: list):
+        """Show format-unavailable entries in the skipped unavailable elements panel.
+
+        If the skipped panel already exists, appends to it. Otherwise creates it.
+        Format: \"channel - title  [Format unavailable]\"
+        """
+        self._show_skipped_error_entries(entries, 'format_unavailable', 'Format unavailable')
+
+    def _show_skipped_error_entries(self, entries: list, flag_key: str, label: str):
+        """Show age-restricted entries in the skipped unavailable elements panel.
+
+        If the skipped panel already exists, appends to it. Otherwise creates it.
+        """
         if not entries:
             return
 
@@ -368,10 +383,7 @@ class ProgressMixin:
         for entry in entries:
             title = entry.get('title', 'Unknown')
             channel = entry.get('channel', '')
-            if channel:
-                formatted.append({'title': title, 'channel': channel, 'age_restricted': True})
-            else:
-                formatted.append({'title': title, 'channel': '', 'age_restricted': True})
+            formatted.append({'title': title, 'channel': channel or '', **{flag_key: True}})
 
         if hasattr(self, '_skipped_frame') and hasattr(self, '_skipped_text'):
             # Append to existing skipped panel
@@ -381,9 +393,9 @@ class ProgressMixin:
                 title = entry['title']
                 channel = entry['channel']
                 if channel:
-                    line = f"{current_lines}. {channel} - {title}  [Age-restricted]"
+                    line = f"{current_lines}. {channel} - {title}  [{label}]"
                 else:
-                    line = f"{current_lines}. {title}  [Age-restricted]"
+                    line = f"{current_lines}. {title}  [{label}]"
                 self._skipped_text.insert('end', f"\n{line}")
                 current_lines += 1
             new_height = int(self._skipped_text.index('end-1c').split('.')[0])

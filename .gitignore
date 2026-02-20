@@ -1,6 +1,9 @@
 # Modules
 __pycache__
 
+# Virtual environment
+venv/
+
 # Binaries
 external/
 dist

@@ -28,6 +28,9 @@ set componentsOK=1
 :: Add local FFmpeg to PATH for verification
 if exist "ffmpeg\bin" set "PATH=%CD%\ffmpeg\bin;%PATH%"
 
+:: Add Deno to PATH if installed
+if exist "%USERPROFILE%\.deno\bin" set "PATH=%USERPROFILE%\.deno\bin;%PATH%"
+
 :: Check Python
 python --version >nul 2>&1
 if %errorLevel% neq 0 set componentsOK=0
@@ -46,11 +49,15 @@ if !componentsOK! == 1 (
     if !errorLevel! neq 0 set componentsOK=0
 )
 
+:: Check Deno (required for YouTube signature solving)
+deno --version >nul 2>&1
+if %errorLevel% neq 0 set componentsOK=0
+
 goto :eof
 
 :install
 :: Python verification and installation
-echo [1/4] Checking Python...
+echo [1/5] Checking Python...
 python --version >nul 2>&1
 if !errorLevel! == 0 (
     echo [OK] Python is installed
@@ -73,7 +80,7 @@ if !errorLevel! == 0 (
 )
 
 :: pip verification and update
-echo [2/4] Checking pip...
+echo [2/5] Checking pip...
 pip --version >nul 2>&1
 if !errorLevel! == 0 (
     echo [OK] pip available - Updating...
@@ -84,15 +91,15 @@ if !errorLevel! == 0 (
 )
 
 :: Python dependencies installation
-echo [3/4] Installing dependencies...
+echo [3/5] Installing dependencies...
 if exist "requirements.txt" (
     pip install -r requirements.txt
 ) else (
-    pip install yt-dlp>=2023.12.30 Pillow>=10.0.0 ttkthemes>=3.2.2 mutagen>=1.47.0
+    pip install yt-dlp>=2023.12.30 yt-dlp-ejs>=0.4.0 Pillow>=10.0.0 ttkthemes>=3.2.2 mutagen>=1.47.0
 )
 
 :: FFmpeg installation
-echo [4/4] Installing FFmpeg...
+echo [4/5] Installing FFmpeg...
 ffmpeg -version >nul 2>&1
 if !errorLevel! neq 0 (
     if not exist "temp" mkdir temp
@@ -108,12 +115,34 @@ if !errorLevel! neq 0 (
 
 :: Cleanup
 if exist "temp" rmdir /s /q "temp"
+
+:: Deno installation
+echo [5/5] Installing Deno ^(JavaScript runtime for YouTube signature solving^)...
+deno --version >nul 2>&1
+if !errorLevel! neq 0 (
+    echo Downloading and installing Deno...
+    powershell -Command "irm https://deno.land/install.ps1 | iex" >nul 2>&1
+    if exist "%USERPROFILE%\.deno\bin" set "PATH=%USERPROFILE%\.deno\bin;%PATH%"
+    deno --version >nul 2>&1
+    if !errorLevel! == 0 (
+        echo [OK] Deno installed successfully
+    ) else (
+        echo [WARN] Deno installation may have failed
+        echo [INFO] Install Deno manually: https://deno.land/#installation
+    )
+) else (
+    echo [OK] Deno is already installed
+)
+
 echo [OK] Installation completed!
 echo.
 
 :launch
 :: Add FFmpeg to PATH
 if exist "ffmpeg\bin" set "PATH=%CD%\ffmpeg\bin;%PATH%"
+
+:: Add Deno to PATH
+if exist "%USERPROFILE%\.deno\bin" set "PATH=%USERPROFILE%\.deno\bin;%PATH%"
 
 :: Check for updates from GitHub
 call :check_updates
@@ -266,7 +295,7 @@ goto :eof
 
 :update_ytdlp
 echo Checking for yt-dlp updates...
-pip install --upgrade yt-dlp >nul 2>&1
+pip install --upgrade yt-dlp yt-dlp-ejs >nul 2>&1
 if !errorLevel! == 0 (
     echo [OK] yt-dlp is up to date
 ) else (

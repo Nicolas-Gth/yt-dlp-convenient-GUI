@@ -1,5 +1,6 @@
 # Core dependencies
 yt-dlp>=2023.12.30
+yt-dlp-ejs>=0.4.0
 Pillow>=10.0.0
 ttkthemes>=3.2.2
 mutagen>=1.47.0
