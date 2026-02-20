@@ -11,12 +11,10 @@ build
 ffmpeg
 temp
 
-# Custom config files
-cookies.txt
-
 # User settings and configuration
 yt-dlp-gui-config.json
 **/yt-dlp-gui-config.json
+cookies.txt
 
 # Misc
 main.spec
