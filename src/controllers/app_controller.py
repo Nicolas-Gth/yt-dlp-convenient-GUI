@@ -2,13 +2,15 @@
 Main application controller coordinating view and download operations.
 """
 import datetime
+import os
 import time
 from typing import Dict, Any, Optional
 
 from views import MainApplicationView
 from controllers.download_controller import DownloadController
 from models import VideoInfo, PlaylistInfo, DownloadProgress
-from config import FILE_FORMATS
+from config import FILE_FORMATS, COOKIES_PATH
+from utils.cookies_validator import validate_cookies_file
 
 
 class ApplicationController:
@@ -65,6 +67,10 @@ class ApplicationController:
         # Validate input
         if not config.url or not config.output_directory:
             print("Error: Please provide both URL and output directory")
+            return
+        
+        # Check cookies validity before starting download
+        if not self._check_cookies_before_download():
             return
         
         # Show fetching progress with animated progress bar
@@ -574,6 +580,20 @@ class ApplicationController:
         # The actual directory selection is handled in the view's _on_browse_click method
         pass
     
+    def _check_cookies_before_download(self) -> bool:
+        """Validate cookies and prompt the user. Returns True to proceed, False to cancel."""
+        warning = validate_cookies_file()
+        if warning is None:
+            return True  # Cookies are fine (or absent), proceed
+
+        import tkinter.messagebox as messagebox
+        proceed = messagebox.askokcancel(
+            "Cookies Warning",
+            warning + "\n\nContinue download anyway?",
+            icon="warning"
+        )
+        return proceed
+
     def run(self):
         """Start the application."""
         self.view.run()
