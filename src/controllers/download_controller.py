@@ -289,6 +289,27 @@ class DownloadController:
     # ------------------------------------------------------------------
 
     @staticmethod
+    def _normalize_playlist_url(url: str) -> str:
+        """Convert a watch?v=…&list=… URL into a clean playlist URL.
+
+        When the user pastes a URL like
+        https://www.youtube.com/watch?v=XXX&list=PLyyy&index=N
+        yt-dlp may treat it as a single-video extraction instead of a
+        playlist, which causes playlist slicing / interval to be ignored.
+        Stripping the video parameters ensures yt-dlp always sees a pure
+        playlist URL.
+        """
+        import re as _re
+        m = _re.search(r'[?&]list=([^&]+)', url)
+        if not m:
+            return url  # No playlist ID found, return as-is
+        playlist_id = m.group(1)
+        # Determine base domain (youtube.com vs music.youtube.com)
+        if 'music.youtube.com' in url:
+            return f"https://music.youtube.com/playlist?list={playlist_id}"
+        return f"https://www.youtube.com/playlist?list={playlist_id}"
+
+    @staticmethod
     def _extract_playlist_id(url: str) -> Optional[str]:
         """Extract the playlist ID (PLxxx…) from a YouTube / YT Music URL."""
         import re as _re
@@ -546,6 +567,11 @@ class DownloadController:
     def fetch_video_info(self, config: DownloadConfig, fetch_progress_callback: Optional[Callable] = None) -> tuple[Optional[Dict], Optional[str]]:
         """Fetch video information without downloading. Returns (info, error_message)."""
         self._playlist_urls = []
+
+        # Normalise watch?v=…&list=… URLs to pure playlist URLs so that
+        # yt-dlp always extracts the playlist (not the single video).
+        if config.is_playlist:
+            config.url = self._normalize_playlist_url(config.url)
 
         # Lightweight logger that captures error messages so we can detect
         # specific errors even when ignoreerrors=True swallows exceptions.
