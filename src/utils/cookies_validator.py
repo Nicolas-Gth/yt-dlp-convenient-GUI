@@ -32,8 +32,20 @@ def validate_cookies_file() -> Optional[str]:
         return None  # Can't read the file, skip validation
 
     # --- 1. Format & expiration check ---
+    # Only check authentication-relevant cookies for expiration.
+    # Ephemeral cookies (ST-*, CONSISTENCY, YSC, etc.) expire quickly
+    # and are irrelevant for download functionality.
+    _AUTH_COOKIE_NAMES = {
+        "SID", "HSID", "SSID", "APISID", "SAPISID", "LOGIN_INFO",
+        "__Secure-1PSID", "__Secure-3PSID",
+        "__Secure-1PAPISID", "__Secure-3PAPISID",
+        "__Secure-1PSIDTS", "__Secure-3PSIDTS",
+        "__Secure-1PSIDCC", "__Secure-3PSIDCC",
+        "SIDCC",
+    }
+
     has_valid_cookie = False
-    has_expired = False
+    has_auth_expired = False
     now = time.time()
 
     for line in lines:
@@ -46,13 +58,15 @@ def validate_cookies_file() -> Optional[str]:
             continue
 
         has_valid_cookie = True
+        cookie_name = fields[5]
         try:
             expiration = int(fields[4])
         except ValueError:
             continue
 
-        if expiration != 0 and expiration < now:
-            has_expired = True
+        # Only flag expiration for auth-relevant cookies
+        if cookie_name in _AUTH_COOKIE_NAMES and expiration != 0 and expiration < now:
+            has_auth_expired = True
 
     if not has_valid_cookie:
         return (
@@ -61,7 +75,7 @@ def validate_cookies_file() -> Optional[str]:
             "Please update it with fresh cookies from your browser, "
             "or delete it if you don't need it."
         )
-    if has_expired:
+    if has_auth_expired:
         return (
             "Some cookies in cookies.txt have expired.\n\n"
             "This may cause YouTube downloads to fail "
