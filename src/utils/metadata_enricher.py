@@ -431,7 +431,8 @@ def fetch_cover_art_itunes(artist: str, album: str, title: str = "") -> Optional
             "term": query,
             "media": "music",
             "entity": "album",
-            "limit": "5"
+            "limit": "5",
+            "country": "US"
         })
         url = f"{_ITUNES_BASE}/search?{params}"
         data = _request(url)
@@ -460,7 +461,8 @@ def fetch_cover_art_itunes(artist: str, album: str, title: str = "") -> Optional
             "term": query,
             "media": "music",
             "entity": "song",
-            "limit": "10"
+            "limit": "10",
+            "country": "US"
         })
         url = f"{_ITUNES_BASE}/search?{params}"
         data = _request(url)
@@ -850,10 +852,10 @@ def enrich_metadata(video_infos: Dict) -> Optional[EnrichedMetadata]:
     
     # --- Step 3: Genre ---
     # Priority 1: iTunes per-song genre (curated, standardized classification)
+    # Always call iTunes for this specific track — don't reuse _itunes_last_genre
+    # from an earlier track in the same playlist session (it would be wrong).
     if not enriched.genre:
-        if not _itunes_last_genre:
-            # Trigger an iTunes song lookup for genre
-            fetch_cover_art_itunes(artist, yt_album or "", title)
+        fetch_cover_art_itunes(artist, yt_album or "", title)
         if _itunes_last_genre:
             enriched.genre = _itunes_last_genre
             print(f"  [metadata] \u2713 Genre (iTunes): {enriched.genre}")

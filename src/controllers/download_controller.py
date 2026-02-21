@@ -146,13 +146,15 @@ class CustomPostProcessor(yt_dlp.postprocessor.PostProcessor):
         except Exception as e:
             print(f"Warning: Could not fix year tag: {e}")
         
-        # Remove generic "Music" genre written by FFmpegMetadata (YouTube category).
-        # A real genre will be set by the enricher if enabled; otherwise leave empty
-        # rather than keeping a useless generic tag.
+        # Always remove genre written by FFmpegMetadata (YouTube category).
+        # yt-dlp's FFmpegMetadataPP maps genre from: genre → genres → categories → tags.
+        # YouTube categories are localized (e.g. "Rock y Alternativo" in Spanish,
+        # "Musique" in French) and tags are just video keywords — neither is a
+        # reliable genre classification. The enricher will set a proper English
+        # genre from iTunes/MusicBrainz if available; otherwise leave empty.
         try:
             audio = ID3(file_path)
-            existing_genre = audio.get("TCON")
-            if existing_genre and str(existing_genre).strip().lower() == "music":
+            if audio.get("TCON"):
                 audio.delall("TCON")
                 audio.save()
         except Exception as e:
