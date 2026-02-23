@@ -1,268 +1,19 @@
 """
-Download controller handling yt-dlp operations and metadata processing.
+Download controller handling yt-dlp operations and download orchestration.
 """
 import os
-import re
-import io
-import json
-import shutil
-import subprocess
 import threading
-from typing import Optional, Dict, Any, Callable
+from typing import Optional, Dict, Callable
 import yt_dlp
-from config import (ICON_PATH, COOKIES_PATH, COOKIES_INSTRUCTIONS)
-    
-from mutagen.id3 import ID3, APIC, TDRC, TCON
-from mutagen.mp3 import MP3
-from mutagen.easyid3 import EasyID3
+from config import COOKIES_PATH, get_ffmpeg_path
 
-from models import DownloadConfig, VideoInfo, PlaylistInfo, DownloadProgress
-from utils import crop_album_cover, enrich_metadata, apply_enriched_metadata_mp3
-from utils.playlist_utils import (
-    normalize_playlist_url, compute_playlist_offset,
-)
-from config import get_ffmpeg_path, FILE_FORMATS
+from models import DownloadConfig, DownloadProgress
+from utils.playlist_utils import normalize_playlist_url, compute_playlist_offset
+from utils.post_processor_utils import CustomPostProcessor
+from utils.ydl_options_utils import build_ydl_options
+from utils.error_messages_utils import cookie_error_message, age_restricted_error_message
+from utils.notification_utils import send_completion_notification
 
-
-class CustomPostProcessor(yt_dlp.postprocessor.PostProcessor):
-    """Custom post-processor for handling metadata and file organization."""
-    
-    # Patterns stripped from video titles for clean filenames/tags
-    _TITLE_NOISE_RE = re.compile(
-        r'\s*[\(\[]'
-        r'(official\s*(music\s*)?video|official\s*audio|official\s*lyric\s*video'
-        r'|lyrics?|lyric\s*video|audio|visualizer|hd|hq|4k'
-        r'|clip\s*officiel|video\s*oficial|videoclip'
-        r'|mv|m/v|music\s*video|live)'
-        r'[\)\]]',
-        re.IGNORECASE
-    )
-
-    @staticmethod
-    def _clean_title(title: str) -> str:
-        """Strip noise like (Official Video), [Lyrics], etc. from a video title."""
-        cleaned = CustomPostProcessor._TITLE_NOISE_RE.sub('', title).strip()
-        # Also strip trailing whitespace/dashes left over
-        cleaned = re.sub(r'[\s\-]+$', '', cleaned)
-        return cleaned if cleaned else title
-
-    def __init__(self, download_config: DownloadConfig, normalize_callback: Optional[Callable] = None):
-        super().__init__()
-        self.config = download_config
-        self.normalize_callback = normalize_callback
-    
-    def run(self, video_infos):
-        """Process downloaded file: add metadata, rename, and set album cover."""
-        file_format = self.config.file_format
-        # Use yt-dlp's actual filepath — the title may contain characters
-        # (/ ? : ~ etc.) that yt-dlp sanitises when writing to disk,
-        # so reconstructing the path from the raw title would fail.
-        file_path = video_infos.get('filepath',
-                                    f"{self.config.output_directory}/{video_infos['title']}.{file_format}")
-
-        # Check if the file actually exists
-        if not os.path.exists(file_path):
-            print(f"Warning: File {file_path} not found. Conversion may have failed.")
-            return [], video_infos
-
-        # --- Collect all info for this track's summary line ---
-        track_info = {
-            'type': 'track_summary',
-            'volume': None,
-            'metadata_found': False,
-            'lyrics_found': False,
-            'cover_found': False,
-            'duration': video_infos.get('duration', 0) or 0,
-        }
-
-        # Determine artist name
-        try:
-            artist_name = video_infos.get('artists', [video_infos.get('uploader', '').replace(" - Topic", "")])[0]
-        except (KeyError, IndexError):
-            artist_name = video_infos.get('uploader', '').replace(" - Topic", "")
-
-        # Determine display name: "Artist - Track" for music, "Video Title" otherwise
-        track_name = video_infos.get('track')  # Only set on YT Music
-        if track_name and artist_name:
-            track_info['display_name'] = f"{artist_name} - {track_name}"
-        else:
-            track_info['display_name'] = video_infos.get('title', 'Unknown')
-
-        # Analyze loudness after normalization if enabled
-        if self.config.normalize_volume:
-            track_info['volume'] = self._analyze_loudness(file_path)
-
-        # Add metadata to the file
-        if file_format == "mp3":
-            self._add_mp3_metadata(file_path, video_infos, artist_name)
-        
-        # Rename and sanitize the file name
-        new_file_path = self._sanitize_and_rename_file(file_path, video_infos, artist_name, file_format)
-        
-        # Add album cover for MP3 files
-        if file_format == "mp3" and os.path.exists(new_file_path):
-            self._add_album_cover(new_file_path, video_infos, track_info)
-
-        # Send combined summary line to UI
-        if self.normalize_callback:
-            self.normalize_callback(track_info)
-
-        return [], video_infos
-    
-    def _add_mp3_metadata(self, file_path: str, video_infos: Dict, artist_name: str):
-        """Add metadata to MP3 file."""
-        try:
-            metadatas = MP3(file_path, ID3=EasyID3)
-            metadatas['artist'] = artist_name
-            
-            # Use clean track name as title tag
-            track_name = video_infos.get('track')  # YT Music: already clean
-            if not track_name:
-                track_name = self._clean_title(video_infos.get('title', ''))
-            metadatas['title'] = track_name
-            
-            album_name = video_infos.get('album')
-            if album_name:
-                metadatas['album'] = album_name
-            
-            metadatas.save()
-        except Exception as e:
-            print(f"Warning: Could not add metadata to MP3 file: {e}")
-        
-        # Fix year tag: FFmpegMetadata writes upload_date (YYYYMMDD) into TDRC.
-        # We want only the 4-digit year, and prefer yt-dlp's release_year
-        # (original release) over the upload date.
-        try:
-            audio = ID3(file_path)
-            release_year = video_infos.get('release_year')
-            if release_year:
-                audio.delall("TDRC")
-                audio["TDRC"] = TDRC(encoding=3, text=[str(release_year)])
-            else:
-                existing_tdrc = audio.get("TDRC")
-                if existing_tdrc:
-                    existing_text = str(existing_tdrc)
-                    if len(existing_text) > 4 and existing_text[:4].isdigit():
-                        audio.delall("TDRC")
-                        audio["TDRC"] = TDRC(encoding=3, text=[existing_text[:4]])
-            audio.save()
-        except Exception as e:
-            print(f"Warning: Could not fix year tag: {e}")
-        
-        # Always remove genre written by FFmpegMetadata (YouTube category).
-        # yt-dlp's FFmpegMetadataPP maps genre from: genre → genres → categories → tags.
-        # YouTube categories are localized (e.g. "Rock y Alternativo" in Spanish,
-        # "Musique" in French) and tags are just video keywords — neither is a
-        # reliable genre classification. The enricher will set a proper English
-        # genre from iTunes/MusicBrainz if available; otherwise leave empty.
-        try:
-            audio = ID3(file_path)
-            if audio.get("TCON"):
-                audio.delall("TCON")
-                audio.save()
-        except Exception as e:
-            print(f"Warning: Could not clean genre tag: {e}")
-    
-    def _analyze_loudness(self, file_path: str) -> dict:
-        """Analyze the file loudness using ffmpeg. Returns loudness info dict or None."""
-        try:
-            from config import get_ffmpeg_path
-            ffmpeg_dir = get_ffmpeg_path()
-            if ffmpeg_dir:
-                ffmpeg_bin = os.path.join(ffmpeg_dir, 'ffmpeg')
-                if not os.path.exists(ffmpeg_bin):
-                    ffmpeg_bin = 'ffmpeg'
-            else:
-                ffmpeg_bin = 'ffmpeg'
-            
-            result = subprocess.run(
-                [ffmpeg_bin, '-i', file_path, '-af', 'loudnorm=print_format=json', '-f', 'null', '-'],
-                capture_output=True, text=True, timeout=60
-            )
-            
-            # Parse the loudnorm JSON output from stderr
-            stderr = result.stderr
-            json_start = stderr.rfind('{')
-            json_end = stderr.rfind('}') + 1
-            
-            if json_start != -1 and json_end > json_start:
-                loudness_data = json.loads(stderr[json_start:json_end])
-                input_i = float(loudness_data.get('input_i', 0))
-                target = self.config.normalize_target
-                print(f"Normalization: measured at {input_i:.1f} LUFS (target: {target:.1f} LUFS)")
-                return {'measured': input_i, 'target': target}
-        except Exception as e:
-            print(f"Warning: Could not analyze loudness: {e}")
-        return None
-    
-    def _sanitize_and_rename_file(self, file_path: str, video_infos: Dict, artist_name: str, file_format: str) -> str:
-        """Sanitize filename and rename the file."""
-        # Prefer clean track name from YT Music, otherwise clean the video title
-        title = video_infos.get('track') or self._clean_title(video_infos.get('title', ''))
-        sanitized_artist = re.sub(r'[!?:#%&{}<>|*/$@~]', '', artist_name)
-        sanitized_title = re.sub(r'[!?:#%&{}<>|*/$@~]', '', title)
-        
-        new_file_path = f"{self.config.output_directory}/{sanitized_artist} - {sanitized_title}.{file_format}"
-        
-        try:
-            os.rename(file_path, new_file_path)
-            return new_file_path
-        except Exception as e:
-            print(f"Warning: Could not rename file: {e}")
-            return file_path
-    
-    def _add_album_cover(self, file_path: str, video_infos: Dict, track_info: dict = None):
-        """Add album cover to MP3 file, with optional metadata enrichment."""
-        thumbnail_url = video_infos.get('thumbnail', '')
-        
-        # Prepare the YouTube thumbnail as fallback cover
-        fallback_cover = None
-        if thumbnail_url:
-            try:
-                fallback_cover = crop_album_cover(thumbnail_url)
-            except Exception as e:
-                print(f"Warning: Could not crop YouTube thumbnail: {e}")
-        
-        # Try metadata enrichment if enabled
-        if self.config.enrich_metadata:
-            enriched = enrich_metadata(video_infos)
-            
-            if enriched:
-                if enriched.cover_data:
-                    print(f"  [metadata] ✓ HD album cover")
-                if enriched.synced_lyrics:
-                    print(f"  [metadata] ✓ Synced lyrics (LRC) embedded")
-                elif enriched.lyrics:
-                    print(f"  [metadata] ✓ Lyrics embedded")
-                
-                if not enriched.cover_data and fallback_cover:
-                    print(f"  [metadata] No HD cover found, using YouTube thumbnail")
-                
-                # Update track_info for the combined summary
-                if track_info is not None:
-                    track_info['cover_found'] = bool(enriched.cover_data)
-                    track_info['lyrics_found'] = bool(enriched.synced_lyrics or enriched.lyrics)
-                    track_info['metadata_found'] = bool(
-                        enriched.cover_data or enriched.lyrics or enriched.synced_lyrics or enriched.album
-                    )
-                
-                apply_enriched_metadata_mp3(file_path, enriched, fallback_cover)
-                return
-        
-        # Fallback: just embed the YouTube thumbnail
-        if fallback_cover:
-            try:
-                audio = ID3(file_path)
-                audio['APIC'] = APIC(
-                    encoding=0,
-                    mime='image/jpeg',
-                    type=3,
-                    desc=u'Cover',
-                    data=fallback_cover
-                )
-                audio.save()
-            except Exception as e:
-                print(f"Warning: Could not add album cover to MP3: {e}")
 
 
 class DownloadController:
@@ -425,7 +176,7 @@ class DownloadController:
                 # Check captured errors for cookie / bot-check
                 for err in error_capture.errors:
                     if "Sign in to confirm" in err and "bot" in err:
-                        return None, self._cookie_error_message()
+                        return None, cookie_error_message()
                 # Check if this is a known DRM-protected site
                 if ("spotify.com" in config.url.lower() or 
                     "netflix.com" in config.url.lower() or
@@ -482,7 +233,7 @@ class DownloadController:
             
             # Handle cookie / bot-check errors
             if "Sign in to confirm" in error_message and "bot" in error_message:
-                return None, self._cookie_error_message()
+                return None, cookie_error_message()
             # Handle ExtractorError specifically (includes DRM errors)
             elif ("DRM protection" in error_message or "DRM protected" in error_message or 
                 "use DRM protection" in error_message or "known to use DRM" in error_message):
@@ -508,7 +259,7 @@ class DownloadController:
             elif "Unsupported URL" in error_message:
                 return None, "Unsupported URL format. Please check the URL."
             elif "Sign in to confirm" in error_message and "bot" in error_message:
-                return None, self._cookie_error_message()
+                return None, cookie_error_message()
             elif "Sign in to confirm your age" in error_message:
                 return None, "This video requires age verification and cannot be downloaded."
             elif "This video is not available" in error_message:
@@ -533,7 +284,7 @@ class DownloadController:
         self._age_restricted_entries = []
         self._format_unavailable_entries = []
         try:
-            ydl_opts = self._build_ydl_options(config)
+            ydl_opts = build_ydl_options(config, self.ffmpeg_path, self._progress_hook, self._cancel_filter)
 
             # Logger that captures error messages to detect cookie/bot errors
             # even when ignoreerrors=True swallows the exception.
@@ -562,7 +313,7 @@ class DownloadController:
                         print("Cookie authentication required.")
                         self._cleanup_partial_files(config.output_directory)
                         if self.error_callback:
-                            self.error_callback(self._cookie_error_message())
+                            self.error_callback(cookie_error_message())
                         return True
                 return False
 
@@ -660,7 +411,7 @@ class DownloadController:
                     self.cancel_callback()
                 return
             
-            self._send_completion_notification(config)
+            send_completion_notification(config, self.video_infos, self.progress)
             
             # Call completion callback to reset UI
             if self.completion_callback:
@@ -687,102 +438,10 @@ class DownloadController:
                 print("Cookie authentication required.")
                 self._cleanup_partial_files(config.output_directory)
                 if self.error_callback:
-                    self.error_callback(self._cookie_error_message())
+                    self.error_callback(cookie_error_message())
                 return
             print(f"Download error: {error}")
             self._retry_download(config)
-    
-    def _build_ydl_options(self, config: DownloadConfig) -> Dict[str, Any]:
-        """Build yt-dlp options based on configuration."""
-        base_opts = {
-            'verbose': config.verbose,
-            'no-part': True,
-            'ignoreerrors': True,
-            'quiet': True,
-            'extractor_args': {'youtubetab': {'skip': ['authcheck']}},
-            'external_downloader_args': ['-loglevel', 'panic'],
-            'outtmpl': config.output_template,
-            'noplaylist': not config.is_playlist,
-            'progress_hooks': [self._progress_hook],
-            'match_filter': self._cancel_filter,
-        }
-        
-        # Use cookies file if available
-        if os.path.isfile(COOKIES_PATH):
-            base_opts['cookiefile'] = COOKIES_PATH
-        
-        if config.file_format == "mp3":
-            return self._add_mp3_options(base_opts, config)
-        elif config.file_format == "mp4":
-            return self._add_mp4_options(base_opts, config)
-        
-        return base_opts
-    
-    def _add_mp3_options(self, opts: Dict, config: DownloadConfig) -> Dict:
-        """Add MP3-specific options."""
-        opts['format'] = 'bestaudio/best'
-        
-        if self.ffmpeg_path is not None:
-            opts['ffmpeg_location'] = self.ffmpeg_path
-            extract_audio_pp = {
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'mp3',
-            }
-            # "Best" means no quality cap — let yt-dlp use the highest available
-            if config.bitrate and config.bitrate.lower() != 'best':
-                extract_audio_pp['preferredquality'] = config.bitrate
-            else:
-                extract_audio_pp['preferredquality'] = '0'  # 0 = best quality (VBR)
-            opts['postprocessors'] = [
-                extract_audio_pp,
-                {'key': 'FFmpegMetadata', 'add_metadata': True}
-            ]
-            
-            # Add volume normalization if enabled
-            # Keys must be lowercase — yt-dlp's _configuration_args does .lower() lookups.
-            if config.normalize_volume:
-                target = config.normalize_target
-                opts['postprocessor_args'] = {
-                    'extractaudio': [
-                        '-af', f'loudnorm=I={target}:TP=-1.5:LRA=11'
-                    ]
-                }
-        else:
-            print("Warning: MP3 conversion disabled - ffmpeg not found")
-            opts['format'] = 'bestaudio'
-        
-        return opts
-    
-    def _add_mp4_options(self, opts: Dict, config: DownloadConfig) -> Dict:
-        """Add MP4-specific options."""
-        if config.quality and config.quality.lower() == 'best':
-            format_string = 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best'
-        else:
-            format_string = f'bestvideo[height<={config.quality}][vbr<=12000][ext=mp4]+bestaudio[ext=m4a]/best[vbr<=12000][ext=mp4]/best'
-        opts['format'] = format_string
-        
-        if self.ffmpeg_path is not None:
-            opts['ffmpeg_location'] = self.ffmpeg_path
-            opts['postprocessors'] = [{'key': 'FFmpegVideoConvertor', 'preferedformat': 'mp4'}]
-            
-            # Add volume normalization if enabled
-            # For MP4, apply loudnorm during the merge step.
-            # We override the audio codec to re-encode audio with loudnorm
-            # while keeping video as stream copy.
-            # Key must be lowercase — yt-dlp's _configuration_args does .lower() lookups.
-            if config.normalize_volume:
-                target = config.normalize_target
-                opts['postprocessor_args'] = {
-                    'merger+ffmpeg_o': [
-                        '-c:v', 'copy',
-                        '-c:a', 'aac', '-b:a', '192k',
-                        '-af', f'loudnorm=I={target}:TP=-1.5:LRA=11'
-                    ]
-                }
-        else:
-            print("Warning: MP4 conversion disabled - ffmpeg not found")
-        
-        return opts
     
     def _cancel_filter(self, info_dict, *, incomplete):
         """Match filter that rejects all entries once download is cancelled.
@@ -810,63 +469,8 @@ class DownloadController:
         if self.progress_callback:
             self.progress_callback(d, self.video_infos, self.progress)
     
-    @staticmethod
-    def _cookie_error_message() -> str:
-        """Return a user-friendly error message for cookie / bot-check errors."""
-        return (
-            "YouTube is asking you to prove you're not a bot.\n\n"
-            "To fix this, you need to provide your browser cookies:\n\n"
-            + COOKIES_INSTRUCTIONS
-        )
-
-    @staticmethod
-    def _age_restricted_error_message(entries: list) -> str:
-        """Return a user-friendly popup message when videos were skipped due to age restriction."""
-        count = len(entries)
-        plural = 's' if count > 1 else ''
-        them = 'them' if count > 1 else 'it'
-
-        return (
-            f"{count} video{plural} could not be downloaded because "
-            f"{'they require' if count > 1 else 'it requires'} age verification.\n\n"
-            f"To download {them}, you need to provide your browser cookies:\n\n"
-            + COOKIES_INSTRUCTIONS
-        )
-
     def _retry_download(self, config: DownloadConfig):
         """Retry download on error."""
         print("There was a problem during the download, automatically restarting!")
         # Implementation for retry logic
         pass
-    
-    def _send_completion_notification(self, config: DownloadConfig):
-        """Send completion notification."""
-        if self.video_infos:
-            if config.is_playlist:
-                playlist_title = self.video_infos.get('title', 'Unknown Playlist')
-                count = self.progress.current_song if self.progress else 0
-                if count > 0:
-                    message = f"{count} element{'s' if count > 1 else ''} downloaded from playlist {playlist_title}."
-                else:
-                    message = f"Playlist {playlist_title} downloaded."
-            else:
-                title = self.video_infos.get('title', 'Unknown')
-                message = f"Video \"{title}\" has been downloaded."
-            
-            try:
-                if shutil.which("notify-send"):
-                    cmd = [
-                        "notify-send",
-                        "--app-name=yt-dlp GUI",
-                        "--expire-time=5000",
-                        "Download Complete!",
-                        message,
-                    ]
-                    # Add icon if available
-                    if ICON_PATH and os.path.isfile(ICON_PATH):
-                        cmd.insert(1, f"--icon={ICON_PATH}")
-                    subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                else:
-                    print(f"Download Complete! {message}")
-            except Exception:
-                print(f"Download Complete! {message}")

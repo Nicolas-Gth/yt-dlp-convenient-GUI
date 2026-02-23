@@ -6,8 +6,11 @@ import os
 # Application version (single source of truth)
 APP_VERSION = "2.6.5"
 
+# Application name
+APP_NAME = "yt-dlp Convenient GUI"
+
 # Application constants
-APP_TITLE = f"yt-dlp Convenient GUI [v{APP_VERSION}] - Made by Nicolas-Gth"
+APP_TITLE = f"{APP_NAME} [v{APP_VERSION}] - Made by Nicolas-Gth"
 
 # Default window dimensions
 DEFAULT_WINDOW_SIZE = {

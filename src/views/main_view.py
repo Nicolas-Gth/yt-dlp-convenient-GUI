@@ -18,9 +18,9 @@ from config import (
 from utils import get_platform_fonts, load_icon, settings_manager
 from models import DownloadConfig
 
-from .widgets import WidgetsMixin
+from .widgets_view import WidgetsMixin
 from .progress_view import ProgressMixin
-from .event_handlers import EventHandlersMixin
+from .event_handlers_view import EventHandlersMixin
 
 
 class MainApplicationView(WidgetsMixin, ProgressMixin, EventHandlersMixin):

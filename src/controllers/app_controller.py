@@ -10,7 +10,7 @@ from views import MainApplicationView
 from controllers.download_controller import DownloadController
 from models import VideoInfo, PlaylistInfo, DownloadProgress
 from config import FILE_FORMATS, COOKIES_PATH
-from utils.cookies_validator import validate_cookies_file
+from utils.cookies_validator_utils import validate_cookies_file
 
 
 class ApplicationController:
@@ -561,8 +561,8 @@ class ApplicationController:
         # Show age-restricted popup after UI is reset (dialog is blocking)
         age_restricted = self.download_controller._age_restricted_entries
         if age_restricted:
-            from controllers.download_controller import DownloadController
-            self.view.show_ytdlp_error(DownloadController._age_restricted_error_message(age_restricted))
+            from utils.error_messages_utils import age_restricted_error_message
+            self.view.show_ytdlp_error(age_restricted_error_message(age_restricted))
     
     def on_format_change(self, format_type: str):
         """Handle format selection change."""
