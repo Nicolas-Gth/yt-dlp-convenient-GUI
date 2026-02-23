@@ -10,7 +10,7 @@ import subprocess
 import threading
 from typing import Optional, Dict, Any, Callable
 import yt_dlp
-from config import (ICON_PATH, COOKIES_PATH)
+from config import (ICON_PATH, COOKIES_PATH, COOKIES_INSTRUCTIONS)
     
 from mutagen.id3 import ID3, APIC, TDRC, TCON
 from mutagen.mp3 import MP3
@@ -18,6 +18,9 @@ from mutagen.easyid3 import EasyID3
 
 from models import DownloadConfig, VideoInfo, PlaylistInfo, DownloadProgress
 from utils import crop_album_cover, enrich_metadata, apply_enriched_metadata_mp3
+from utils.playlist_utils import (
+    normalize_playlist_url, compute_playlist_offset,
+)
 from config import get_ffmpeg_path, FILE_FORMATS
 
 
@@ -286,227 +289,6 @@ class DownloadController:
         self._age_restricted_entries: list = []  # Entries skipped due to age restriction
         self._format_unavailable_entries: list = []  # Entries skipped due to format errors
     
-    # ------------------------------------------------------------------
-    # YouTube innertube helpers – resolve displayed playlist positions
-    # ------------------------------------------------------------------
-
-    @staticmethod
-    def _normalize_playlist_url(url: str) -> str:
-        """Convert a watch?v=…&list=… URL into a clean playlist URL.
-
-        When the user pastes a URL like
-        https://www.youtube.com/watch?v=XXX&list=PLyyy&index=N
-        yt-dlp may treat it as a single-video extraction instead of a
-        playlist, which causes playlist slicing / interval to be ignored.
-        Stripping the video parameters ensures yt-dlp always sees a pure
-        playlist URL.
-        """
-        import re as _re
-        m = _re.search(r'[?&]list=([^&]+)', url)
-        if not m:
-            return url  # No playlist ID found, return as-is
-        playlist_id = m.group(1)
-        # Determine base domain (youtube.com vs music.youtube.com)
-        if 'music.youtube.com' in url:
-            return f"https://music.youtube.com/playlist?list={playlist_id}"
-        return f"https://www.youtube.com/playlist?list={playlist_id}"
-
-    @staticmethod
-    def _extract_playlist_id(url: str) -> Optional[str]:
-        """Extract the playlist ID (PLxxx…) from a YouTube / YT Music URL."""
-        import re as _re
-        m = _re.search(r'[?&]list=([^&]+)', url)
-        return m.group(1) if m else None
-
-    @staticmethod
-    def _innertube_browse(playlist_id: str, continuation: Optional[str] = None) -> Optional[Dict]:
-        """Single innertube browse request. Returns raw JSON or None."""
-        import urllib.request
-        body: Dict[str, Any] = {
-            "context": {
-                "client": {
-                    "clientName": "WEB",
-                    "clientVersion": "2.20250201.00.00",
-                }
-            }
-        }
-        if continuation:
-            body["continuation"] = continuation
-        else:
-            body["browseId"] = f"VL{playlist_id}"
-
-        data = json.dumps(body).encode()
-        req = urllib.request.Request(
-            "https://www.youtube.com/youtubei/v1/browse",
-            data=data,
-            headers={"Content-Type": "application/json",
-                     "User-Agent": "Mozilla/5.0"},
-        )
-        try:
-            with urllib.request.urlopen(req, timeout=20) as resp:
-                return json.loads(resp.read())
-        except Exception as exc:
-            print(f"  [innertube] Request failed: {exc}")
-            return None
-
-    @staticmethod
-    def _parse_innertube_items(result: Dict, is_continuation: bool) -> list:
-        """Extract the list of renderer items from an innertube response."""
-        try:
-            if is_continuation:
-                for action in result.get("onResponseReceivedActions", []):
-                    items = (action
-                             .get("appendContinuationItemsAction", {})
-                             .get("continuationItems", []))
-                    if items:
-                        return items
-                return []
-            else:
-                tabs = (result.get("contents", {})
-                              .get("twoColumnBrowseResultsRenderer", {})
-                              .get("tabs", []))
-                if not tabs:
-                    return []
-                section = (tabs[0]
-                           .get("tabRenderer", {})
-                           .get("content", {})
-                           .get("sectionListRenderer", {})
-                           .get("contents", [{}])[0])
-                playlist_renderer = (section
-                                     .get("itemSectionRenderer", {})
-                                     .get("contents", [{}])[0]
-                                     .get("playlistVideoListRenderer", {}))
-                return playlist_renderer.get("contents", [])
-        except (KeyError, IndexError, TypeError):
-            return []
-
-    def _get_youtube_visible_ids(self, playlist_id: str, count: int) -> list:
-        """Return the first *count* visible video IDs as displayed on youtube.com.
-
-        Uses the innertube browse API, which returns **only entries that
-        YouTube displays** to the user (skipping deleted / private /
-        region-blocked videos).  This list therefore matches the numbering
-        the user sees on the website.
-        """
-        video_ids: list = []
-        continuation: Optional[str] = None
-
-        for page in range(max(1, count // 100 + 5)):
-            result = self._innertube_browse(playlist_id, continuation)
-            if not result:
-                break
-
-            items = self._parse_innertube_items(result, continuation is not None)
-            continuation = None
-
-            for item in items:
-                if "playlistVideoRenderer" in item:
-                    vid = item["playlistVideoRenderer"].get("videoId", "")
-                    if vid:
-                        video_ids.append(vid)
-                        if len(video_ids) >= count:
-                            return video_ids
-                elif "continuationItemRenderer" in item:
-                    cir = item["continuationItemRenderer"]
-                    token = None
-                    # Path 1: continuationEndpoint → continuationCommand → token
-                    try:
-                        token = cir["continuationEndpoint"]["continuationCommand"]["token"]
-                    except (KeyError, TypeError):
-                        pass
-                    # Path 2: continuationEndpoint → commandExecutorCommand
-                    # (wraps multiple commands; the continuation token is
-                    #  inside one of the sub-commands)
-                    if not token:
-                        try:
-                            cmds = (cir["continuationEndpoint"]
-                                       ["commandExecutorCommand"]
-                                       ["commands"])
-                            for cmd in cmds:
-                                ct = (cmd.get("continuationCommand") or {}).get("token")
-                                if ct:
-                                    token = ct
-                                    break
-                        except (KeyError, TypeError):
-                            pass
-                    # Path 3: button → buttonRenderer → command
-                    if not token:
-                        try:
-                            token = (cir["button"]["buttonRenderer"]["command"]
-                                     ["continuationCommand"]["token"])
-                        except (KeyError, TypeError):
-                            pass
-                    if token:
-                        continuation = token
-
-            if not continuation:
-                break
-
-        return video_ids
-
-    def _compute_playlist_offset(self, url: str, target_pos: int,
-                                  flat_entries: list) -> int:
-        """Compare YouTube's displayed numbering with the flat-extracted list.
-
-        Returns the offset to ADD to the user's position to obtain the
-        correct index in *flat_entries*.  Returns 0 when no offset is
-        detected or the probe fails.
-        """
-        playlist_id = self._extract_playlist_id(url)
-        if not playlist_id:
-            return 0
-
-        print(f"  [playlist] Probing YouTube for displayed position {target_pos}…")
-        yt_ids = self._get_youtube_visible_ids(playlist_id, target_pos)
-
-        if len(yt_ids) < target_pos:
-            print(f"  [playlist] Probe returned only {len(yt_ids)} IDs "
-                  f"(need {target_pos}), skipping offset detection")
-            return 0
-
-        target_id = yt_ids[target_pos - 1]
-
-        # Locate that video ID in the flat-extracted list
-        api_idx_found = None
-        for api_idx, entry in enumerate(flat_entries):
-            if entry and isinstance(entry, dict) and entry.get("id") == target_id:
-                api_idx_found = api_idx
-                break
-
-        if api_idx_found is None:
-            print(f"  [playlist] Target ID {target_id} not found in flat list")
-            return 0
-
-        offset = api_idx_found - (target_pos - 1)
-        if offset != 0:
-            print(f"  [playlist] Offset detected: {offset}  "
-                  f"(YouTube #{target_pos} \"{flat_entries[api_idx_found].get('title', '?')}\" "
-                  f"→ API index {api_idx_found + 1})")
-
-            # Identify which entries the API has that YouTube hides.
-            # Walk both lists in parallel up to the target position.
-            yt_id_set = set(yt_ids[:target_pos])
-            hidden = []
-            for i in range(api_idx_found + 1):
-                e = flat_entries[i]
-                if not e or not isinstance(e, dict):
-                    hidden.append({'title': '<Unknown>', 'channel': '', 'id': ''})
-                    continue
-                eid = e.get('id', '')
-                if eid not in yt_id_set:
-                    hidden.append({
-                        'title': e.get('title', '<Unknown>'),
-                        'channel': (e.get('channel') or e.get('uploader') or ''),
-                        'id': eid,
-                    })
-
-            self._hidden_entries = hidden
-        else:
-            print(f"  [playlist] No offset — positions match")
-            self._hidden_entries = []
-
-        return offset
-        
     def set_progress_callback(self, callback: Callable):
         """Set the callback function for progress updates."""
         self.progress_callback = callback
@@ -573,7 +355,7 @@ class DownloadController:
         # Normalise watch?v=…&list=… URLs to pure playlist URLs so that
         # yt-dlp always extracts the playlist (not the single video).
         if config.is_playlist:
-            config.url = self._normalize_playlist_url(config.url)
+            config.url = normalize_playlist_url(config.url)
 
         # Lightweight logger that captures error messages so we can detect
         # specific errors even when ignoreerrors=True swallows exceptions.
@@ -669,8 +451,9 @@ class DownloadController:
                     # causing the user-visible position N to differ from
                     # API index N.
                     if start_idx > 0:
-                        offset = self._compute_playlist_offset(
-                            config.url, config.playlist_start, all_entries)
+                        offset, self._hidden_entries = compute_playlist_offset(
+                            config.url, config.playlist_start,
+                            config.playlist_end, all_entries)
                         start_idx += offset
                         end_idx += offset
                         # Clamp to valid range
@@ -1030,41 +813,24 @@ class DownloadController:
     @staticmethod
     def _cookie_error_message() -> str:
         """Return a user-friendly error message for cookie / bot-check errors."""
-        cookies_dir = os.path.dirname(COOKIES_PATH)
         return (
             "YouTube is asking you to prove you're not a bot.\n\n"
             "To fix this, you need to provide your browser cookies:\n\n"
-            "1. Install the \"Get cookies.txt LOCALLY\" extension\n"
-            "    in your browser (Chrome / Firefox / Edge).\n\n"
-            "2. Sign in to YouTube in your browser.\n\n"
-            "3. On youtube.com, click the extension icon and\n"
-            "    export your cookies (\"Export as cookies.txt\").\n\n"
-            "4. Place the cookies.txt file at the application root:\n"
-            f"  {cookies_dir}{os.sep}\n\n"
-            "5. Restart the download."
+            + COOKIES_INSTRUCTIONS
         )
 
     @staticmethod
     def _age_restricted_error_message(entries: list) -> str:
         """Return a user-friendly popup message when videos were skipped due to age restriction."""
-        cookies_dir = os.path.dirname(COOKIES_PATH)
         count = len(entries)
         plural = 's' if count > 1 else ''
-
         them = 'them' if count > 1 else 'it'
 
         return (
             f"{count} video{plural} could not be downloaded because "
             f"{'they require' if count > 1 else 'it requires'} age verification.\n\n"
             f"To download {them}, you need to provide your browser cookies:\n\n"
-            "1. Install the \"Get cookies.txt LOCALLY\" extension\n"
-            "    in your browser (Chrome / Firefox / Edge).\n\n"
-            "2. Sign in to YouTube in your browser.\n\n"
-            "3. On youtube.com, click the extension icon and\n"
-            "    export your cookies (\"Export as cookies.txt\").\n\n"
-            "4. Place the cookies.txt file at the application root:\n"
-            f"  {cookies_dir}{os.sep}\n\n"
-            "5. Restart the download."
+            + COOKIES_INSTRUCTIONS
         )
 
     def _retry_download(self, config: DownloadConfig):
