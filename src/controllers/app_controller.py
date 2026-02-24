@@ -11,6 +11,7 @@ from controllers.download_controller import DownloadController
 from models import VideoInfo, PlaylistInfo, DownloadProgress
 from config import FILE_FORMATS, COOKIES_PATH
 from utils.cookies_validator_utils import validate_cookies_file
+from utils.sleep_inhibitor_utils import sleep_inhibitor
 
 
 class ApplicationController:
@@ -47,6 +48,8 @@ class ApplicationController:
         self.download_controller.set_age_restricted_callback(self.on_age_restricted_entry)
         # Set format-unavailable callback for live skipped entry display
         self.download_controller.set_format_unavailable_callback(self.on_format_unavailable_entry)
+        # Set video-unavailable callback for live skipped entry display
+        self.download_controller.set_video_unavailable_callback(self.on_video_unavailable_entry)
     
     def setup_callbacks(self):
         """Connect view callbacks to controller methods."""
@@ -141,6 +144,10 @@ class ApplicationController:
         
         # Start download
         self.download_controller.start_download(config)
+
+        # Prevent system sleep if option is enabled
+        if self.view.prevent_sleep_var.get():
+            sleep_inhibitor.inhibit()
     
     def update_initial_progress_display(self, video_info: Dict, config):
         """Update the initial progress display with video information."""
@@ -508,6 +515,9 @@ class ApplicationController:
     
     def _on_download_error_ui(self, error_message: str):
         """Show an error popup and reset the UI (runs on main thread)."""
+        # Re-enable system sleep
+        sleep_inhibitor.uninhibit()
+
         self.view.show_ytdlp_error(error_message)
         self._on_download_complete_ui(cancelled=True)
     
@@ -518,6 +528,10 @@ class ApplicationController:
     def on_format_unavailable_entry(self, entry: dict):
         """Handle a single format-unavailable entry detected during download (called from download thread)."""
         self.view.root.after(0, lambda e=entry: self.view.show_format_unavailable_entries([e]))
+
+    def on_video_unavailable_entry(self, entry: dict):
+        """Handle a single video-unavailable entry detected during download (called from download thread)."""
+        self.view.root.after(0, lambda e=entry: self.view.show_video_unavailable_entries([e]))
     
     def on_download_complete(self):
         """Handle download completion (called from download thread)."""
@@ -546,6 +560,9 @@ class ApplicationController:
     
     def _on_download_complete_ui(self, cancelled: bool = False):
         """Handle download completion UI updates (runs on main thread)."""
+        # Re-enable system sleep
+        sleep_inhibitor.uninhibit()
+
         # Show completion message
         completion_msg = self._build_completion_message(cancelled)
         if hasattr(self.view, 'song_label'):

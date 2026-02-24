@@ -27,7 +27,7 @@ class ProgressMixin:
 
         # Create progress frame where convert button was
         self.progress_frame = tk.LabelFrame(self.root, bg=COLORS['background'], border=0)
-        self.progress_frame.grid(sticky=tk.W+tk.E, row=6, column=0)
+        self.progress_frame.grid(sticky=tk.W+tk.E, row=7, column=0)
         self.progress_frame.columnconfigure(0, weight=1)
 
         # Create stop button below progress frame, just above disclaimer
@@ -46,7 +46,7 @@ class ProgressMixin:
             activeforeground=COLORS['text_secondary'],
             cursor="hand2"
         )
-        self.stop_button.grid(row=7, column=0, pady=(8, 2))
+        self.stop_button.grid(row=8, column=0, pady=(8, 2))
 
         # Song name label
         self.song_label = ttk.Label(self.progress_frame, text="", anchor="w", justify="left",
@@ -159,6 +159,7 @@ class ProgressMixin:
 
         # Recreate convert button
         self.create_convert_button()
+
         self.enable_interactive_widgets()
         self.adjust_window_size()  # Reset to base size
 
@@ -327,7 +328,14 @@ class ProgressMixin:
         for i, entry in enumerate(hidden_entries, start=1):
             title = entry.get('title', 'Unknown')
             channel = entry.get('channel', '')
-            suffix = '  [Age-restricted]' if entry.get('age_restricted') else '  [Format unavailable]' if entry.get('format_unavailable') else ''
+            if entry.get('age_restricted'):
+                suffix = '  [Age-restricted]'
+            elif entry.get('format_unavailable'):
+                suffix = '  [Format unavailable]'
+            elif entry.get('video_unavailable'):
+                suffix = '  [Unavailable]'
+            else:
+                suffix = ''
             if channel:
                 lines.append(f"{i}. {channel} - {title}{suffix}")
             else:
@@ -369,6 +377,14 @@ class ProgressMixin:
         Format: \"channel - title  [Format unavailable]\"
         """
         self._show_skipped_error_entries(entries, 'format_unavailable', 'Format unavailable')
+
+    def show_video_unavailable_entries(self, entries: list):
+        """Show video-unavailable entries in the skipped unavailable elements panel.
+
+        If the skipped panel already exists, appends to it. Otherwise creates it.
+        Format: \"channel - title  [Unavailable]\"
+        """
+        self._show_skipped_error_entries(entries, 'video_unavailable', 'Unavailable')
 
     def _show_skipped_error_entries(self, entries: list, flag_key: str, label: str):
         """Show age-restricted entries in the skipped unavailable elements panel.
@@ -625,7 +641,7 @@ class ProgressMixin:
 
         # Create a progress frame where the button was
         self.fetching_frame = tk.LabelFrame(self.root, bg=COLORS['background'], border=0)
-        self.fetching_frame.grid(sticky=tk.W, row=6, column=0, pady=2, padx=110)
+        self.fetching_frame.grid(sticky=tk.W, row=7, column=0, pady=2, padx=110)
 
         # Progress label
         self.fetching_label = ttk.Label(

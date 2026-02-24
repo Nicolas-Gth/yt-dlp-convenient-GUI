@@ -29,6 +29,7 @@ class DownloadController:
         self.error_callback: Optional[Callable] = None
         self.age_restricted_callback: Optional[Callable] = None
         self.format_unavailable_callback: Optional[Callable] = None
+        self.video_unavailable_callback: Optional[Callable] = None
         self.video_infos: Optional[Dict] = None
         self._cancelled = False
         self._current_config: Optional[DownloadConfig] = None
@@ -39,6 +40,7 @@ class DownloadController:
         self._hidden_entries: list = []  # Entries in API but hidden on YouTube
         self._age_restricted_entries: list = []  # Entries skipped due to age restriction
         self._format_unavailable_entries: list = []  # Entries skipped due to format errors
+        self._video_unavailable_entries: list = []  # Entries skipped because the video is unavailable
     
     def set_progress_callback(self, callback: Callable):
         """Set the callback function for progress updates."""
@@ -67,6 +69,10 @@ class DownloadController:
     def set_format_unavailable_callback(self, callback: Callable):
         """Set the callback for format-unavailable entries detected during download."""
         self.format_unavailable_callback = callback
+
+    def set_video_unavailable_callback(self, callback: Callable):
+        """Set the callback for video-unavailable entries detected during download."""
+        self.video_unavailable_callback = callback
     
     def cancel_download(self):
         """Cancel the current download and clean up partial files."""
@@ -283,6 +289,7 @@ class DownloadController:
         """Main download process."""
         self._age_restricted_entries = []
         self._format_unavailable_entries = []
+        self._video_unavailable_entries = []
         try:
             ydl_opts = build_ydl_options(config, self.ffmpeg_path, self._progress_hook, self._cancel_filter)
 
@@ -348,6 +355,31 @@ class DownloadController:
                         return True
                 return False
 
+            _VIDEO_UNAVAILABLE_PATTERNS = (
+                "Video unavailable",
+                "This video is not available",
+                "Private video",
+                "This video has been removed",
+                "video is no longer available",
+                "Join this channel to get access",
+                "This video requires payment",
+            )
+
+            def _check_video_unavailable(video_title: str = '', video_channel: str = ''):
+                """Check captured errors for generic video unavailability."""
+                for err in error_capture.errors:
+                    if any(pat in err for pat in _VIDEO_UNAVAILABLE_PATTERNS):
+                        entry = {
+                            'title': video_title or 'Unknown',
+                            'channel': video_channel or '',
+                        }
+                        self._video_unavailable_entries.append(entry)
+                        if self.video_unavailable_callback:
+                            self.video_unavailable_callback(entry)
+                        error_capture.errors.clear()
+                        return True
+                return False
+
             if config.is_playlist and self._playlist_urls:
                 # Download individual videos by URL to avoid playlist
                 # indexing offset caused by deleted/unavailable entries.
@@ -379,6 +411,7 @@ class DownloadController:
                             return
                         _check_age_restricted(video_title, video_channel)
                         _check_format_unavailable(video_title, video_channel)
+                        _check_video_unavailable(video_title, video_channel)
             else:
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     self._ydl_instance = ydl
@@ -394,6 +427,10 @@ class DownloadController:
                         vi.get('channel') or vi.get('uploader', '')
                     )
                     _check_format_unavailable(
+                        vi.get('title', ''),
+                        vi.get('channel') or vi.get('uploader', '')
+                    )
+                    _check_video_unavailable(
                         vi.get('title', ''),
                         vi.get('channel') or vi.get('uploader', '')
                     )

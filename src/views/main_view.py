@@ -164,6 +164,9 @@ class MainApplicationView(WidgetsMixin, ProgressMixin, EventHandlersMixin):
         # Enrich metadata variable
         self.enrich_var = BooleanVar(value=preferences.get("enrich_metadata", False))
 
+        # Prevent sleep variable
+        self.prevent_sleep_var = BooleanVar(value=preferences.get("prevent_sleep", False))
+
     # ------------------------------------------------------------------
     # Window sizing
     # ------------------------------------------------------------------
@@ -219,7 +222,8 @@ class MainApplicationView(WidgetsMixin, ProgressMixin, EventHandlersMixin):
             playlist_mode=config.is_playlist,
             normalize_volume=config.normalize_volume,
             normalize_target=config.normalize_target,
-            enrich_metadata=config.enrich_metadata
+            enrich_metadata=config.enrich_metadata,
+            prevent_sleep=self.prevent_sleep_var.get()
         )
 
         if config.file_format == "mp3":
