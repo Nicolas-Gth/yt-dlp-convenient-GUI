@@ -45,6 +45,7 @@ class EventHandlersMixin:
             'mp3_radio', 'mp4_radio',
             'no_playlist_radio', 'yes_playlist_radio',
             'normalize_check', 'enrich_check',
+            'prevent_sleep_check',
         ]
         for attr in lock_targets:
             if hasattr(self, attr):
@@ -307,7 +308,8 @@ class EventHandlersMixin:
             playlist_mode=(self.playlist_var.get() == 0),
             normalize_volume=self.normalize_var.get(),
             normalize_target=self._get_normalize_target(),
-            enrich_metadata=self.enrich_var.get()
+            enrich_metadata=self.enrich_var.get(),
+            prevent_sleep=self.prevent_sleep_var.get()
         )
         if self.on_format_change_callback:
             self.on_format_change_callback("mp3")
@@ -322,7 +324,8 @@ class EventHandlersMixin:
             playlist_mode=(self.playlist_var.get() == 0),
             normalize_volume=self.normalize_var.get(),
             normalize_target=self._get_normalize_target(),
-            enrich_metadata=self.enrich_var.get()
+            enrich_metadata=self.enrich_var.get(),
+            prevent_sleep=self.prevent_sleep_var.get()
         )
         if self.on_format_change_callback:
             self.on_format_change_callback("mp4")
@@ -337,7 +340,8 @@ class EventHandlersMixin:
             playlist_mode=True,
             normalize_volume=self.normalize_var.get(),
             normalize_target=self._get_normalize_target(),
-            enrich_metadata=self.enrich_var.get()
+            enrich_metadata=self.enrich_var.get(),
+            prevent_sleep=self.prevent_sleep_var.get()
         )
         if self.on_playlist_change_callback:
             self.on_playlist_change_callback(True)
@@ -352,7 +356,8 @@ class EventHandlersMixin:
             playlist_mode=False,
             normalize_volume=self.normalize_var.get(),
             normalize_target=self._get_normalize_target(),
-            enrich_metadata=self.enrich_var.get()
+            enrich_metadata=self.enrich_var.get(),
+            prevent_sleep=self.prevent_sleep_var.get()
         )
         if self.on_playlist_change_callback:
             self.on_playlist_change_callback(False)
@@ -373,7 +378,8 @@ class EventHandlersMixin:
             playlist_mode=(self.playlist_var.get() == 0),
             normalize_volume=self.normalize_var.get(),
             normalize_target=target,
-            enrich_metadata=self.enrich_var.get()
+            enrich_metadata=self.enrich_var.get(),
+            prevent_sleep=self.prevent_sleep_var.get()
         )
 
     def _get_normalize_target(self) -> float:
@@ -395,7 +401,22 @@ class EventHandlersMixin:
             playlist_mode=(self.playlist_var.get() == 0),
             normalize_volume=self.normalize_var.get(),
             normalize_target=target,
-            enrich_metadata=self.enrich_var.get()
+            enrich_metadata=self.enrich_var.get(),
+            prevent_sleep=self.prevent_sleep_var.get()
+        )
+
+    def _on_prevent_sleep_toggled(self):
+        """Handle prevent sleep checkbox toggle."""
+        target = self._get_normalize_target()
+        settings_manager.save_format_preferences(
+            format_var=self.format_var.get(),
+            bitrate=self.bitrate_var.get(),
+            quality=self.quality_var.get(),
+            playlist_mode=(self.playlist_var.get() == 0),
+            normalize_volume=self.normalize_var.get(),
+            normalize_target=target,
+            enrich_metadata=self.enrich_var.get(),
+            prevent_sleep=self.prevent_sleep_var.get()
         )
 
     def _on_bitrate_changed(self, selected_value):
@@ -407,7 +428,8 @@ class EventHandlersMixin:
             playlist_mode=(self.playlist_var.get() == 0),
             normalize_volume=self.normalize_var.get(),
             normalize_target=self._get_normalize_target(),
-            enrich_metadata=self.enrich_var.get()
+            enrich_metadata=self.enrich_var.get(),
+            prevent_sleep=self.prevent_sleep_var.get()
         )
 
     def _on_quality_changed(self, selected_value):
@@ -419,5 +441,6 @@ class EventHandlersMixin:
             playlist_mode=(self.playlist_var.get() == 0),
             normalize_volume=self.normalize_var.get(),
             normalize_target=self._get_normalize_target(),
-            enrich_metadata=self.enrich_var.get()
+            enrich_metadata=self.enrich_var.get(),
+            prevent_sleep=self.prevent_sleep_var.get()
         )

@@ -23,6 +23,7 @@ class WidgetsMixin:
         self.create_playlist_selection()
         self.create_normalize_selection()
         self.create_enrich_selection()
+        self.create_prevent_sleep_selection()
         self.create_convert_button()
         self.create_disclaimer()
 
@@ -338,6 +339,24 @@ class WidgetsMixin:
         self.enrich_hint.grid(row=0, column=1, padx=2)
 
     # ------------------------------------------------------------------
+    # Prevent sleep selection
+    # ------------------------------------------------------------------
+
+    def create_prevent_sleep_selection(self):
+        """Create checkbox to prevent system sleep during downloads."""
+        self.frame_prevent_sleep = tk.LabelFrame(self.root, bg=COLORS['background'], border=0)
+        self.frame_prevent_sleep.grid(sticky=tk.W, row=6, column=0)
+
+        self.prevent_sleep_check = ttk.Checkbutton(
+            self.frame_prevent_sleep,
+            text="  Prevent sleep during download",
+            variable=self.prevent_sleep_var,
+            command=self._on_prevent_sleep_toggled,
+            cursor="hand2"
+        )
+        self.prevent_sleep_check.grid(sticky=tk.W, row=0, column=0, padx=5, pady=5)
+
+    # ------------------------------------------------------------------
     # Convert button
     # ------------------------------------------------------------------
 
@@ -358,7 +377,7 @@ class WidgetsMixin:
             activeforeground=COLORS['text_secondary'],
             cursor="hand2"
         )
-        self.convert_button.grid(row=6, column=0, pady=2)
+        self.convert_button.grid(row=7, column=0, pady=2)
 
     # ------------------------------------------------------------------
     # Disclaimer
@@ -367,7 +386,7 @@ class WidgetsMixin:
     def create_disclaimer(self):
         """Create the disclaimer text."""
         self.frame3 = tk.LabelFrame(self.root, bg=COLORS['background'], border=0)
-        self.frame3.grid(sticky=tk.W, row=8, column=0)
+        self.frame3.grid(sticky=tk.W, row=9, column=0)
 
         disclaimer_text = (
             "Legal Notice: This software is intended for downloading and converting YouTube content that is\n"

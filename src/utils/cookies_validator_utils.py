@@ -10,7 +10,7 @@ import time
 import urllib.request
 from typing import Optional
 
-from config import COOKIES_PATH
+from config import COOKIES_PATH, COOKIES_INSTRUCTIONS
 
 
 def validate_cookies_file() -> Optional[str]:
@@ -70,18 +70,18 @@ def validate_cookies_file() -> Optional[str]:
 
     if not has_valid_cookie:
         return (
-            "The cookies.txt file is present but does not contain any valid cookies.\n\n"
+            "The cookies.txt file is present but does not contain any valid cookies. "
             "This may cause the download to fail.\n\n"
-            "Please update it with fresh cookies from your browser, "
-            "or delete it if you don't need it."
+            "Delete cookies.txt if you don't need it, or update it:\n\n"
+            + COOKIES_INSTRUCTIONS
         )
     if has_auth_expired:
         return (
-            "Some cookies in cookies.txt have expired.\n\n"
+            "Some cookies in cookies.txt have expired. "
             "This may cause YouTube downloads to fail "
             "(bot detection, age-restricted content, etc.).\n\n"
-            "Please update the file with fresh cookies from your browser, "
-            "or delete it if you don't need it."
+            "Delete cookies.txt if you don't need it, or update it:\n\n"
+            + COOKIES_INSTRUCTIONS
         )
 
     # --- 2. Live validation against YouTube ---
@@ -102,12 +102,11 @@ def validate_cookies_file() -> Optional[str]:
         # YouTube embeds a LOGGED_IN flag in its page source
         if '"LOGGED_IN":false' in body:
             return (
-                "The cookies in cookies.txt are not valid or have been revoked "
-                "by YouTube.\n\n"
+                "The cookies in cookies.txt are not valid or have been revoked by YouTube. "
                 "This may cause downloads to fail "
                 "(bot detection, age-restricted content, etc.).\n\n"
-                "Please update the file with fresh cookies from your browser, "
-                "or delete it if you don't need it."
+                "Delete cookies.txt if you don't need it, or update it:\n\n"
+                + COOKIES_INSTRUCTIONS
             )
     except Exception:
         # Network error or parsing issue – don't block the user

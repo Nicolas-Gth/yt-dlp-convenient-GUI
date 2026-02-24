@@ -1,265 +1,19 @@
 """
-Download controller handling yt-dlp operations and metadata processing.
+Download controller handling yt-dlp operations and download orchestration.
 """
 import os
-import re
-import io
-import json
-import shutil
-import subprocess
 import threading
-from typing import Optional, Dict, Any, Callable
+from typing import Optional, Dict, Callable
 import yt_dlp
-from config import (ICON_PATH, COOKIES_PATH)
-    
-from mutagen.id3 import ID3, APIC, TDRC, TCON
-from mutagen.mp3 import MP3
-from mutagen.easyid3 import EasyID3
+from config import COOKIES_PATH, get_ffmpeg_path
 
-from models import DownloadConfig, VideoInfo, PlaylistInfo, DownloadProgress
-from utils import crop_album_cover, enrich_metadata, apply_enriched_metadata_mp3
-from config import get_ffmpeg_path, FILE_FORMATS
+from models import DownloadConfig, DownloadProgress
+from utils.playlist_utils import normalize_playlist_url, compute_playlist_offset
+from utils.post_processor_utils import CustomPostProcessor
+from utils.ydl_options_utils import build_ydl_options
+from utils.error_messages_utils import cookie_error_message, age_restricted_error_message
+from utils.notification_utils import send_completion_notification
 
-
-class CustomPostProcessor(yt_dlp.postprocessor.PostProcessor):
-    """Custom post-processor for handling metadata and file organization."""
-    
-    # Patterns stripped from video titles for clean filenames/tags
-    _TITLE_NOISE_RE = re.compile(
-        r'\s*[\(\[]'
-        r'(official\s*(music\s*)?video|official\s*audio|official\s*lyric\s*video'
-        r'|lyrics?|lyric\s*video|audio|visualizer|hd|hq|4k'
-        r'|clip\s*officiel|video\s*oficial|videoclip'
-        r'|mv|m/v|music\s*video|live)'
-        r'[\)\]]',
-        re.IGNORECASE
-    )
-
-    @staticmethod
-    def _clean_title(title: str) -> str:
-        """Strip noise like (Official Video), [Lyrics], etc. from a video title."""
-        cleaned = CustomPostProcessor._TITLE_NOISE_RE.sub('', title).strip()
-        # Also strip trailing whitespace/dashes left over
-        cleaned = re.sub(r'[\s\-]+$', '', cleaned)
-        return cleaned if cleaned else title
-
-    def __init__(self, download_config: DownloadConfig, normalize_callback: Optional[Callable] = None):
-        super().__init__()
-        self.config = download_config
-        self.normalize_callback = normalize_callback
-    
-    def run(self, video_infos):
-        """Process downloaded file: add metadata, rename, and set album cover."""
-        file_format = self.config.file_format
-        # Use yt-dlp's actual filepath — the title may contain characters
-        # (/ ? : ~ etc.) that yt-dlp sanitises when writing to disk,
-        # so reconstructing the path from the raw title would fail.
-        file_path = video_infos.get('filepath',
-                                    f"{self.config.output_directory}/{video_infos['title']}.{file_format}")
-
-        # Check if the file actually exists
-        if not os.path.exists(file_path):
-            print(f"Warning: File {file_path} not found. Conversion may have failed.")
-            return [], video_infos
-
-        # --- Collect all info for this track's summary line ---
-        track_info = {
-            'type': 'track_summary',
-            'volume': None,
-            'metadata_found': False,
-            'lyrics_found': False,
-            'cover_found': False,
-            'duration': video_infos.get('duration', 0) or 0,
-        }
-
-        # Determine artist name
-        try:
-            artist_name = video_infos.get('artists', [video_infos.get('uploader', '').replace(" - Topic", "")])[0]
-        except (KeyError, IndexError):
-            artist_name = video_infos.get('uploader', '').replace(" - Topic", "")
-
-        # Determine display name: "Artist - Track" for music, "Video Title" otherwise
-        track_name = video_infos.get('track')  # Only set on YT Music
-        if track_name and artist_name:
-            track_info['display_name'] = f"{artist_name} - {track_name}"
-        else:
-            track_info['display_name'] = video_infos.get('title', 'Unknown')
-
-        # Analyze loudness after normalization if enabled
-        if self.config.normalize_volume:
-            track_info['volume'] = self._analyze_loudness(file_path)
-
-        # Add metadata to the file
-        if file_format == "mp3":
-            self._add_mp3_metadata(file_path, video_infos, artist_name)
-        
-        # Rename and sanitize the file name
-        new_file_path = self._sanitize_and_rename_file(file_path, video_infos, artist_name, file_format)
-        
-        # Add album cover for MP3 files
-        if file_format == "mp3" and os.path.exists(new_file_path):
-            self._add_album_cover(new_file_path, video_infos, track_info)
-
-        # Send combined summary line to UI
-        if self.normalize_callback:
-            self.normalize_callback(track_info)
-
-        return [], video_infos
-    
-    def _add_mp3_metadata(self, file_path: str, video_infos: Dict, artist_name: str):
-        """Add metadata to MP3 file."""
-        try:
-            metadatas = MP3(file_path, ID3=EasyID3)
-            metadatas['artist'] = artist_name
-            
-            # Use clean track name as title tag
-            track_name = video_infos.get('track')  # YT Music: already clean
-            if not track_name:
-                track_name = self._clean_title(video_infos.get('title', ''))
-            metadatas['title'] = track_name
-            
-            album_name = video_infos.get('album')
-            if album_name:
-                metadatas['album'] = album_name
-            
-            metadatas.save()
-        except Exception as e:
-            print(f"Warning: Could not add metadata to MP3 file: {e}")
-        
-        # Fix year tag: FFmpegMetadata writes upload_date (YYYYMMDD) into TDRC.
-        # We want only the 4-digit year, and prefer yt-dlp's release_year
-        # (original release) over the upload date.
-        try:
-            audio = ID3(file_path)
-            release_year = video_infos.get('release_year')
-            if release_year:
-                audio.delall("TDRC")
-                audio["TDRC"] = TDRC(encoding=3, text=[str(release_year)])
-            else:
-                existing_tdrc = audio.get("TDRC")
-                if existing_tdrc:
-                    existing_text = str(existing_tdrc)
-                    if len(existing_text) > 4 and existing_text[:4].isdigit():
-                        audio.delall("TDRC")
-                        audio["TDRC"] = TDRC(encoding=3, text=[existing_text[:4]])
-            audio.save()
-        except Exception as e:
-            print(f"Warning: Could not fix year tag: {e}")
-        
-        # Always remove genre written by FFmpegMetadata (YouTube category).
-        # yt-dlp's FFmpegMetadataPP maps genre from: genre → genres → categories → tags.
-        # YouTube categories are localized (e.g. "Rock y Alternativo" in Spanish,
-        # "Musique" in French) and tags are just video keywords — neither is a
-        # reliable genre classification. The enricher will set a proper English
-        # genre from iTunes/MusicBrainz if available; otherwise leave empty.
-        try:
-            audio = ID3(file_path)
-            if audio.get("TCON"):
-                audio.delall("TCON")
-                audio.save()
-        except Exception as e:
-            print(f"Warning: Could not clean genre tag: {e}")
-    
-    def _analyze_loudness(self, file_path: str) -> dict:
-        """Analyze the file loudness using ffmpeg. Returns loudness info dict or None."""
-        try:
-            from config import get_ffmpeg_path
-            ffmpeg_dir = get_ffmpeg_path()
-            if ffmpeg_dir:
-                ffmpeg_bin = os.path.join(ffmpeg_dir, 'ffmpeg')
-                if not os.path.exists(ffmpeg_bin):
-                    ffmpeg_bin = 'ffmpeg'
-            else:
-                ffmpeg_bin = 'ffmpeg'
-            
-            result = subprocess.run(
-                [ffmpeg_bin, '-i', file_path, '-af', 'loudnorm=print_format=json', '-f', 'null', '-'],
-                capture_output=True, text=True, timeout=60
-            )
-            
-            # Parse the loudnorm JSON output from stderr
-            stderr = result.stderr
-            json_start = stderr.rfind('{')
-            json_end = stderr.rfind('}') + 1
-            
-            if json_start != -1 and json_end > json_start:
-                loudness_data = json.loads(stderr[json_start:json_end])
-                input_i = float(loudness_data.get('input_i', 0))
-                target = self.config.normalize_target
-                print(f"Normalization: measured at {input_i:.1f} LUFS (target: {target:.1f} LUFS)")
-                return {'measured': input_i, 'target': target}
-        except Exception as e:
-            print(f"Warning: Could not analyze loudness: {e}")
-        return None
-    
-    def _sanitize_and_rename_file(self, file_path: str, video_infos: Dict, artist_name: str, file_format: str) -> str:
-        """Sanitize filename and rename the file."""
-        # Prefer clean track name from YT Music, otherwise clean the video title
-        title = video_infos.get('track') or self._clean_title(video_infos.get('title', ''))
-        sanitized_artist = re.sub(r'[!?:#%&{}<>|*/$@~]', '', artist_name)
-        sanitized_title = re.sub(r'[!?:#%&{}<>|*/$@~]', '', title)
-        
-        new_file_path = f"{self.config.output_directory}/{sanitized_artist} - {sanitized_title}.{file_format}"
-        
-        try:
-            os.rename(file_path, new_file_path)
-            return new_file_path
-        except Exception as e:
-            print(f"Warning: Could not rename file: {e}")
-            return file_path
-    
-    def _add_album_cover(self, file_path: str, video_infos: Dict, track_info: dict = None):
-        """Add album cover to MP3 file, with optional metadata enrichment."""
-        thumbnail_url = video_infos.get('thumbnail', '')
-        
-        # Prepare the YouTube thumbnail as fallback cover
-        fallback_cover = None
-        if thumbnail_url:
-            try:
-                fallback_cover = crop_album_cover(thumbnail_url)
-            except Exception as e:
-                print(f"Warning: Could not crop YouTube thumbnail: {e}")
-        
-        # Try metadata enrichment if enabled
-        if self.config.enrich_metadata:
-            enriched = enrich_metadata(video_infos)
-            
-            if enriched:
-                if enriched.cover_data:
-                    print(f"  [metadata] ✓ HD album cover")
-                if enriched.synced_lyrics:
-                    print(f"  [metadata] ✓ Synced lyrics (LRC) embedded")
-                elif enriched.lyrics:
-                    print(f"  [metadata] ✓ Lyrics embedded")
-                
-                if not enriched.cover_data and fallback_cover:
-                    print(f"  [metadata] No HD cover found, using YouTube thumbnail")
-                
-                # Update track_info for the combined summary
-                if track_info is not None:
-                    track_info['cover_found'] = bool(enriched.cover_data)
-                    track_info['lyrics_found'] = bool(enriched.synced_lyrics or enriched.lyrics)
-                    track_info['metadata_found'] = bool(
-                        enriched.cover_data or enriched.lyrics or enriched.synced_lyrics or enriched.album
-                    )
-                
-                apply_enriched_metadata_mp3(file_path, enriched, fallback_cover)
-                return
-        
-        # Fallback: just embed the YouTube thumbnail
-        if fallback_cover:
-            try:
-                audio = ID3(file_path)
-                audio['APIC'] = APIC(
-                    encoding=0,
-                    mime='image/jpeg',
-                    type=3,
-                    desc=u'Cover',
-                    data=fallback_cover
-                )
-                audio.save()
-            except Exception as e:
-                print(f"Warning: Could not add album cover to MP3: {e}")
 
 
 class DownloadController:
@@ -275,6 +29,7 @@ class DownloadController:
         self.error_callback: Optional[Callable] = None
         self.age_restricted_callback: Optional[Callable] = None
         self.format_unavailable_callback: Optional[Callable] = None
+        self.video_unavailable_callback: Optional[Callable] = None
         self.video_infos: Optional[Dict] = None
         self._cancelled = False
         self._current_config: Optional[DownloadConfig] = None
@@ -285,228 +40,8 @@ class DownloadController:
         self._hidden_entries: list = []  # Entries in API but hidden on YouTube
         self._age_restricted_entries: list = []  # Entries skipped due to age restriction
         self._format_unavailable_entries: list = []  # Entries skipped due to format errors
+        self._video_unavailable_entries: list = []  # Entries skipped because the video is unavailable
     
-    # ------------------------------------------------------------------
-    # YouTube innertube helpers – resolve displayed playlist positions
-    # ------------------------------------------------------------------
-
-    @staticmethod
-    def _normalize_playlist_url(url: str) -> str:
-        """Convert a watch?v=…&list=… URL into a clean playlist URL.
-
-        When the user pastes a URL like
-        https://www.youtube.com/watch?v=XXX&list=PLyyy&index=N
-        yt-dlp may treat it as a single-video extraction instead of a
-        playlist, which causes playlist slicing / interval to be ignored.
-        Stripping the video parameters ensures yt-dlp always sees a pure
-        playlist URL.
-        """
-        import re as _re
-        m = _re.search(r'[?&]list=([^&]+)', url)
-        if not m:
-            return url  # No playlist ID found, return as-is
-        playlist_id = m.group(1)
-        # Determine base domain (youtube.com vs music.youtube.com)
-        if 'music.youtube.com' in url:
-            return f"https://music.youtube.com/playlist?list={playlist_id}"
-        return f"https://www.youtube.com/playlist?list={playlist_id}"
-
-    @staticmethod
-    def _extract_playlist_id(url: str) -> Optional[str]:
-        """Extract the playlist ID (PLxxx…) from a YouTube / YT Music URL."""
-        import re as _re
-        m = _re.search(r'[?&]list=([^&]+)', url)
-        return m.group(1) if m else None
-
-    @staticmethod
-    def _innertube_browse(playlist_id: str, continuation: Optional[str] = None) -> Optional[Dict]:
-        """Single innertube browse request. Returns raw JSON or None."""
-        import urllib.request
-        body: Dict[str, Any] = {
-            "context": {
-                "client": {
-                    "clientName": "WEB",
-                    "clientVersion": "2.20250201.00.00",
-                }
-            }
-        }
-        if continuation:
-            body["continuation"] = continuation
-        else:
-            body["browseId"] = f"VL{playlist_id}"
-
-        data = json.dumps(body).encode()
-        req = urllib.request.Request(
-            "https://www.youtube.com/youtubei/v1/browse",
-            data=data,
-            headers={"Content-Type": "application/json",
-                     "User-Agent": "Mozilla/5.0"},
-        )
-        try:
-            with urllib.request.urlopen(req, timeout=20) as resp:
-                return json.loads(resp.read())
-        except Exception as exc:
-            print(f"  [innertube] Request failed: {exc}")
-            return None
-
-    @staticmethod
-    def _parse_innertube_items(result: Dict, is_continuation: bool) -> list:
-        """Extract the list of renderer items from an innertube response."""
-        try:
-            if is_continuation:
-                for action in result.get("onResponseReceivedActions", []):
-                    items = (action
-                             .get("appendContinuationItemsAction", {})
-                             .get("continuationItems", []))
-                    if items:
-                        return items
-                return []
-            else:
-                tabs = (result.get("contents", {})
-                              .get("twoColumnBrowseResultsRenderer", {})
-                              .get("tabs", []))
-                if not tabs:
-                    return []
-                section = (tabs[0]
-                           .get("tabRenderer", {})
-                           .get("content", {})
-                           .get("sectionListRenderer", {})
-                           .get("contents", [{}])[0])
-                playlist_renderer = (section
-                                     .get("itemSectionRenderer", {})
-                                     .get("contents", [{}])[0]
-                                     .get("playlistVideoListRenderer", {}))
-                return playlist_renderer.get("contents", [])
-        except (KeyError, IndexError, TypeError):
-            return []
-
-    def _get_youtube_visible_ids(self, playlist_id: str, count: int) -> list:
-        """Return the first *count* visible video IDs as displayed on youtube.com.
-
-        Uses the innertube browse API, which returns **only entries that
-        YouTube displays** to the user (skipping deleted / private /
-        region-blocked videos).  This list therefore matches the numbering
-        the user sees on the website.
-        """
-        video_ids: list = []
-        continuation: Optional[str] = None
-
-        for page in range(max(1, count // 100 + 5)):
-            result = self._innertube_browse(playlist_id, continuation)
-            if not result:
-                break
-
-            items = self._parse_innertube_items(result, continuation is not None)
-            continuation = None
-
-            for item in items:
-                if "playlistVideoRenderer" in item:
-                    vid = item["playlistVideoRenderer"].get("videoId", "")
-                    if vid:
-                        video_ids.append(vid)
-                        if len(video_ids) >= count:
-                            return video_ids
-                elif "continuationItemRenderer" in item:
-                    cir = item["continuationItemRenderer"]
-                    token = None
-                    # Path 1: continuationEndpoint → continuationCommand → token
-                    try:
-                        token = cir["continuationEndpoint"]["continuationCommand"]["token"]
-                    except (KeyError, TypeError):
-                        pass
-                    # Path 2: continuationEndpoint → commandExecutorCommand
-                    # (wraps multiple commands; the continuation token is
-                    #  inside one of the sub-commands)
-                    if not token:
-                        try:
-                            cmds = (cir["continuationEndpoint"]
-                                       ["commandExecutorCommand"]
-                                       ["commands"])
-                            for cmd in cmds:
-                                ct = (cmd.get("continuationCommand") or {}).get("token")
-                                if ct:
-                                    token = ct
-                                    break
-                        except (KeyError, TypeError):
-                            pass
-                    # Path 3: button → buttonRenderer → command
-                    if not token:
-                        try:
-                            token = (cir["button"]["buttonRenderer"]["command"]
-                                     ["continuationCommand"]["token"])
-                        except (KeyError, TypeError):
-                            pass
-                    if token:
-                        continuation = token
-
-            if not continuation:
-                break
-
-        return video_ids
-
-    def _compute_playlist_offset(self, url: str, target_pos: int,
-                                  flat_entries: list) -> int:
-        """Compare YouTube's displayed numbering with the flat-extracted list.
-
-        Returns the offset to ADD to the user's position to obtain the
-        correct index in *flat_entries*.  Returns 0 when no offset is
-        detected or the probe fails.
-        """
-        playlist_id = self._extract_playlist_id(url)
-        if not playlist_id:
-            return 0
-
-        print(f"  [playlist] Probing YouTube for displayed position {target_pos}…")
-        yt_ids = self._get_youtube_visible_ids(playlist_id, target_pos)
-
-        if len(yt_ids) < target_pos:
-            print(f"  [playlist] Probe returned only {len(yt_ids)} IDs "
-                  f"(need {target_pos}), skipping offset detection")
-            return 0
-
-        target_id = yt_ids[target_pos - 1]
-
-        # Locate that video ID in the flat-extracted list
-        api_idx_found = None
-        for api_idx, entry in enumerate(flat_entries):
-            if entry and isinstance(entry, dict) and entry.get("id") == target_id:
-                api_idx_found = api_idx
-                break
-
-        if api_idx_found is None:
-            print(f"  [playlist] Target ID {target_id} not found in flat list")
-            return 0
-
-        offset = api_idx_found - (target_pos - 1)
-        if offset != 0:
-            print(f"  [playlist] Offset detected: {offset}  "
-                  f"(YouTube #{target_pos} \"{flat_entries[api_idx_found].get('title', '?')}\" "
-                  f"→ API index {api_idx_found + 1})")
-
-            # Identify which entries the API has that YouTube hides.
-            # Walk both lists in parallel up to the target position.
-            yt_id_set = set(yt_ids[:target_pos])
-            hidden = []
-            for i in range(api_idx_found + 1):
-                e = flat_entries[i]
-                if not e or not isinstance(e, dict):
-                    hidden.append({'title': '<Unknown>', 'channel': '', 'id': ''})
-                    continue
-                eid = e.get('id', '')
-                if eid not in yt_id_set:
-                    hidden.append({
-                        'title': e.get('title', '<Unknown>'),
-                        'channel': (e.get('channel') or e.get('uploader') or ''),
-                        'id': eid,
-                    })
-
-            self._hidden_entries = hidden
-        else:
-            print(f"  [playlist] No offset — positions match")
-            self._hidden_entries = []
-
-        return offset
-        
     def set_progress_callback(self, callback: Callable):
         """Set the callback function for progress updates."""
         self.progress_callback = callback
@@ -534,6 +69,10 @@ class DownloadController:
     def set_format_unavailable_callback(self, callback: Callable):
         """Set the callback for format-unavailable entries detected during download."""
         self.format_unavailable_callback = callback
+
+    def set_video_unavailable_callback(self, callback: Callable):
+        """Set the callback for video-unavailable entries detected during download."""
+        self.video_unavailable_callback = callback
     
     def cancel_download(self):
         """Cancel the current download and clean up partial files."""
@@ -573,7 +112,7 @@ class DownloadController:
         # Normalise watch?v=…&list=… URLs to pure playlist URLs so that
         # yt-dlp always extracts the playlist (not the single video).
         if config.is_playlist:
-            config.url = self._normalize_playlist_url(config.url)
+            config.url = normalize_playlist_url(config.url)
 
         # Lightweight logger that captures error messages so we can detect
         # specific errors even when ignoreerrors=True swallows exceptions.
@@ -643,7 +182,7 @@ class DownloadController:
                 # Check captured errors for cookie / bot-check
                 for err in error_capture.errors:
                     if "Sign in to confirm" in err and "bot" in err:
-                        return None, self._cookie_error_message()
+                        return None, cookie_error_message()
                 # Check if this is a known DRM-protected site
                 if ("spotify.com" in config.url.lower() or 
                     "netflix.com" in config.url.lower() or
@@ -669,8 +208,9 @@ class DownloadController:
                     # causing the user-visible position N to differ from
                     # API index N.
                     if start_idx > 0:
-                        offset = self._compute_playlist_offset(
-                            config.url, config.playlist_start, all_entries)
+                        offset, self._hidden_entries = compute_playlist_offset(
+                            config.url, config.playlist_start,
+                            config.playlist_end, all_entries)
                         start_idx += offset
                         end_idx += offset
                         # Clamp to valid range
@@ -699,7 +239,7 @@ class DownloadController:
             
             # Handle cookie / bot-check errors
             if "Sign in to confirm" in error_message and "bot" in error_message:
-                return None, self._cookie_error_message()
+                return None, cookie_error_message()
             # Handle ExtractorError specifically (includes DRM errors)
             elif ("DRM protection" in error_message or "DRM protected" in error_message or 
                 "use DRM protection" in error_message or "known to use DRM" in error_message):
@@ -725,7 +265,7 @@ class DownloadController:
             elif "Unsupported URL" in error_message:
                 return None, "Unsupported URL format. Please check the URL."
             elif "Sign in to confirm" in error_message and "bot" in error_message:
-                return None, self._cookie_error_message()
+                return None, cookie_error_message()
             elif "Sign in to confirm your age" in error_message:
                 return None, "This video requires age verification and cannot be downloaded."
             elif "This video is not available" in error_message:
@@ -749,8 +289,9 @@ class DownloadController:
         """Main download process."""
         self._age_restricted_entries = []
         self._format_unavailable_entries = []
+        self._video_unavailable_entries = []
         try:
-            ydl_opts = self._build_ydl_options(config)
+            ydl_opts = build_ydl_options(config, self.ffmpeg_path, self._progress_hook, self._cancel_filter)
 
             # Logger that captures error messages to detect cookie/bot errors
             # even when ignoreerrors=True swallows the exception.
@@ -779,7 +320,7 @@ class DownloadController:
                         print("Cookie authentication required.")
                         self._cleanup_partial_files(config.output_directory)
                         if self.error_callback:
-                            self.error_callback(self._cookie_error_message())
+                            self.error_callback(cookie_error_message())
                         return True
                 return False
 
@@ -810,6 +351,31 @@ class DownloadController:
                         self._format_unavailable_entries.append(entry)
                         if self.format_unavailable_callback:
                             self.format_unavailable_callback(entry)
+                        error_capture.errors.clear()
+                        return True
+                return False
+
+            _VIDEO_UNAVAILABLE_PATTERNS = (
+                "Video unavailable",
+                "This video is not available",
+                "Private video",
+                "This video has been removed",
+                "video is no longer available",
+                "Join this channel to get access",
+                "This video requires payment",
+            )
+
+            def _check_video_unavailable(video_title: str = '', video_channel: str = ''):
+                """Check captured errors for generic video unavailability."""
+                for err in error_capture.errors:
+                    if any(pat in err for pat in _VIDEO_UNAVAILABLE_PATTERNS):
+                        entry = {
+                            'title': video_title or 'Unknown',
+                            'channel': video_channel or '',
+                        }
+                        self._video_unavailable_entries.append(entry)
+                        if self.video_unavailable_callback:
+                            self.video_unavailable_callback(entry)
                         error_capture.errors.clear()
                         return True
                 return False
@@ -845,6 +411,7 @@ class DownloadController:
                             return
                         _check_age_restricted(video_title, video_channel)
                         _check_format_unavailable(video_title, video_channel)
+                        _check_video_unavailable(video_title, video_channel)
             else:
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     self._ydl_instance = ydl
@@ -863,6 +430,10 @@ class DownloadController:
                         vi.get('title', ''),
                         vi.get('channel') or vi.get('uploader', '')
                     )
+                    _check_video_unavailable(
+                        vi.get('title', ''),
+                        vi.get('channel') or vi.get('uploader', '')
+                    )
             
             self._ydl_instance = None
 
@@ -877,7 +448,7 @@ class DownloadController:
                     self.cancel_callback()
                 return
             
-            self._send_completion_notification(config)
+            send_completion_notification(config, self.video_infos, self.progress)
             
             # Call completion callback to reset UI
             if self.completion_callback:
@@ -904,102 +475,10 @@ class DownloadController:
                 print("Cookie authentication required.")
                 self._cleanup_partial_files(config.output_directory)
                 if self.error_callback:
-                    self.error_callback(self._cookie_error_message())
+                    self.error_callback(cookie_error_message())
                 return
             print(f"Download error: {error}")
             self._retry_download(config)
-    
-    def _build_ydl_options(self, config: DownloadConfig) -> Dict[str, Any]:
-        """Build yt-dlp options based on configuration."""
-        base_opts = {
-            'verbose': config.verbose,
-            'no-part': True,
-            'ignoreerrors': True,
-            'quiet': True,
-            'extractor_args': {'youtubetab': {'skip': ['authcheck']}},
-            'external_downloader_args': ['-loglevel', 'panic'],
-            'outtmpl': config.output_template,
-            'noplaylist': not config.is_playlist,
-            'progress_hooks': [self._progress_hook],
-            'match_filter': self._cancel_filter,
-        }
-        
-        # Use cookies file if available
-        if os.path.isfile(COOKIES_PATH):
-            base_opts['cookiefile'] = COOKIES_PATH
-        
-        if config.file_format == "mp3":
-            return self._add_mp3_options(base_opts, config)
-        elif config.file_format == "mp4":
-            return self._add_mp4_options(base_opts, config)
-        
-        return base_opts
-    
-    def _add_mp3_options(self, opts: Dict, config: DownloadConfig) -> Dict:
-        """Add MP3-specific options."""
-        opts['format'] = 'bestaudio/best'
-        
-        if self.ffmpeg_path is not None:
-            opts['ffmpeg_location'] = self.ffmpeg_path
-            extract_audio_pp = {
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'mp3',
-            }
-            # "Best" means no quality cap — let yt-dlp use the highest available
-            if config.bitrate and config.bitrate.lower() != 'best':
-                extract_audio_pp['preferredquality'] = config.bitrate
-            else:
-                extract_audio_pp['preferredquality'] = '0'  # 0 = best quality (VBR)
-            opts['postprocessors'] = [
-                extract_audio_pp,
-                {'key': 'FFmpegMetadata', 'add_metadata': True}
-            ]
-            
-            # Add volume normalization if enabled
-            # Keys must be lowercase — yt-dlp's _configuration_args does .lower() lookups.
-            if config.normalize_volume:
-                target = config.normalize_target
-                opts['postprocessor_args'] = {
-                    'extractaudio': [
-                        '-af', f'loudnorm=I={target}:TP=-1.5:LRA=11'
-                    ]
-                }
-        else:
-            print("Warning: MP3 conversion disabled - ffmpeg not found")
-            opts['format'] = 'bestaudio'
-        
-        return opts
-    
-    def _add_mp4_options(self, opts: Dict, config: DownloadConfig) -> Dict:
-        """Add MP4-specific options."""
-        if config.quality and config.quality.lower() == 'best':
-            format_string = 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best'
-        else:
-            format_string = f'bestvideo[height<={config.quality}][vbr<=12000][ext=mp4]+bestaudio[ext=m4a]/best[vbr<=12000][ext=mp4]/best'
-        opts['format'] = format_string
-        
-        if self.ffmpeg_path is not None:
-            opts['ffmpeg_location'] = self.ffmpeg_path
-            opts['postprocessors'] = [{'key': 'FFmpegVideoConvertor', 'preferedformat': 'mp4'}]
-            
-            # Add volume normalization if enabled
-            # For MP4, apply loudnorm during the merge step.
-            # We override the audio codec to re-encode audio with loudnorm
-            # while keeping video as stream copy.
-            # Key must be lowercase — yt-dlp's _configuration_args does .lower() lookups.
-            if config.normalize_volume:
-                target = config.normalize_target
-                opts['postprocessor_args'] = {
-                    'merger+ffmpeg_o': [
-                        '-c:v', 'copy',
-                        '-c:a', 'aac', '-b:a', '192k',
-                        '-af', f'loudnorm=I={target}:TP=-1.5:LRA=11'
-                    ]
-                }
-        else:
-            print("Warning: MP4 conversion disabled - ffmpeg not found")
-        
-        return opts
     
     def _cancel_filter(self, info_dict, *, incomplete):
         """Match filter that rejects all entries once download is cancelled.
@@ -1027,80 +506,8 @@ class DownloadController:
         if self.progress_callback:
             self.progress_callback(d, self.video_infos, self.progress)
     
-    @staticmethod
-    def _cookie_error_message() -> str:
-        """Return a user-friendly error message for cookie / bot-check errors."""
-        cookies_dir = os.path.dirname(COOKIES_PATH)
-        return (
-            "YouTube is asking you to prove you're not a bot.\n\n"
-            "To fix this, you need to provide your browser cookies:\n\n"
-            "1. Install the \"Get cookies.txt LOCALLY\" extension\n"
-            "    in your browser (Chrome / Firefox / Edge).\n\n"
-            "2. Sign in to YouTube in your browser.\n\n"
-            "3. On youtube.com, click the extension icon and\n"
-            "    export your cookies (\"Export as cookies.txt\").\n\n"
-            "4. Place the cookies.txt file at the application root:\n"
-            f"  {cookies_dir}{os.sep}\n\n"
-            "5. Restart the download."
-        )
-
-    @staticmethod
-    def _age_restricted_error_message(entries: list) -> str:
-        """Return a user-friendly popup message when videos were skipped due to age restriction."""
-        cookies_dir = os.path.dirname(COOKIES_PATH)
-        count = len(entries)
-        plural = 's' if count > 1 else ''
-
-        them = 'them' if count > 1 else 'it'
-
-        return (
-            f"{count} video{plural} could not be downloaded because "
-            f"{'they require' if count > 1 else 'it requires'} age verification.\n\n"
-            f"To download {them}, you need to provide your browser cookies:\n\n"
-            "1. Install the \"Get cookies.txt LOCALLY\" extension\n"
-            "    in your browser (Chrome / Firefox / Edge).\n\n"
-            "2. Sign in to YouTube in your browser.\n\n"
-            "3. On youtube.com, click the extension icon and\n"
-            "    export your cookies (\"Export as cookies.txt\").\n\n"
-            "4. Place the cookies.txt file at the application root:\n"
-            f"  {cookies_dir}{os.sep}\n\n"
-            "5. Restart the download."
-        )
-
     def _retry_download(self, config: DownloadConfig):
         """Retry download on error."""
         print("There was a problem during the download, automatically restarting!")
         # Implementation for retry logic
         pass
-    
-    def _send_completion_notification(self, config: DownloadConfig):
-        """Send completion notification."""
-        if self.video_infos:
-            if config.is_playlist:
-                playlist_title = self.video_infos.get('title', 'Unknown Playlist')
-                count = self.progress.current_song if self.progress else 0
-                if count > 0:
-                    message = f"{count} element{'s' if count > 1 else ''} downloaded from playlist {playlist_title}."
-                else:
-                    message = f"Playlist {playlist_title} downloaded."
-            else:
-                title = self.video_infos.get('title', 'Unknown')
-                message = f"Video \"{title}\" has been downloaded."
-            
-            try:
-                if shutil.which("notify-send"):
-                    cmd = [
-                        "notify-send",
-                        "--app-name=yt-dlp GUI",
-                        "--expire-time=5000",
-                        "Download Complete!",
-                        message,
-                    ]
-                    # Add icon if available
-                    if ICON_PATH and os.path.isfile(ICON_PATH):
-                        cmd.insert(1, f"--icon={ICON_PATH}")
-                    subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                else:
-                    print(f"Download Complete! {message}")
-            except Exception:
-                print(f"Download Complete! {message}")

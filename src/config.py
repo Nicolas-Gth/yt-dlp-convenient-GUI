@@ -4,10 +4,13 @@ Configuration and constants for the yt-dlp GUI application.
 import os
 
 # Application version (single source of truth)
-APP_VERSION = "2.6.4"
+APP_VERSION = "2.6.5"
+
+# Application name
+APP_NAME = "yt-dlp Convenient GUI"
 
 # Application constants
-APP_TITLE = f"yt-dlp Convenient GUI [v{APP_VERSION}] - Made by Nicolas-Gth"
+APP_TITLE = f"{APP_NAME} [v{APP_VERSION}] - Made by Nicolas-Gth"
 
 # Default window dimensions
 DEFAULT_WINDOW_SIZE = {
@@ -60,6 +63,21 @@ FILE_FORMATS = {
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 ICON_PATH = os.path.join(SCRIPT_DIR, '..', 'assets', 'icon.ico')
 COOKIES_PATH = os.path.join(SCRIPT_DIR, '..', 'cookies.txt')
+COOKIES_DIR = os.path.dirname(COOKIES_PATH)
+
+# Cookie export instructions (shared across all cookie-related messages)
+COOKIES_INSTRUCTIONS = (
+    "1. Install the \"Get cookies.txt LOCALLY\" extension in your browser (Chrome / Firefox / Edge).\n\n"
+    "2. Open a new private / incognito window and sign in to YouTube.\n\n"
+    "3. In the same window and same tab, navigate to: https://www.youtube.com/robots.txt "
+    "(this must be the only private/incognito tab open)\n\n"
+    "4. Click the extension icon and export your cookies (\"Export as cookies.txt\"), "
+    "then close the private window so the session is never reopened in the browser.\n\n"
+    f"5. Place the cookies.txt file at the application root: {COOKIES_DIR}{os.sep}\n\n"
+    "6. Restart the download.\n\n"
+    "YouTube rotates cookies on open browser tabs. "
+    "Using a private window ensures exported cookies stay valid."
+)
 
 # FFmpeg configuration
 def get_ffmpeg_path():
