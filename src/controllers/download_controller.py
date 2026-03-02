@@ -5,7 +5,7 @@ import os
 import threading
 from typing import Optional, Dict, Callable
 import yt_dlp
-from config import COOKIES_PATH, get_ffmpeg_path
+from config import COOKIES_PATH, COOKIES_INSTRUCTIONS, get_ffmpeg_path
 
 from models import DownloadConfig, DownloadProgress
 from utils.playlist_utils import normalize_playlist_url, compute_playlist_offset
@@ -191,6 +191,13 @@ class DownloadController:
                     "amazon" in config.url.lower()):
                     return None, "This content is protected by DRM and cannot be downloaded.\n\nDRM (Digital Rights Management) prevents downloading from services like Spotify, Netflix, etc."
                 else:
+                    if not os.path.isfile(COOKIES_PATH):
+                        return None, (
+                            "Could not retrieve video information. Please check the URL.\n\n"
+                            "If the URL is correct, YouTube may be requiring authentication. "
+                            "You can provide your browser cookies to fix this:\n\n"
+                            + COOKIES_INSTRUCTIONS
+                        )
                     return None, "Could not retrieve video information. Please check the URL."
             
             # For playlists, slice entries to the user's requested range.
