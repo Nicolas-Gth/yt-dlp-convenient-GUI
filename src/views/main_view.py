@@ -2,28 +2,25 @@
 Main application view — orchestrator that composes all view mixins.
 
 The heavy lifting is split across:
-    - widgets.py        : widget creation (WidgetsMixin)
+    - window_view.py    : window setup, styling & sizing (WindowMixin)
+    - widgets_view.py   : widget creation (WidgetsMixin)
     - progress_view.py  : download progress UI (ProgressMixin)
-    - event_handlers.py : callbacks & validation (EventHandlersMixin)
+    - event_handlers_view.py : callbacks & validation (EventHandlersMixin)
 """
 import tkinter as tk
 from tkinter import StringVar, IntVar, DoubleVar, BooleanVar
-import tkinter.ttk as ttk
-from ttkthemes import ThemedTk
 
-from config import (
-    APP_TITLE, COLORS, DEFAULT_BITRATE, DEFAULT_QUALITY, ICON_PATH,
-    DEFAULT_NORMALIZE_TARGET, PLATFORM_SCALE
-)
-from utils import get_platform_fonts, load_icon, settings_manager
+from config import DEFAULT_BITRATE, DEFAULT_QUALITY, DEFAULT_NORMALIZE_TARGET
+from utils import settings_manager
 from models import DownloadConfig
 
+from .window_view import WindowMixin
 from .widgets_view import WidgetsMixin
 from .progress_view import ProgressMixin
 from .event_handlers_view import EventHandlersMixin
 
 
-class MainApplicationView(WidgetsMixin, ProgressMixin, EventHandlersMixin):
+class MainApplicationView(WindowMixin, WidgetsMixin, ProgressMixin, EventHandlersMixin):
     """Main application window and GUI components."""
 
     def __init__(self):
@@ -40,99 +37,6 @@ class MainApplicationView(WidgetsMixin, ProgressMixin, EventHandlersMixin):
         self.on_format_change_callback = None
         self.on_playlist_change_callback = None
         self.on_stop_callback = None
-
-    # ------------------------------------------------------------------
-    # Window setup
-    # ------------------------------------------------------------------
-
-    def setup_window(self):
-        """Initialize the main window."""
-        self.root = ThemedTk(theme="equilux")
-        self.root.title(APP_TITLE)
-        self.root.configure(bg=COLORS['background'])
-        self.root.resizable(False, False)
-
-        # Allow column 0 to expand so centered widgets work
-        self.root.columnconfigure(0, weight=1)
-
-        # Set default background for all tk widgets
-        self.root.option_add('*Background', COLORS['background'])
-        self.root.option_add('*Foreground', COLORS['text_primary'])
-
-        # Set application icon
-        load_icon(ICON_PATH, self.root)
-
-    # ------------------------------------------------------------------
-    # Fonts & styles
-    # ------------------------------------------------------------------
-
-    def setup_fonts(self):
-        """Configure fonts and styles."""
-        self.fonts = get_platform_fonts()
-
-        # Apply the default font
-        self.root.option_add('*Font', self.fonts['default'])
-
-        # Configure ttk styles
-        self.style = ttk.Style()
-
-        # Configure colors for all ttk widgets to match our theme
-        self.style.configure('TLabel',
-                           font=self.fonts['default'],
-                           background=COLORS['background'],
-                           foreground=COLORS['text_primary'])
-
-        self.style.configure('TButton',
-                           font=self.fonts['default'],
-                           background=COLORS['background'],
-                           foreground=COLORS['text_primary'])
-
-        self.style.configure('TEntry',
-                           font=self.fonts['default'],
-                           background=COLORS['background'],
-                           foreground=COLORS['text_primary'])
-
-        self.style.configure('TCombobox',
-                           font=self.fonts['default'],
-                           background=COLORS['background'],
-                           foreground=COLORS['text_primary'])
-
-        self.style.configure('TRadiobutton',
-                           font=self.fonts['default'],
-                           background=COLORS['background'],
-                           foreground=COLORS['text_primary'])
-
-        self.style.configure('TCheckbutton',
-                           font=self.fonts['default'],
-                           background=COLORS['background'],
-                           foreground=COLORS['text_primary'])
-
-        self.style.configure('TMenubutton',
-                           background=COLORS['background'],
-                           foreground=COLORS['text_primary'])
-
-        self.style.configure('TSpinbox',
-                           background=COLORS['background'],
-                           fieldbackground=COLORS['background'],
-                           foreground=COLORS['text_primary'])
-
-        self.style.configure('TFrame',
-                           background=COLORS['background'])
-
-        self.style.configure('TLabelframe',
-                           background=COLORS['background'])
-
-        # Configure scrollbar
-        self.style.configure('Vertical.TScrollbar',
-                           background=COLORS['background'],
-                           troughcolor=COLORS['background'],
-                           bordercolor=COLORS['background'],
-                           arrowcolor=COLORS['text_primary'])
-
-        # Configure progress bar
-        self.style.configure('TProgressbar',
-                           background=COLORS['button_normal'],
-                           troughcolor=COLORS['background'])
 
     # ------------------------------------------------------------------
     # Tk variables
@@ -166,23 +70,6 @@ class MainApplicationView(WidgetsMixin, ProgressMixin, EventHandlersMixin):
 
         # Prevent sleep variable
         self.prevent_sleep_var = BooleanVar(value=preferences.get("prevent_sleep", False))
-
-    # ------------------------------------------------------------------
-    # Window sizing
-    # ------------------------------------------------------------------
-
-    def adjust_window_size(self, extra_height: int = 0):
-        """Adjust window size to fit content automatically."""
-        self.root.update_idletasks()
-        req_width = self.root.winfo_reqwidth()
-        req_height = self.root.winfo_reqheight() + extra_height
-        # Clamp width between minimum and maximum
-        width = max(req_width, PLATFORM_SCALE['width_base'])
-        width = min(width, 560)  # Never wider than 560px
-        # Force size via minsize/maxsize instead of geometry() to avoid
-        # WM repositioning the window on every resize (KDE/Wayland bug).
-        self.root.minsize(width, req_height)
-        self.root.maxsize(width, req_height)
 
     # ------------------------------------------------------------------
     # Download config builder
