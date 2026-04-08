@@ -10,7 +10,7 @@ The heavy lifting is split across:
 import tkinter as tk
 from tkinter import StringVar, IntVar, DoubleVar, BooleanVar
 
-from config import DEFAULT_BITRATE, DEFAULT_QUALITY, DEFAULT_NORMALIZE_TARGET
+from config import COLORS, DEFAULT_BITRATE, DEFAULT_QUALITY, DEFAULT_NORMALIZE_TARGET
 from utils import settings_manager
 from models import DownloadConfig
 
