@@ -870,6 +870,20 @@ def enrich_metadata(video_infos: Dict) -> Optional[EnrichedMetadata]:
             enriched.genre = mb_genre
             print(f"  [metadata] \u2713 Genre (MusicBrainz): {enriched.genre}")
     
+    # Priority 3: Use the genre from yt-dlp (e.g. SoundCloud uploader-set genre).
+    # Exclude generic YouTube categories which are not real music genres.
+    if not enriched.genre:
+        _YOUTUBE_CATEGORIES = {
+            "music", "entertainment", "people & blogs", "education", "gaming",
+            "comedy", "film & animation", "science & technology", "news & politics",
+            "sports", "howto & style", "travel & events", "autos & vehicles",
+            "pets & animals", "nonprofits & activism",
+        }
+        source_genre = video_infos.get('genre', '').strip()
+        if source_genre and source_genre.lower() not in _YOUTUBE_CATEGORIES:
+            enriched.genre = source_genre
+            print(f"  [metadata] ✓ Genre (source): {enriched.genre}")
+
     # Only return if we actually found something useful
     if enriched.cover_data or enriched.lyrics or enriched.synced_lyrics or enriched.genre:
         return enriched

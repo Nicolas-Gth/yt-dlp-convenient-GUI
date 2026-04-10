@@ -156,6 +156,10 @@ def crop_album_cover(thumbnail_url: str) -> Optional[bytes]:
         # Smart crop: remove dark bars then crop to square
         album_im = _crop_to_square_removing_bars(im)
         
+        # Convert RGBA/P → RGB (JPEG doesn't support transparency)
+        if album_im.mode in ('RGBA', 'P', 'LA'):
+            album_im = album_im.convert('RGB')
+        
         # Convert to JPEG bytes
         with BytesIO() as output:
             album_im.save(output, format="JPEG")

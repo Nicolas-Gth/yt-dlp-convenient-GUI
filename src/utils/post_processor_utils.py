@@ -145,12 +145,23 @@ class CustomPostProcessor(yt_dlp.postprocessor.PostProcessor):
         except Exception as e:
             print(f"Warning: Could not fix year tag: {e}")
 
-        # Always remove genre written by FFmpegMetadata (YouTube category).
+        # Remove generic YouTube categories ("Music", "Entertainment", etc.)
+        # but keep useful genre tags from other sources (e.g. SoundCloud).
+        _GENERIC_CATEGORIES = {
+            "music", "entertainment", "people & blogs", "education", "gaming",
+            "comedy", "film & animation", "science & technology",
+            "news & politics", "sports", "howto & style",
+            "travel & events", "autos & vehicles", "pets & animals",
+            "nonprofits & activism",
+        }
         try:
             audio = ID3(file_path)
-            if audio.get("TCON"):
-                audio.delall("TCON")
-                audio.save()
+            tcon = audio.get("TCON")
+            if tcon:
+                genre_text = str(tcon).strip()
+                if genre_text.lower() in _GENERIC_CATEGORIES:
+                    audio.delall("TCON")
+                    audio.save()
         except Exception as e:
             print(f"Warning: Could not clean genre tag: {e}")
 
