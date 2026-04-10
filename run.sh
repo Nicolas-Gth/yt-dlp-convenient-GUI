@@ -254,28 +254,23 @@ install_components() {
                 fi
                 ;;
             "ubuntu"|"debian"|"linuxmint"|"pop"|"elementary")
+                local apt_packages=()
                 if ! python3 -c "import tkinter" >/dev/null 2>&1; then
-                    echo -e "${YELLOW}Installing python3-tk...${NC}"
-                    sudo apt update && sudo apt install -y python3-tk
+                    apt_packages+=(python3-tk)
+                fi
+                if ! python3 -m venv --help >/dev/null 2>&1; then
+                    apt_packages+=(python3-venv)
+                fi
+                if [[ ${#apt_packages[@]} -gt 0 ]]; then
+                    echo -e "${YELLOW}Installing ${apt_packages[*]}...${NC}"
+                    sudo apt update && sudo apt install -y "${apt_packages[@]}"
                 fi
                 ;;
         esac
         echo -e "${GREEN}[OK]${NC} Python 3 is already installed"
     fi
     
-    # Ensure pip is available and updated
-    echo -e "${YELLOW}[2/5] Ensuring pip is available and updated...${NC}"
-    if ! command_exists pip3 && ! command_exists pip; then
-        python3 -m ensurepip --upgrade 2>/dev/null || true
-    fi
-    
-    # Use pip3 if available, otherwise pip
-    local pip_cmd="pip3"
-    if ! command_exists pip3; then
-        pip_cmd="pip"
-    fi
-    
-    python3 -m pip install --upgrade pip
+    echo -e "${YELLOW}[2/5] Setting up virtual environment...${NC}"
     
     echo -e "${YELLOW}[3/5] Installing Python dependencies...${NC}"
     
