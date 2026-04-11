@@ -62,3 +62,7 @@ The script automatically:
   pip3 install -r requirements.txt
   python3 run.py
   ```
+
+## License
+
+This project is licensed under the [GNU GPL v3](LICENSE).
