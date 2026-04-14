@@ -4,13 +4,17 @@ Progress display mixin for the main application view.
 Contains all progress-related UI: download progress bars, ETA,
 thumbnails, normalize feedback, skipped entries, and fetching progress.
 """
-import tkinter as tk
-import tkinter.ttk as ttk
-from PIL import ImageTk
+from PySide6.QtWidgets import (
+    QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
+    QProgressBar, QTextEdit, QFrame, QSizePolicy
+)
+from PySide6.QtGui import QFont, QPixmap, QImage
+from PySide6.QtCore import Qt, QTimer, QByteArray, QBuffer
 
-from config import COLORS
 from utils import load_thumbnail
 from models import VideoInfo
+
+from io import BytesIO
 
 
 class ProgressMixin:
@@ -23,145 +27,124 @@ class ProgressMixin:
     def show_progress_widgets(self, is_playlist: bool = False):
         """Show download progress widgets."""
         self.disable_interactive_widgets()
-        self.convert_button.destroy()
+        self.convert_button.hide()
 
-        # Create progress frame where convert button was
-        self.progress_frame = tk.LabelFrame(self.root, bg=COLORS['background'], border=0)
-        self.progress_frame.grid(sticky=tk.W+tk.E, row=7, column=0)
-        self.progress_frame.columnconfigure(0, weight=1)
-
-        # Create stop button below progress frame, just above disclaimer
-        self.stop_button = tk.Button(
-            self.root,
-            text="Stop download",
-            font=("Bahnschrift", 12),
-            command=self._on_stop_click,
-            border=0,
-            highlightthickness=0,
-            fg=COLORS['text_primary'],
-            bg="#a63333",
-            pady=5,
-            padx=10,
-            activebackground="#c94444",
-            activeforeground=COLORS['text_secondary'],
-            cursor="hand2"
-        )
-        self.stop_button.grid(row=8, column=0, pady=(8, 2))
+        # Create progress container
+        self.progress_frame = QFrame()
+        self.progress_layout = QVBoxLayout(self.progress_frame)
+        self.progress_layout.setContentsMargins(7, 10, 7, 0)
 
         # Song name label
-        self.song_label = ttk.Label(self.progress_frame, text="", anchor="w", justify="left",
-                                    font=("Arial", 9, "bold"))
-        self.song_label.grid(sticky=tk.W, row=0, column=0, pady=(10, 0), padx=7)
+        self.song_label = QLabel("")
+        self.song_label.setFont(QFont("Arial", 9, QFont.Bold))
+        self.song_label.setWordWrap(True)
+        self.progress_layout.addWidget(self.song_label)
 
-        # Thumbnail placeholder
-        self.thumbnail_label = ttk.Label(self.progress_frame)
-        self.thumbnail_label.grid(sticky=tk.W, row=1, column=0, pady=5, padx=7)
+        # Thumbnail + info row
+        thumb_info_layout = QHBoxLayout()
+        self.thumbnail_label = QLabel()
+        self.thumbnail_label.setFixedSize(100, 60)
+        thumb_info_layout.addWidget(self.thumbnail_label, alignment=Qt.AlignLeft | Qt.AlignTop)
 
-        # Video info label
-        self.info_label = ttk.Label(self.progress_frame, text="", anchor="w", justify="left")
-        self.info_label.grid(sticky=tk.W, row=1, column=0, pady=5, padx=74)
+        self.info_label = QLabel("")
+        self.info_label.setWordWrap(True)
+        thumb_info_layout.addWidget(self.info_label, 1)
+        self.progress_layout.addLayout(thumb_info_layout)
 
         # Element progress
-        self.progress_label = ttk.Label(self.progress_frame, text="Element progress :", anchor="w", justify="left")
-        self.progress_label.grid(sticky=tk.W, row=2, column=0, pady=0, padx=7)
+        elem_layout = QHBoxLayout()
+        self.progress_label = QLabel("Element progress :")
+        elem_layout.addWidget(self.progress_label)
 
-        self.video_progress = ttk.Progressbar(
-            self.progress_frame,
-            orient=tk.HORIZONTAL,
-            length=300,
-            mode='determinate'
-        )
-        self.video_progress.grid(sticky=tk.W, row=2, column=0, pady=0, padx=120)
+        self.video_progress = QProgressBar()
+        self.video_progress.setRange(0, 1000)
+        self.video_progress.setValue(0)
+        self.video_progress.setFixedWidth(300)
+        self.video_progress.setTextVisible(False)
+        elem_layout.addWidget(self.video_progress)
 
-        self.video_progress_percent = ttk.Label(
-            self.progress_frame,
-            text=" 0.0%",
-            anchor="w",
-            justify="left"
-        )
-        self.video_progress_percent.grid(sticky=tk.W, row=2, column=0, pady=10, padx=(422, 0))
+        self.video_progress_percent = QLabel(" 0.0%")
+        self.video_progress_percent.setFixedWidth(80)
+        elem_layout.addWidget(self.video_progress_percent)
+        elem_layout.addStretch()
+        self.progress_layout.addLayout(elem_layout)
 
         # Total progress (for playlists)
         if is_playlist:
-            self.total_progress_label = ttk.Label(
-                self.progress_frame,
-                text="Total progress :",
-                anchor="w",
-                justify="left"
-            )
-            self.total_progress_label.grid(sticky=tk.W, row=3, column=0, pady=0, padx=7)
+            total_layout = QHBoxLayout()
+            self.total_progress_label = QLabel("Total progress :")
+            total_layout.addWidget(self.total_progress_label)
 
-            self.total_progress = ttk.Progressbar(
-                self.progress_frame,
-                orient=tk.HORIZONTAL,
-                length=300,
-                mode='determinate'
-            )
-            self.total_progress.grid(sticky=tk.W, row=3, column=0, pady=0, padx=120)
+            self.total_progress = QProgressBar()
+            self.total_progress.setRange(0, 1000)
+            self.total_progress.setValue(0)
+            self.total_progress.setFixedWidth(300)
+            self.total_progress.setTextVisible(False)
+            total_layout.addWidget(self.total_progress)
 
-            self.total_progress_percent = ttk.Label(
-                self.progress_frame,
-                text=" 0.0%",
-                anchor="w",
-                justify="left"
-            )
-            self.total_progress_percent.grid(sticky=tk.W, row=3, column=0, pady=10, padx=(422, 0))
+            self.total_progress_percent = QLabel(" 0.0%")
+            self.total_progress_percent.setFixedWidth(80)
+            total_layout.addWidget(self.total_progress_percent)
+            total_layout.addStretch()
+            self.progress_layout.addLayout(total_layout)
 
-            # ETA label (below total progress)
-            self.eta_label = ttk.Label(
-                self.progress_frame, text="", anchor="w", justify="left"
-            )
-            self.eta_label.grid(sticky=tk.W, row=4, column=0, pady=(0, 5), padx=7)
+            # ETA label
+            self.eta_label = QLabel("")
+            self.progress_layout.addWidget(self.eta_label)
             self._eta_callback = None
-            self._eta_timer_id = None
-            self._start_eta_timer()
+            self._eta_timer = QTimer(self)
+            self._eta_timer.timeout.connect(self._update_eta_timer)
+            self._eta_timer.start(1000)
 
-            # Adjust window size for playlist
-            self.adjust_window_size()
-        else:
-            # Adjust window size for single video
-            self.adjust_window_size()
+        self.main_layout.insertWidget(self.main_layout.indexOf(self.convert_button), self.progress_frame)
+
+        # Create stop button
+        self.stop_button = QPushButton("Stop download")
+        self.stop_button.setFont(QFont("Bahnschrift", 12))
+        self.stop_button.setCursor(Qt.PointingHandCursor)
+        self.stop_button.setStyleSheet("""
+            QPushButton {
+                background-color: #a63333; color: white; border: none;
+                border-radius: 4px; padding: 8px 16px;
+            }
+            QPushButton:hover { background-color: #c94444; }
+        """)
+        self.stop_button.clicked.connect(self._on_stop_click)
+        self.main_layout.insertWidget(self.main_layout.indexOf(self.convert_button), self.stop_button, alignment=Qt.AlignCenter)
+
+        self.adjust_window_size()
 
     def hide_progress_widgets(self):
         """Hide progress widgets and restore convert button."""
-        # Remove stop button
-        if hasattr(self, 'stop_button') and self.stop_button.winfo_exists():
-            self.stop_button.destroy()
-            del self.stop_button
-
         # Stop ETA timer
         self._stop_eta_timer()
 
-        if hasattr(self, '_skipped_frame'):
-            self._skipped_frame.destroy()
-            del self._skipped_frame
+        if hasattr(self, 'stop_button') and self.stop_button is not None:
+            self.stop_button.hide()
+            self.stop_button.deleteLater()
+            self.stop_button = None
 
-        if hasattr(self, 'progress_frame'):
-            for widget in self.progress_frame.winfo_children():
-                widget.destroy()
-            self.progress_frame.grid_forget()
-            del self.progress_frame
+        if hasattr(self, '_skipped_frame') and self._skipped_frame is not None:
+            self._skipped_frame.hide()
+            self._skipped_frame.deleteLater()
+            self._skipped_frame = None
 
-        # Clean up normalize scrollable frame if it exists
-        if hasattr(self, 'normalize_outer_frame'):
-            self.normalize_outer_frame.destroy()
-            del self.normalize_outer_frame
-            if hasattr(self, '_normalize_labels'):
-                del self._normalize_labels
-            if hasattr(self, '_normalize_canvas'):
-                del self._normalize_canvas
-            if hasattr(self, '_normalize_inner_frame'):
-                del self._normalize_inner_frame
-            if hasattr(self, '_scroll_area'):
-                del self._scroll_area
-            if hasattr(self, '_info_item_count'):
-                del self._info_item_count
+        if hasattr(self, 'progress_frame') and self.progress_frame is not None:
+            self.progress_frame.hide()
+            self.progress_frame.deleteLater()
+            self.progress_frame = None
 
-        # Recreate convert button
-        self.create_convert_button()
+        if hasattr(self, 'normalize_outer_frame') and self.normalize_outer_frame is not None:
+            self.normalize_outer_frame.hide()
+            self.normalize_outer_frame.deleteLater()
+            self.normalize_outer_frame = None
+            self._normalize_labels = None
+            self._info_item_count = None
 
+        self.convert_button.show()
+        self.set_convert_button_enabled(True)
         self.enable_interactive_widgets()
-        self.adjust_window_size()  # Reset to base size
+        self.adjust_window_size()
 
     # ------------------------------------------------------------------
     # Download-again button
@@ -169,34 +152,26 @@ class ProgressMixin:
 
     def show_new_download_button(self):
         """Transform the stop button into a 'New download' button."""
-        # Hide element/total progress bars
         for attr in ('progress_label', 'video_progress', 'video_progress_percent',
                       'total_progress_label', 'total_progress', 'total_progress_percent',
-                      'eta_label'):
+                      'eta_label', 'thumbnail_label', 'info_label'):
             widget = getattr(self, attr, None)
             if widget is not None:
-                try:
-                    widget.grid_remove()
-                except Exception:
-                    pass
-        # Clear last element info (thumbnail, title details)
-        for attr in ('thumbnail_label', 'info_label'):
-            widget = getattr(self, attr, None)
-            if widget is not None:
-                try:
-                    widget.grid_remove()
-                except Exception:
-                    pass
-        if hasattr(self, 'stop_button') and self.stop_button.winfo_exists():
-            self.stop_button.configure(
-                state='normal',
-                text="New download",
-                bg=COLORS['button_normal'],
-                activebackground=COLORS['button_active'],
-                cursor="hand2",
-                command=self._on_download_again_click
-            )
-        # Resize window to fit remaining content
+                widget.hide()
+
+        if hasattr(self, 'stop_button') and self.stop_button is not None:
+            self.stop_button.setEnabled(True)
+            self.stop_button.setText("New download")
+            self.stop_button.setStyleSheet("""
+                QPushButton {
+                    background-color: #238a45; color: white; border: none;
+                    border-radius: 4px; padding: 8px 16px;
+                }
+                QPushButton:hover { background-color: #449468; }
+            """)
+            self.stop_button.clicked.disconnect()
+            self.stop_button.clicked.connect(self._on_download_again_click)
+
         self.adjust_window_size()
 
     # ------------------------------------------------------------------
@@ -207,24 +182,22 @@ class ProgressMixin:
         """Set the callback used to compute the ETA string."""
         self._eta_callback = callback
 
-    def _start_eta_timer(self):
+    def _update_eta_timer(self):
         """Refresh the ETA label every second."""
-        if hasattr(self, 'eta_label') and self.eta_label.winfo_exists():
+        if hasattr(self, 'eta_label') and self.eta_label is not None:
             if callable(getattr(self, '_eta_callback', None)):
                 eta_text = self._eta_callback()
-                self.eta_label.configure(text=eta_text)
-            self._eta_timer_id = self.root.after(1000, self._start_eta_timer)
+                self.eta_label.setText(eta_text)
 
     def _stop_eta_timer(self):
         """Stop the ETA refresh timer."""
-        if hasattr(self, '_eta_timer_id') and self._eta_timer_id is not None:
-            self.root.after_cancel(self._eta_timer_id)
-            self._eta_timer_id = None
+        if hasattr(self, '_eta_timer') and self._eta_timer is not None:
+            self._eta_timer.stop()
 
     def update_eta(self, eta_text: str):
         """Update the estimated remaining time label."""
-        if hasattr(self, 'eta_label'):
-            self.eta_label.configure(text=eta_text)
+        if hasattr(self, 'eta_label') and self.eta_label is not None:
+            self.eta_label.setText(eta_text)
 
     # ------------------------------------------------------------------
     # Progress updates
@@ -232,96 +205,79 @@ class ProgressMixin:
 
     def update_progress_info(self, video_info: VideoInfo, song_name: str, is_playlist: bool = False):
         """Update progress display with video information."""
-        if not hasattr(self, 'progress_frame'):
+        if not hasattr(self, 'progress_frame') or self.progress_frame is None:
             return
 
-        # Update song name
-        self.song_label.configure(text=song_name)
+        self.song_label.setText(song_name)
 
-        # Update video info
         info_text = (
             f"Title : \"{video_info.title}\"\n"
             f"Channel : \"{video_info.uploader}\"\n"
             f"Duration : {video_info.duration_formatted}"
         )
-        self.info_label.configure(text=info_text)
+        self.info_label.setText(info_text)
 
         # Update thumbnail
         if video_info.thumbnail:
             thumbnail = load_thumbnail(video_info.thumbnail, (100, 60), video_info.is_music)
             if thumbnail:
-                photo = ImageTk.PhotoImage(thumbnail)
-                self.thumbnail_label.configure(image=photo)
-                self.thumbnail_label.image = photo  # Keep a reference
+                # Convert PIL Image to QPixmap
+                buf = BytesIO()
+                thumbnail.save(buf, format="PNG")
+                buf.seek(0)
+                qimg = QImage()
+                qimg.loadFromData(buf.getvalue())
+                pixmap = QPixmap.fromImage(qimg)
+                self.thumbnail_label.setPixmap(pixmap)
 
-                # Adjust info label position based on actual thumbnail size
-                # If the thumbnail ended up square, it was cropped (music/black bars)
+                # Adjust thumbnail label size for square images
                 is_square = abs(thumbnail.size[0] - thumbnail.size[1]) < 5
-                padx = 74 if is_square else 114
-                self.info_label.grid_configure(padx=padx)
+                if is_square:
+                    self.thumbnail_label.setFixedSize(60, 60)
+                else:
+                    self.thumbnail_label.setFixedSize(100, 60)
 
-        # Resize window to fit updated content
         self.adjust_window_size()
 
     def update_video_progress(self, percentage: float, status: str = ""):
         """Update video download progress."""
-        if hasattr(self, 'video_progress'):
-            if status == "processing":
-                self.video_progress['mode'] = 'indeterminate'
-                self.video_progress.start(10)
-                self.video_progress_percent.configure(text="Processing")
-            else:
-                if self.video_progress['mode'] != 'determinate':
-                    self.video_progress.stop()
-                    self.video_progress['mode'] = 'determinate'
-
-                self.video_progress['value'] = percentage
-                self.video_progress_percent.configure(text=f" {percentage:.1f}%")
+        if not hasattr(self, 'video_progress') or self.video_progress is None:
+            return
+        if status == "processing":
+            self.video_progress.setRange(0, 0)  # indeterminate
+            self.video_progress_percent.setText("Processing")
+        else:
+            if self.video_progress.maximum() == 0:
+                self.video_progress.setRange(0, 1000)
+            self.video_progress.setValue(int(percentage * 10))
+            self.video_progress_percent.setText(f" {percentage:.1f}%")
 
     def update_total_progress(self, percentage: float):
         """Update total progress for playlists."""
-        if hasattr(self, 'total_progress'):
-            self.total_progress['value'] = percentage
-            if percentage >= 100:
-                self.total_progress_percent.configure(text="Done")
-            else:
-                self.total_progress_percent.configure(text=f" {percentage:.1f}%")
+        if not hasattr(self, 'total_progress') or self.total_progress is None:
+            return
+        self.total_progress.setValue(int(percentage * 10))
+        if percentage >= 100:
+            self.total_progress_percent.setText("Done")
+        else:
+            self.total_progress_percent.setText(f" {percentage:.1f}%")
 
     # ------------------------------------------------------------------
     # Skipped entries panel
     # ------------------------------------------------------------------
 
     def show_skipped_entries(self, hidden_entries: list):
-        """Show a panel listing entries that YouTube hides but the API returned.
-
-        Displayed above the 'Downloaded elements' section so the user can
-        see which videos were skipped due to numbering offset.
-        """
-        if not hasattr(self, 'progress_frame') or not hidden_entries:
+        """Show a panel listing entries that were skipped."""
+        if not hasattr(self, 'progress_frame') or self.progress_frame is None or not hidden_entries:
             return
 
-        # Determine the row — place it after the last progress widget row
-        next_row = len(self.progress_frame.grid_slaves()) + 5
+        self._skipped_frame = QFrame()
+        skipped_layout = QVBoxLayout(self._skipped_frame)
+        skipped_layout.setContentsMargins(5, 2, 5, 2)
 
-        self._skipped_frame = tk.Frame(
-            self.progress_frame, bg=COLORS['background']
-        )
-        self._skipped_frame.grid(
-            sticky=tk.W + tk.E, row=next_row, column=0, padx=5, pady=2
-        )
-
-        # Header
-        header = ttk.Label(
-            self._skipped_frame,
-            text="Skipped unavailable elements",
-            font=("Arial", 9, "bold"),
-            anchor="w",
-            justify="left",
-        )
-        header.pack(anchor='w', padx=2, pady=(2, 0))
-
-        sep = ttk.Separator(self._skipped_frame, orient='horizontal')
-        sep.pack(fill='x', padx=2, pady=(1, 3))
+        header = QLabel("Skipped unavailable elements")
+        header.setFont(QFont("Arial", 9, QFont.Bold))
+        skipped_layout.addWidget(header)
 
         # Build text content
         lines = []
@@ -341,70 +297,44 @@ class ProgressMixin:
             else:
                 lines.append(f"{i}. {title}{suffix}")
 
-        # Selectable readonly text widget
-        text_content = "\n".join(lines)
-        num_lines = len(lines)
-        self._skipped_text = tk.Text(
-            self._skipped_frame,
-            font=("Arial", 8),
-            bg=COLORS['background'],
-            fg=COLORS['text_primary'],
-            relief='flat',
-            borderwidth=0,
-            highlightthickness=0,
-            wrap='none',
-            height=num_lines,
-            cursor='arrow',
-        )
-        self._skipped_text.insert('1.0', text_content)
-        self._skipped_text.configure(state='disabled')
-        self._skipped_text.pack(anchor='w', padx=2, pady=1)
+        self._skipped_text = QTextEdit()
+        self._skipped_text.setReadOnly(True)
+        self._skipped_text.setFont(QFont("Arial", 8))
+        self._skipped_text.setPlainText("\n".join(lines))
+        self._skipped_text.setFixedHeight(min(len(lines) * 18 + 10, 120))
+        self._skipped_text.setStyleSheet("border: none;")
+        skipped_layout.addWidget(self._skipped_text)
 
+        self.progress_layout.addWidget(self._skipped_frame)
         self.adjust_window_size()
 
     def show_age_restricted_entries(self, entries: list):
-        """Show age-restricted entries in the skipped unavailable elements panel.
-
-        If the skipped panel already exists, appends to it. Otherwise creates it.
-        Format: \"channel - title  [Age-restricted]\"
-        """
+        """Show age-restricted entries in the skipped panel."""
         self._show_skipped_error_entries(entries, 'age_restricted', 'Age-restricted')
 
     def show_format_unavailable_entries(self, entries: list):
-        """Show format-unavailable entries in the skipped unavailable elements panel.
-
-        If the skipped panel already exists, appends to it. Otherwise creates it.
-        Format: \"channel - title  [Format unavailable]\"
-        """
+        """Show format-unavailable entries in the skipped panel."""
         self._show_skipped_error_entries(entries, 'format_unavailable', 'Format unavailable')
 
     def show_video_unavailable_entries(self, entries: list):
-        """Show video-unavailable entries in the skipped unavailable elements panel.
-
-        If the skipped panel already exists, appends to it. Otherwise creates it.
-        Format: \"channel - title  [Unavailable]\"
-        """
+        """Show video-unavailable entries in the skipped panel."""
         self._show_skipped_error_entries(entries, 'video_unavailable', 'Unavailable')
 
     def _show_skipped_error_entries(self, entries: list, flag_key: str, label: str):
-        """Show age-restricted entries in the skipped unavailable elements panel.
-
-        If the skipped panel already exists, appends to it. Otherwise creates it.
-        """
+        """Show error entries in the skipped panel."""
         if not entries:
             return
-
-        # Build entries in the same format as hidden_entries for show_skipped_entries
         formatted = []
         for entry in entries:
             title = entry.get('title', 'Unknown')
             channel = entry.get('channel', '')
-            formatted.append({'title': title, 'channel': channel or '', **{flag_key: True}})
+            formatted.append({'title': title, 'channel': channel or '', flag_key: True})
 
-        if hasattr(self, '_skipped_frame') and hasattr(self, '_skipped_text'):
-            # Append to existing skipped panel
-            self._skipped_text.configure(state='normal')
-            current_lines = int(self._skipped_text.index('end-1c').split('.')[0])
+        if hasattr(self, '_skipped_frame') and self._skipped_frame is not None and hasattr(self, '_skipped_text'):
+            # Append to existing
+            current = self._skipped_text.toPlainText()
+            current_lines = current.count('\n') + 1
+            new_lines = []
             for entry in formatted:
                 title = entry['title']
                 channel = entry['channel']
@@ -412,14 +342,13 @@ class ProgressMixin:
                     line = f"{current_lines}. {channel} - {title}  [{label}]"
                 else:
                     line = f"{current_lines}. {title}  [{label}]"
-                self._skipped_text.insert('end', f"\n{line}")
+                new_lines.append(line)
                 current_lines += 1
-            new_height = int(self._skipped_text.index('end-1c').split('.')[0])
-            self._skipped_text.configure(height=new_height)
-            self._skipped_text.configure(state='disabled')
+            self._skipped_text.setPlainText(current + "\n" + "\n".join(new_lines))
+            total_lines = self._skipped_text.toPlainText().count('\n') + 1
+            self._skipped_text.setFixedHeight(min(total_lines * 18 + 10, 120))
             self.adjust_window_size()
         else:
-            # Create the skipped panel with age-restricted entries
             self.show_skipped_entries(formatted)
 
     # ------------------------------------------------------------------
@@ -427,39 +356,26 @@ class ProgressMixin:
     # ------------------------------------------------------------------
 
     def show_normalize_feedback(self, info: dict):
-        """Show per-track summary feedback below the progress widgets.
-
-        Each track gets one line combining: name, metadata, lyrics, volume.
-        Displays up to 5 items directly. After 5, a scrollbar appears
-        and the block stays at a fixed height.
-        """
-        if not hasattr(self, 'progress_frame'):
+        """Show per-track summary feedback below the progress widgets."""
+        if not hasattr(self, 'progress_frame') or self.progress_frame is None:
             return
 
-        # Track item count for numbering
-        if not hasattr(self, '_info_item_count'):
+        if not hasattr(self, '_info_item_count') or self._info_item_count is None:
             self._info_item_count = 0
         self._info_item_count += 1
         num = self._info_item_count
 
         display_name = info.get('display_name', info.get('title', 'Unknown'))
 
-        # Build parts list
         parts = []
-
-        # Metadata status
         if info.get('metadata_found'):
             parts.append("Metadatas")
         elif info.get('type') == 'track_summary':
             parts.append("No metadatas")
-
-        # Lyrics status
         if info.get('lyrics_found'):
             parts.append("Lyrics")
         elif info.get('type') == 'track_summary':
             parts.append("No lyrics")
-
-        # Volume status
         volume = info.get('volume')
         if volume:
             measured = volume['measured']
@@ -474,240 +390,108 @@ class ProgressMixin:
         feedback = f"{num}. {display_name}{separator}{separator.join(parts)}" if parts else f"{num}. {display_name}"
 
         MAX_VISIBLE = 5
-        ITEM_HEIGHT = 22  # approximate height per label in pixels
+        ITEM_HEIGHT = 18
 
-        # Initialize the scrollable container on first call
-        if not hasattr(self, '_normalize_labels'):
+        if not hasattr(self, '_normalize_labels') or self._normalize_labels is None:
             self._normalize_labels = []
 
-            # Determine the row for the normalize block (after progress widgets)
-            next_row = len(self.progress_frame.grid_slaves()) + 5
+            self.normalize_outer_frame = QFrame()
+            norm_layout = QVBoxLayout(self.normalize_outer_frame)
+            norm_layout.setContentsMargins(5, 2, 5, 8)
 
-            # Outer frame holds header + canvas + scrollbar
-            self.normalize_outer_frame = tk.Frame(
-                self.progress_frame, bg=COLORS['background']
-            )
-            self.normalize_outer_frame.grid(
-                sticky=tk.W+tk.E, row=next_row, column=0, padx=5, pady=(2, 8)
-            )
+            header_lbl = QLabel("Downloaded elements")
+            header_lbl.setFont(QFont("Arial", 9, QFont.Bold))
+            norm_layout.addWidget(header_lbl)
 
-            # Header (fixed, does NOT scroll)
-            header_lbl = ttk.Label(
-                self.normalize_outer_frame,
-                text="Downloaded elements",
-                font=("Arial", 9, "bold"),
-                anchor="w",
-                justify="left"
-            )
-            header_lbl.pack(anchor='w', padx=2, pady=(2, 0))
-            sep = ttk.Separator(self.normalize_outer_frame, orient='horizontal')
-            sep.pack(fill='x', padx=2, pady=(1, 3))
+            line = QFrame()
+            line.setFrameShape(QFrame.HLine)
+            norm_layout.addWidget(line)
 
-            # Scrollable area frame (holds canvas + scrollbar side by side)
-            self._scroll_area = tk.Frame(
-                self.normalize_outer_frame, bg=COLORS['background']
-            )
-            self._scroll_area.pack(fill=tk.BOTH, expand=True)
+            self._normalize_text = QTextEdit()
+            self._normalize_text.setReadOnly(True)
+            self._normalize_text.setFont(QFont("Arial", 8))
+            self._normalize_text.setStyleSheet("border: none;")
+            self._normalize_text.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+            norm_layout.addWidget(self._normalize_text)
 
-            # Canvas for scrolling
-            self._normalize_canvas = tk.Canvas(
-                self._scroll_area,
-                bg=COLORS['background'],
-                highlightthickness=0,
-                borderwidth=0
-            )
-            self._normalize_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+            self.progress_layout.addWidget(self.normalize_outer_frame)
 
-            # Inner frame inside the canvas
-            self._normalize_inner_frame = tk.Frame(
-                self._normalize_canvas, bg=COLORS['background']
-            )
-            self._normalize_canvas_window = self._normalize_canvas.create_window(
-                (0, 0), window=self._normalize_inner_frame, anchor='nw'
-            )
-
-            # Make inner frame stretch to canvas width
-            self._normalize_canvas.bind('<Configure>', self._on_normalize_canvas_configure)
-
-            # Scrollbar (hidden initially)
-            self._normalize_scrollbar = ttk.Scrollbar(
-                self._scroll_area,
-                orient=tk.VERTICAL,
-                command=self._normalize_canvas.yview
-            )
-            self._normalize_canvas.configure(yscrollcommand=self._normalize_scrollbar.set)
-
-            # Bind resize
-            self._normalize_inner_frame.bind('<Configure>', self._on_normalize_frame_configure)
-
-            # Bind mousewheel for scrolling
-            self._normalize_canvas.bind('<Enter>', self._bind_normalize_mousewheel)
-            self._normalize_canvas.bind('<Leave>', self._unbind_normalize_mousewheel)
-
-            # Selectable readonly text widget instead of labels
-            self._normalize_text = tk.Text(
-                self._normalize_inner_frame,
-                font=("Arial", 8),
-                bg=COLORS['background'],
-                fg=COLORS['text_primary'],
-                relief='flat',
-                borderwidth=0,
-                highlightthickness=0,
-                wrap='none',
-                height=1,
-                cursor='arrow',
-            )
-            self._normalize_text.pack(anchor='w', padx=2, pady=1, fill='x')
-            self._normalize_text.configure(state='disabled')
-
-        # Append the new line to the text widget
-        self._normalize_text.configure(state='normal')
-        if len(self._normalize_labels) > 0:
-            self._normalize_text.insert('end', f"\n{feedback}")
+        # Append the new line
+        if self._normalize_labels:
+            current = self._normalize_text.toPlainText()
+            self._normalize_text.setPlainText(current + "\n" + feedback)
         else:
-            self._normalize_text.insert('end', feedback)
-        self._normalize_text.configure(state='disabled')
+            self._normalize_text.setPlainText(feedback)
         self._normalize_labels.append(feedback)
 
         count = len(self._normalize_labels)
-
-        # Update text widget height to match line count
-        self._normalize_text.configure(state='normal')
-        self._normalize_text.configure(height=count)
-        self._normalize_text.configure(state='disabled')
-
         if count <= MAX_VISIBLE:
-            # Grow canvas height to fit
-            new_height = count * ITEM_HEIGHT
-            self._normalize_canvas.configure(height=new_height)
+            self._normalize_text.setFixedHeight(count * ITEM_HEIGHT + 10)
         else:
-            # Lock height at MAX_VISIBLE items and show scrollbar
-            self._normalize_canvas.configure(height=MAX_VISIBLE * ITEM_HEIGHT)
-            self._normalize_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+            self._normalize_text.setFixedHeight(MAX_VISIBLE * ITEM_HEIGHT + 10)
 
-        # Update scroll region and scroll to bottom
-        self._normalize_canvas.update_idletasks()
-        self._normalize_canvas.configure(scrollregion=self._normalize_canvas.bbox('all'))
-        self._normalize_canvas.yview_moveto(1.0)
+        # Scroll to bottom
+        scrollbar = self._normalize_text.verticalScrollBar()
+        scrollbar.setValue(scrollbar.maximum())
 
-        # Only resize window when the visible area is still growing
         if count <= MAX_VISIBLE:
             self.adjust_window_size()
-
-    def _on_normalize_canvas_configure(self, event):
-        """Stretch inner frame to match canvas width."""
-        if hasattr(self, '_normalize_canvas_window'):
-            self._normalize_canvas.itemconfigure(self._normalize_canvas_window, width=event.width)
-
-    def _on_normalize_frame_configure(self, event):
-        """Update scroll region when inner frame changes size."""
-        if hasattr(self, '_normalize_canvas'):
-            self._normalize_canvas.configure(scrollregion=self._normalize_canvas.bbox('all'))
-
-    def _bind_normalize_mousewheel(self, event):
-        """Bind mousewheel to normalize canvas."""
-        if hasattr(self, '_normalize_canvas'):
-            self._normalize_canvas.bind_all('<Button-4>', self._on_normalize_mousewheel_up)
-            self._normalize_canvas.bind_all('<Button-5>', self._on_normalize_mousewheel_down)
-
-    def _unbind_normalize_mousewheel(self, event):
-        """Unbind mousewheel from normalize canvas."""
-        if hasattr(self, '_normalize_canvas'):
-            self._normalize_canvas.unbind_all('<Button-4>')
-            self._normalize_canvas.unbind_all('<Button-5>')
-
-    def _on_normalize_mousewheel_up(self, event):
-        """Scroll up."""
-        if hasattr(self, '_normalize_canvas'):
-            self._normalize_canvas.yview_scroll(-1, 'units')
-
-    def _on_normalize_mousewheel_down(self, event):
-        """Scroll down."""
-        if hasattr(self, '_normalize_canvas'):
-            self._normalize_canvas.yview_scroll(1, 'units')
 
     # ------------------------------------------------------------------
     # Fetching progress (pre-download info retrieval)
     # ------------------------------------------------------------------
 
     def show_fetching_progress(self, is_playlist: bool = False):
-        """Show fetching progress bar (determinate for playlists, indeterminate for single videos)."""
-        # Disable all interactive widgets
+        """Show fetching progress bar."""
         self.disable_interactive_widgets()
+        self.convert_button.hide()
 
-        # Hide the convert button completely
-        if hasattr(self, 'convert_button') and self.convert_button.winfo_exists():
-            self.convert_button.grid_remove()
+        self.fetching_frame = QFrame()
+        fetching_layout = QVBoxLayout(self.fetching_frame)
+        fetching_layout.setAlignment(Qt.AlignCenter)
 
-        # Create a progress frame where the button was
-        self.fetching_frame = tk.LabelFrame(self.root, bg=COLORS['background'], border=0)
-        self.fetching_frame.grid(sticky=tk.W, row=7, column=0, pady=2, padx=110)
-
-        # Progress label
-        self.fetching_label = ttk.Label(
-            self.fetching_frame,
-            text="Retrieving information..." if not is_playlist else "Retrieving playlist information...",
-            anchor="center",
-            justify="center"
+        self.fetching_label = QLabel(
+            "Retrieving information..." if not is_playlist else "Retrieving playlist information..."
         )
-        self.fetching_label.grid(row=0, column=0, pady=5)
+        self.fetching_label.setAlignment(Qt.AlignCenter)
+        fetching_layout.addWidget(self.fetching_label)
 
-        # Progress bar: determinate for playlists, indeterminate for single videos
+        self.fetching_progress = QProgressBar()
+        self.fetching_progress.setFixedWidth(300)
         if is_playlist:
-            self.fetching_progress = ttk.Progressbar(
-                self.fetching_frame,
-                orient=tk.HORIZONTAL,
-                length=300,
-                mode='determinate',
-                maximum=100
-            )
-            self.fetching_progress.grid(row=1, column=0, pady=5)
+            self.fetching_progress.setRange(0, 100)
+            self.fetching_progress.setValue(0)
         else:
-            self.fetching_progress = ttk.Progressbar(
-                self.fetching_frame,
-                orient=tk.HORIZONTAL,
-                length=300,
-                mode='indeterminate'
-            )
-            self.fetching_progress.grid(row=1, column=0, pady=5)
-            self.fetching_progress.start(10)
+            self.fetching_progress.setRange(0, 0)  # indeterminate
+        fetching_layout.addWidget(self.fetching_progress, alignment=Qt.AlignCenter)
+
+        self.main_layout.insertWidget(self.main_layout.indexOf(self.convert_button), self.fetching_frame)
+        self.adjust_window_size()
 
     def update_fetching_progress(self, current: int, total: int = None):
-        """Update the fetching progress bar and label for playlist extraction."""
+        """Update the fetching progress bar and label."""
         if not hasattr(self, 'fetching_label') or not hasattr(self, 'fetching_progress'):
             return
 
         if total and total > 0:
             percentage = (current / total) * 100
-            self.fetching_progress['value'] = percentage
-            self.fetching_label.configure(
-                text=f"Retrieving playlist information... ({current}/{total})"
+            self.fetching_progress.setValue(int(percentage))
+            self.fetching_label.setText(
+                f"Retrieving playlist information... ({current}/{total})"
             )
         else:
-            # Total unknown — show count only and pulse the bar
-            self.fetching_label.configure(
-                text=f"Retrieving playlist information... ({current} titles found)"
+            self.fetching_label.setText(
+                f"Retrieving playlist information... ({current} titles found)"
             )
-            # Advance bar in small steps to show activity
-            self.fetching_progress['value'] = min(current % 100, 95)
+            self.fetching_progress.setValue(min(current % 100, 95))
 
     def hide_fetching_progress(self):
         """Hide fetching progress widgets and restore convert button."""
-        if hasattr(self, 'fetching_frame'):
-            # Stop progress bar animation
-            if hasattr(self, 'fetching_progress'):
-                self.fetching_progress.stop()
+        if hasattr(self, 'fetching_frame') and self.fetching_frame is not None:
+            self.fetching_frame.hide()
+            self.fetching_frame.deleteLater()
+            self.fetching_frame = None
 
-            # Remove widgets
-            for widget in self.fetching_frame.winfo_children():
-                widget.destroy()
-            self.fetching_frame.grid_forget()
-            del self.fetching_frame
-
-        # Re-enable all interactive widgets
         self.enable_interactive_widgets()
-
-        # Restore the convert button
-        if hasattr(self, 'convert_button') and self.convert_button.winfo_exists():
-            self.convert_button.grid()
-            self.set_convert_button_enabled(True)
+        self.convert_button.show()
+        self.set_convert_button_enabled(True)

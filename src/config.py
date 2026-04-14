@@ -63,6 +63,7 @@ FILE_FORMATS = {
 # Paths
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 ICON_PATH = os.path.join(SCRIPT_DIR, '..', 'assets', 'icon.ico')
+DOWNLOAD_ICON_PATH = os.path.join(SCRIPT_DIR, '..', 'assets', 'download-icon.svg')
 COOKIES_PATH = os.path.join(SCRIPT_DIR, '..', 'cookies.txt')
 COOKIES_DIR = os.path.dirname(COOKIES_PATH)
 
