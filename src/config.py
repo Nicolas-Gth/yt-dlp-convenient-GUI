@@ -3,9 +3,8 @@ Configuration and constants for the yt-dlp GUI application.
 """
 import os
 
-# Application version (single source of truth)
-APP_VERSION = "2.6.8" \
-""
+# Application version
+APP_VERSION = "2.6.9"
 
 # Application name
 APP_NAME = "yt-dlp Convenient GUI"

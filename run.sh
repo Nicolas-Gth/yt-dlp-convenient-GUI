@@ -88,8 +88,8 @@ check_components() {
         all_ok=0
     fi
     
-    # Check pip
-    if command_exists pip3 || command_exists pip; then
+    # Check pip (system-wide or inside venv)
+    if command_exists pip3 || command_exists pip || [[ -x "venv/bin/pip" ]]; then
         echo -e "${GREEN}[OK]${NC} pip is available"
     else
         echo -e "${RED}[MISSING]${NC} pip not found"
