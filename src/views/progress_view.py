@@ -6,15 +6,90 @@ thumbnails, normalize feedback, skipped entries, and fetching progress.
 """
 from PySide6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QProgressBar, QTextEdit, QFrame, QSizePolicy
+    QProgressBar, QTextEdit, QFrame, QGroupBox, QSizePolicy, QSpacerItem,
+    QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView,
+    QApplication
 )
-from PySide6.QtGui import QFont, QPixmap, QImage
-from PySide6.QtCore import Qt, QTimer, QByteArray, QBuffer
+from PySide6.QtGui import QFont, QPixmap, QImage, QIcon, QKeySequence, QPainter, QPainterPath
+from PySide6.QtCore import Qt, QTimer, QByteArray, QBuffer, QSize
 
+from config import DEFAULT_BITRATES, DEFAULT_QUALITIES, DOWNLOAD_ICON_PATH, REFRESH_ICON_PATH
 from utils import load_thumbnail
 from models import VideoInfo
 
 from io import BytesIO
+
+
+class TextProgressBar(QProgressBar):
+    """QProgressBar that displays format text even in indeterminate mode."""
+    def text(self):
+        if self.minimum() == 0 and self.maximum() == 0:
+            return self.format()
+        return super().text()
+
+
+class CopyableTableWidget(QTableWidget):
+    """QTableWidget that supports Ctrl+C to copy selected cells."""
+    def keyPressEvent(self, event):
+        if event.matches(QKeySequence.Copy):
+            selected = self.selectedIndexes()
+            if not selected:
+                return
+            rows = sorted(set(idx.row() for idx in selected))
+            cols = sorted(set(idx.column() for idx in selected))
+            lines = []
+            for r in rows:
+                cells = []
+                for c in cols:
+                    item = self.item(r, c)
+                    cells.append(item.text() if item else '')
+                lines.append('\t'.join(cells))
+            QApplication.clipboard().setText('\n'.join(lines))
+        else:
+            super().keyPressEvent(event)
+
+
+def _round_pixmap(pixmap, radius=4):
+    """Round the corners of a QPixmap."""
+    rounded = QPixmap(pixmap.size())
+    rounded.fill(Qt.transparent)
+    painter = QPainter(rounded)
+    painter.setRenderHint(QPainter.Antialiasing)
+    path = QPainterPath()
+    path.addRoundedRect(0, 0, pixmap.width(), pixmap.height(), radius, radius)
+    painter.setClipPath(path)
+    painter.drawPixmap(0, 0, pixmap)
+    painter.end()
+    return rounded
+
+
+class ScaledPixmapLabel(QLabel):
+    """QLabel that scales its pixmap to fit, maintaining aspect ratio with rounded corners."""
+    def __init__(self):
+        super().__init__()
+        self._original_pixmap = None
+        self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+
+    def setOriginalPixmap(self, pixmap):
+        self._original_pixmap = pixmap
+        self._update_scaled()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._update_scaled()
+
+    def _update_scaled(self):
+        if self._original_pixmap:
+            target_height = self.height() if self.height() > 0 else self.minimumHeight()
+            target_height = max(self.minimumHeight(), target_height)
+            if self.maximumHeight() > 0:
+                target_height = min(self.maximumHeight(), target_height)
+
+            scaled = self._original_pixmap.scaledToHeight(target_height, Qt.SmoothTransformation)
+            scaled = _round_pixmap(scaled)
+            super().setPixmap(scaled)
+            if self.width() != scaled.width():
+                self.setFixedWidth(scaled.width())
 
 
 class ProgressMixin:
@@ -28,9 +103,12 @@ class ProgressMixin:
         """Show download progress widgets."""
         self.disable_interactive_widgets()
         self.convert_button.hide()
+        if hasattr(self, 'set_pre_button_spacer_collapsed'):
+            self.set_pre_button_spacer_collapsed(True)
 
         # Create progress container
         self.progress_frame = QFrame()
+        self.progress_frame.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
         self.progress_layout = QVBoxLayout(self.progress_frame)
         self.progress_layout.setContentsMargins(7, 10, 7, 0)
 
@@ -42,61 +120,88 @@ class ProgressMixin:
 
         # Thumbnail + info row
         thumb_info_layout = QHBoxLayout()
-        self.thumbnail_label = QLabel()
-        self.thumbnail_label.setFixedSize(100, 60)
+        thumb_info_layout.setSpacing(4)
+        thumb_info_layout.setContentsMargins(0, 0, 0, 0)
+        self.thumbnail_label = ScaledPixmapLabel()
+        self.thumbnail_label.setMinimumHeight(60)
+        self.thumbnail_label.setMaximumHeight(100)
+        self.thumbnail_label.setFixedWidth(60)
         thumb_info_layout.addWidget(self.thumbnail_label, alignment=Qt.AlignLeft | Qt.AlignTop)
 
-        self.info_label = QLabel("")
-        self.info_label.setWordWrap(True)
-        thumb_info_layout.addWidget(self.info_label, 1)
+        self.info_table = QTableWidget(3, 2)
+        self.info_table.horizontalHeader().setVisible(False)
+        self.info_table.verticalHeader().setVisible(False)
+        self.info_table.setShowGrid(False)
+        self.info_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.info_table.setSelectionMode(QAbstractItemView.NoSelection)
+        self.info_table.setFocusPolicy(Qt.NoFocus)
+        self.info_table.setFont(QFont("Arial", 8))
+        self.info_table.setFrameShape(QFrame.NoFrame)
+        self.info_table.setStyleSheet(
+            "QTableWidget { border: none; background: transparent; padding: 0; margin: 0; }"
+            "QTableWidget::item { padding: 0px; margin: 0px; }"
+        )
+        self.info_table.setContentsMargins(0, 0, 0, 0)
+        self.info_table.setViewportMargins(0, 0, 0, 0)
+        self.info_table.horizontalHeader().setMinimumSectionSize(0)
+        self.info_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        self.info_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        self.info_table.verticalHeader().setDefaultSectionSize(20)
+        for row, label in enumerate(["Title", "Author", "Duration"]):
+            item = QTableWidgetItem(label)
+            item.setFont(QFont("Arial", 8, QFont.Bold))
+            item.setFlags(Qt.ItemIsEnabled)
+            self.info_table.setItem(row, 0, item)
+            val_item = QTableWidgetItem("")
+            val_item.setFlags(Qt.ItemIsEnabled)
+            self.info_table.setItem(row, 1, val_item)
+        self.info_table.setFixedHeight(3 * 20 + 2)
+        thumb_info_layout.addWidget(self.info_table, 1)
         self.progress_layout.addLayout(thumb_info_layout)
 
         # Element progress
-        elem_layout = QHBoxLayout()
-        self.progress_label = QLabel("Element progress :")
-        elem_layout.addWidget(self.progress_label)
+        self.progress_label = QLabel("Element progress")
+        self.progress_label.setFont(QFont("Arial", 8))
+        self.progress_layout.addWidget(self.progress_label)
 
-        self.video_progress = QProgressBar()
+        self.video_progress = TextProgressBar()
         self.video_progress.setRange(0, 1000)
         self.video_progress.setValue(0)
-        self.video_progress.setFixedWidth(300)
-        self.video_progress.setTextVisible(False)
-        elem_layout.addWidget(self.video_progress)
-
-        self.video_progress_percent = QLabel(" 0.0%")
-        self.video_progress_percent.setFixedWidth(80)
-        elem_layout.addWidget(self.video_progress_percent)
-        elem_layout.addStretch()
-        self.progress_layout.addLayout(elem_layout)
+        self.video_progress.setTextVisible(True)
+        self.video_progress.setFormat("0.0%")
+        self.video_progress.setAlignment(Qt.AlignCenter)
+        self.progress_layout.addWidget(self.video_progress)
+        self.video_progress_percent = None
 
         # Total progress (for playlists)
         if is_playlist:
-            total_layout = QHBoxLayout()
-            self.total_progress_label = QLabel("Total progress :")
-            total_layout.addWidget(self.total_progress_label)
+            self.total_progress_label = QLabel("Total progress")
+            self.total_progress_label.setFont(QFont("Arial", 8))
+            self.progress_layout.addWidget(self.total_progress_label)
 
-            self.total_progress = QProgressBar()
+            self.total_progress = TextProgressBar()
             self.total_progress.setRange(0, 1000)
             self.total_progress.setValue(0)
-            self.total_progress.setFixedWidth(300)
-            self.total_progress.setTextVisible(False)
-            total_layout.addWidget(self.total_progress)
+            self.total_progress.setTextVisible(True)
+            self.total_progress.setFormat("0.0%")
+            self.total_progress.setAlignment(Qt.AlignCenter)
+            self.progress_layout.addWidget(self.total_progress)
+            self.total_progress_percent = None
 
-            self.total_progress_percent = QLabel(" 0.0%")
-            self.total_progress_percent.setFixedWidth(80)
-            total_layout.addWidget(self.total_progress_percent)
-            total_layout.addStretch()
-            self.progress_layout.addLayout(total_layout)
-
-            # ETA label
-            self.eta_label = QLabel("")
-            self.progress_layout.addWidget(self.eta_label)
+            # ETA labels (elapsed left, remaining right)
+            eta_layout = QHBoxLayout()
+            self.eta_elapsed_label = QLabel("")
+            self.eta_remaining_label = QLabel("")
+            self.eta_remaining_label.setAlignment(Qt.AlignRight)
+            eta_layout.addWidget(self.eta_elapsed_label)
+            eta_layout.addWidget(self.eta_remaining_label)
+            self.progress_layout.addLayout(eta_layout)
             self._eta_callback = None
             self._eta_timer = QTimer(self)
             self._eta_timer.timeout.connect(self._update_eta_timer)
             self._eta_timer.start(1000)
 
-        self.main_layout.insertWidget(self.main_layout.indexOf(self.convert_button), self.progress_frame)
+        self.main_layout.insertWidget(self.main_layout.indexOf(self.convert_button), self.progress_frame, 1)
 
         # Create stop button
         self.stop_button = QPushButton("Stop download")
@@ -110,9 +215,12 @@ class ProgressMixin:
             QPushButton:hover { background-color: #c94444; }
         """)
         self.stop_button.clicked.connect(self._on_stop_click)
-        self.main_layout.insertWidget(self.main_layout.indexOf(self.convert_button), self.stop_button, alignment=Qt.AlignCenter)
-
-        self.adjust_window_size()
+        stop_idx = self.main_layout.indexOf(self.convert_button)
+        self._stop_spacer_top = QSpacerItem(0, 0, QSizePolicy.Minimum, QSizePolicy.Fixed)
+        self.main_layout.insertSpacerItem(stop_idx, self._stop_spacer_top)
+        self.main_layout.insertWidget(stop_idx + 1, self.stop_button, 0, Qt.AlignCenter)
+        self._stop_spacer_bottom = QSpacerItem(0, 0, QSizePolicy.Minimum, QSizePolicy.Fixed)
+        self.main_layout.insertSpacerItem(stop_idx + 2, self._stop_spacer_bottom)
 
     def hide_progress_widgets(self):
         """Hide progress widgets and restore convert button."""
@@ -120,6 +228,13 @@ class ProgressMixin:
         self._stop_eta_timer()
 
         if hasattr(self, 'stop_button') and self.stop_button is not None:
+            # Remove the spacer items around the stop button
+            if hasattr(self, '_stop_spacer_bottom') and self._stop_spacer_bottom is not None:
+                self.main_layout.removeItem(self._stop_spacer_bottom)
+                self._stop_spacer_bottom = None
+            if hasattr(self, '_stop_spacer_top') and self._stop_spacer_top is not None:
+                self.main_layout.removeItem(self._stop_spacer_top)
+                self._stop_spacer_top = None
             self.stop_button.hide()
             self.stop_button.deleteLater()
             self.stop_button = None
@@ -139,11 +254,19 @@ class ProgressMixin:
             self.normalize_outer_frame.deleteLater()
             self.normalize_outer_frame = None
             self._normalize_labels = None
+            self._normalize_table = None
             self._info_item_count = None
 
         self.convert_button.show()
+        if hasattr(self, 'set_pre_button_spacer_collapsed'):
+            self.set_pre_button_spacer_collapsed(False)
         self.set_convert_button_enabled(True)
         self.enable_interactive_widgets()
+
+        # Restore input widgets
+        if hasattr(self, 'input_container') and self.input_container is not None:
+            self.input_container.show()
+
         self.adjust_window_size()
 
     # ------------------------------------------------------------------
@@ -154,14 +277,20 @@ class ProgressMixin:
         """Transform the stop button into a 'New download' button."""
         for attr in ('progress_label', 'video_progress', 'video_progress_percent',
                       'total_progress_label', 'total_progress', 'total_progress_percent',
-                      'eta_label', 'thumbnail_label', 'info_label'):
+                      'eta_elapsed_label', 'eta_remaining_label', 'thumbnail_label', 'info_table'):
             widget = getattr(self, attr, None)
             if widget is not None:
                 widget.hide()
 
+        # Hide input widgets so the summary aligns to the top
+        if hasattr(self, 'input_container') and self.input_container is not None:
+            self.input_container.hide()
+
         if hasattr(self, 'stop_button') and self.stop_button is not None:
             self.stop_button.setEnabled(True)
-            self.stop_button.setText("New download")
+            self.stop_button.setText("  New download")
+            self.stop_button.setIcon(QIcon(REFRESH_ICON_PATH))
+            self.stop_button.setIconSize(QSize(18, 18))
             self.stop_button.setStyleSheet("""
                 QPushButton {
                     background-color: #238a45; color: white; border: none;
@@ -172,8 +301,6 @@ class ProgressMixin:
             self.stop_button.clicked.disconnect()
             self.stop_button.clicked.connect(self._on_download_again_click)
 
-        self.adjust_window_size()
-
     # ------------------------------------------------------------------
     # ETA management
     # ------------------------------------------------------------------
@@ -183,11 +310,16 @@ class ProgressMixin:
         self._eta_callback = callback
 
     def _update_eta_timer(self):
-        """Refresh the ETA label every second."""
-        if hasattr(self, 'eta_label') and self.eta_label is not None:
+        """Refresh the ETA labels every second."""
+        if hasattr(self, 'eta_elapsed_label') and self.eta_elapsed_label is not None:
             if callable(getattr(self, '_eta_callback', None)):
-                eta_text = self._eta_callback()
-                self.eta_label.setText(eta_text)
+                result = self._eta_callback()
+                if isinstance(result, tuple):
+                    self.eta_elapsed_label.setText(result[0])
+                    self.eta_remaining_label.setText(result[1])
+                else:
+                    self.eta_elapsed_label.setText(result)
+                    self.eta_remaining_label.setText("")
 
     def _stop_eta_timer(self):
         """Stop the ETA refresh timer."""
@@ -195,9 +327,14 @@ class ProgressMixin:
             self._eta_timer.stop()
 
     def update_eta(self, eta_text: str):
-        """Update the estimated remaining time label."""
-        if hasattr(self, 'eta_label') and self.eta_label is not None:
-            self.eta_label.setText(eta_text)
+        """Update the estimated remaining time labels."""
+        if hasattr(self, 'eta_elapsed_label') and self.eta_elapsed_label is not None:
+            if isinstance(eta_text, tuple):
+                self.eta_elapsed_label.setText(eta_text[0])
+                self.eta_remaining_label.setText(eta_text[1])
+            else:
+                self.eta_elapsed_label.setText(eta_text)
+                self.eta_remaining_label.setText("")
 
     # ------------------------------------------------------------------
     # Progress updates
@@ -210,16 +347,13 @@ class ProgressMixin:
 
         self.song_label.setText(song_name)
 
-        info_text = (
-            f"Title : \"{video_info.title}\"\n"
-            f"Channel : \"{video_info.uploader}\"\n"
-            f"Duration : {video_info.duration_formatted}"
-        )
-        self.info_label.setText(info_text)
+        self.info_table.item(0, 1).setText(video_info.title)
+        self.info_table.item(1, 1).setText(video_info.uploader)
+        self.info_table.item(2, 1).setText(video_info.duration_formatted)
 
         # Update thumbnail
         if video_info.thumbnail:
-            thumbnail = load_thumbnail(video_info.thumbnail, (100, 60), video_info.is_music)
+            thumbnail = load_thumbnail(video_info.thumbnail, (100, 100), video_info.is_music)
             if thumbnail:
                 # Convert PIL Image to QPixmap
                 buf = BytesIO()
@@ -228,29 +362,20 @@ class ProgressMixin:
                 qimg = QImage()
                 qimg.loadFromData(buf.getvalue())
                 pixmap = QPixmap.fromImage(qimg)
-                self.thumbnail_label.setPixmap(pixmap)
-
-                # Adjust thumbnail label size for square images
-                is_square = abs(thumbnail.size[0] - thumbnail.size[1]) < 5
-                if is_square:
-                    self.thumbnail_label.setFixedSize(60, 60)
-                else:
-                    self.thumbnail_label.setFixedSize(100, 60)
-
-        self.adjust_window_size()
+                self.thumbnail_label.setOriginalPixmap(pixmap)
 
     def update_video_progress(self, percentage: float, status: str = ""):
         """Update video download progress."""
         if not hasattr(self, 'video_progress') or self.video_progress is None:
             return
         if status == "processing":
-            self.video_progress.setRange(0, 0)  # indeterminate
-            self.video_progress_percent.setText("Processing")
+            self.video_progress.setRange(0, 0)  # indeterminate animation
+            self.video_progress.setFormat("Processing")
         else:
             if self.video_progress.maximum() == 0:
                 self.video_progress.setRange(0, 1000)
             self.video_progress.setValue(int(percentage * 10))
-            self.video_progress_percent.setText(f" {percentage:.1f}%")
+            self.video_progress.setFormat(f"{percentage:.1f}%")
 
     def update_total_progress(self, percentage: float):
         """Update total progress for playlists."""
@@ -258,9 +383,9 @@ class ProgressMixin:
             return
         self.total_progress.setValue(int(percentage * 10))
         if percentage >= 100:
-            self.total_progress_percent.setText("Done")
+            self.total_progress.setFormat("Done")
         else:
-            self.total_progress_percent.setText(f" {percentage:.1f}%")
+            self.total_progress.setFormat(f"{percentage:.1f}%")
 
     # ------------------------------------------------------------------
     # Skipped entries panel
@@ -306,7 +431,6 @@ class ProgressMixin:
         skipped_layout.addWidget(self._skipped_text)
 
         self.progress_layout.addWidget(self._skipped_frame)
-        self.adjust_window_size()
 
     def show_age_restricted_entries(self, entries: list):
         """Show age-restricted entries in the skipped panel."""
@@ -347,7 +471,6 @@ class ProgressMixin:
             self._skipped_text.setPlainText(current + "\n" + "\n".join(new_lines))
             total_lines = self._skipped_text.toPlainText().count('\n') + 1
             self._skipped_text.setFixedHeight(min(total_lines * 18 + 10, 120))
-            self.adjust_window_size()
         else:
             self.show_skipped_entries(formatted)
 
@@ -365,77 +488,83 @@ class ProgressMixin:
         self._info_item_count += 1
         num = self._info_item_count
 
-        display_name = info.get('display_name', info.get('title', 'Unknown'))
+        artist = info.get('artist', '')
+        title = info.get('title', info.get('display_name', 'Unknown'))
+        metadata = "Yes" if info.get('metadata_found') else "No"
+        lyrics_type = info.get('lyrics_type', 'No')
 
-        parts = []
-        if info.get('metadata_found'):
-            parts.append("Metadatas")
-        elif info.get('type') == 'track_summary':
-            parts.append("No metadatas")
-        if info.get('lyrics_found'):
-            parts.append("Lyrics")
-        elif info.get('type') == 'track_summary':
-            parts.append("No lyrics")
         volume = info.get('volume')
         if volume:
-            measured = volume['measured']
-            target = volume['target']
-            diff = measured - target
-            if diff > 0:
-                parts.append(f"-{abs(diff):.1f} dB")
-            else:
-                parts.append(f"+{abs(diff):.1f} dB")
+            diff = volume['measured'] - volume['target']
+            norm_str = f"{-diff:+.1f} dB" if diff > 0 else f"{abs(diff):+.1f} dB"
+        else:
+            norm_str = ""
 
-        separator = "  |  "
-        feedback = f"{num}. {display_name}{separator}{separator.join(parts)}" if parts else f"{num}. {display_name}"
-
-        MAX_VISIBLE = 5
-        ITEM_HEIGHT = 18
+        MAX_VISIBLE = 8
+        ROW_HEIGHT = 24
 
         if not hasattr(self, '_normalize_labels') or self._normalize_labels is None:
             self._normalize_labels = []
 
-            self.normalize_outer_frame = QFrame()
+            self.normalize_outer_frame = QGroupBox("Downloaded elements")
+            self.normalize_outer_frame.setFont(QFont("Arial", 9, QFont.Bold))
             norm_layout = QVBoxLayout(self.normalize_outer_frame)
-            norm_layout.setContentsMargins(5, 2, 5, 8)
+            norm_layout.setContentsMargins(5, 10, 5, 8)
 
-            header_lbl = QLabel("Downloaded elements")
-            header_lbl.setFont(QFont("Arial", 9, QFont.Bold))
-            norm_layout.addWidget(header_lbl)
+            self._normalize_table = CopyableTableWidget(0, 6)
+            self._normalize_table.setHorizontalHeaderLabels(
+                ["#", "Artist", "Title", "Metadatas", "Lyrics", "Norm."]
+            )
+            self._normalize_table.setFont(QFont("Arial", 8))
+            self._normalize_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+            self._normalize_table.setSelectionMode(QAbstractItemView.ExtendedSelection)
+            self._normalize_table.verticalHeader().setVisible(False)
+            self._normalize_table.setShowGrid(False)
+            self._normalize_table.setStyleSheet(
+                "QTableWidget { border: none; background: transparent; }"
+                "QTableWidget QTableCornerButton::section { background: transparent; }"
+                "QHeaderView { background: transparent; }"
+                "QHeaderView::section { border: none; border-bottom: 1px solid palette(mid); background: transparent; }"
+            )
 
-            line = QFrame()
-            line.setFrameShape(QFrame.HLine)
-            norm_layout.addWidget(line)
+            header = self._normalize_table.horizontalHeader()
+            header.setFont(QFont("Arial", 8, QFont.Bold))
+            header.setSectionResizeMode(0, QHeaderView.ResizeToContents)  # #
+            header.setSectionResizeMode(1, QHeaderView.Stretch)          # Artist
+            header.setSectionResizeMode(2, QHeaderView.Stretch)          # Title
+            header.setSectionResizeMode(3, QHeaderView.ResizeToContents)  # Metadatas
+            header.setSectionResizeMode(4, QHeaderView.ResizeToContents)  # Lyrics
+            header.setSectionResizeMode(5, QHeaderView.ResizeToContents)  # Norm.
+            header.setDefaultAlignment(Qt.AlignLeft | Qt.AlignVCenter)
 
-            self._normalize_text = QTextEdit()
-            self._normalize_text.setReadOnly(True)
-            self._normalize_text.setFont(QFont("Arial", 8))
-            self._normalize_text.setStyleSheet("border: none;")
-            self._normalize_text.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-            norm_layout.addWidget(self._normalize_text)
-
+            norm_layout.addWidget(self._normalize_table, 1)
+            self.progress_layout.addSpacing(10)
             self.progress_layout.addWidget(self.normalize_outer_frame)
 
-        # Append the new line
-        if self._normalize_labels:
-            current = self._normalize_text.toPlainText()
-            self._normalize_text.setPlainText(current + "\n" + feedback)
-        else:
-            self._normalize_text.setPlainText(feedback)
-        self._normalize_labels.append(feedback)
+            # Let the table area stretch immediately
+            idx = self.progress_layout.indexOf(self.normalize_outer_frame)
+            if idx >= 0:
+                self.progress_layout.setStretch(idx, 1)
+            self.progress_frame.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
+
+        # Add a row
+        row = self._normalize_table.rowCount()
+        self._normalize_table.insertRow(row)
+        self._normalize_table.setRowHeight(row, ROW_HEIGHT)
+        for col, text in enumerate([str(num), artist, title, metadata, lyrics_type, norm_str]):
+            item = QTableWidgetItem(text)
+            item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
+            self._normalize_table.setItem(row, col, item)
+        self._normalize_labels.append(num)
 
         count = len(self._normalize_labels)
+        header_h = self._normalize_table.horizontalHeader().height()
         if count <= MAX_VISIBLE:
-            self._normalize_text.setFixedHeight(count * ITEM_HEIGHT + 10)
+            self._normalize_table.setMinimumHeight(header_h + count * ROW_HEIGHT + 2)
         else:
-            self._normalize_text.setFixedHeight(MAX_VISIBLE * ITEM_HEIGHT + 10)
+            self._normalize_table.setMinimumHeight(header_h + MAX_VISIBLE * ROW_HEIGHT + 2)
 
-        # Scroll to bottom
-        scrollbar = self._normalize_text.verticalScrollBar()
-        scrollbar.setValue(scrollbar.maximum())
-
-        if count <= MAX_VISIBLE:
-            self.adjust_window_size()
+        self._normalize_table.scrollToBottom()
 
     # ------------------------------------------------------------------
     # Fetching progress (pre-download info retrieval)
@@ -445,6 +574,8 @@ class ProgressMixin:
         """Show fetching progress bar."""
         self.disable_interactive_widgets()
         self.convert_button.hide()
+        if hasattr(self, 'set_pre_button_spacer_collapsed'):
+            self.set_pre_button_spacer_collapsed(True)
 
         self.fetching_frame = QFrame()
         fetching_layout = QVBoxLayout(self.fetching_frame)
@@ -457,16 +588,14 @@ class ProgressMixin:
         fetching_layout.addWidget(self.fetching_label)
 
         self.fetching_progress = QProgressBar()
-        self.fetching_progress.setFixedWidth(300)
         if is_playlist:
             self.fetching_progress.setRange(0, 100)
             self.fetching_progress.setValue(0)
         else:
             self.fetching_progress.setRange(0, 0)  # indeterminate
-        fetching_layout.addWidget(self.fetching_progress, alignment=Qt.AlignCenter)
+        fetching_layout.addWidget(self.fetching_progress)
 
         self.main_layout.insertWidget(self.main_layout.indexOf(self.convert_button), self.fetching_frame)
-        self.adjust_window_size()
 
     def update_fetching_progress(self, current: int, total: int = None):
         """Update the fetching progress bar and label."""
@@ -494,4 +623,6 @@ class ProgressMixin:
 
         self.enable_interactive_widgets()
         self.convert_button.show()
+        if hasattr(self, 'set_pre_button_spacer_collapsed'):
+            self.set_pre_button_spacer_collapsed(False)
         self.set_convert_button_enabled(True)

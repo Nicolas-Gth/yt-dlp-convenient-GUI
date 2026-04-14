@@ -44,6 +44,7 @@ class MainApplicationView(QMainWindow, WindowMixin, WidgetsMixin, ProgressMixin,
         self.on_format_change_callback = None
         self.on_playlist_change_callback = None
         self.on_stop_callback = None
+        self.on_theme_change_callback = None
 
     # ------------------------------------------------------------------
     # Variables (simple Python attributes instead of Tk vars)

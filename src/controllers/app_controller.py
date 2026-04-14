@@ -3,14 +3,12 @@ Main application controller coordinating view and download operations.
 """
 import datetime
 import os
-import subprocess
 import sys
 import time
 from typing import Dict, Any, Optional
 
 from PySide6.QtWidgets import QApplication, QMessageBox
-from PySide6.QtCore import QObject, Signal, Slot, Qt
-from PySide6.QtGui import QPalette, QColor
+from PySide6.QtCore import QObject, Signal, Slot
 
 from views import MainApplicationView
 from controllers.download_controller import DownloadController
@@ -18,6 +16,8 @@ from models import VideoInfo, PlaylistInfo, DownloadProgress
 from config import FILE_FORMATS, COOKIES_PATH
 from utils.cookies_validator_utils import validate_cookies_file
 from utils.sleep_inhibitor_utils import sleep_inhibitor
+from utils.theme_utils import apply_theme
+from utils import settings_manager
 
 
 class _MainThreadInvoker(QObject):
@@ -53,11 +53,13 @@ class ApplicationController:
     def __init__(self):
         self.app = QApplication.instance() or QApplication(sys.argv)
         self.app.setStyle('Fusion')
-        if self._system_prefers_dark():
-            self._apply_dark_palette()
+        # Apply saved or system theme
+        saved_theme = settings_manager.get_setting('theme', 'system')
+        apply_theme(self.app, saved_theme)
         # Invoker must be parented to app to prevent GC and ensure main-thread affinity
         self._invoker = _MainThreadInvoker(self.app)
         self.view = MainApplicationView()
+        self.view.set_theme_checked(saved_theme)
         self.download_controller = DownloadController()
         self.current_video_info: Optional[Dict] = None
         self._current_config = None
@@ -81,64 +83,10 @@ class ApplicationController:
         self.download_controller.set_format_unavailable_callback(self.on_format_unavailable_entry)
         self.download_controller.set_video_unavailable_callback(self.on_video_unavailable_entry)
     
-    @staticmethod
-    def _system_prefers_dark() -> bool:
-        """Detect if the OS is using a dark colour scheme."""
-        # On Linux, check GNOME/GTK settings first (Qt often misdetects)
-        if sys.platform.startswith('linux'):
-            try:
-                out = subprocess.check_output(
-                    ['gsettings', 'get', 'org.gnome.desktop.interface', 'color-scheme'],
-                    stderr=subprocess.DEVNULL, timeout=2
-                ).decode().strip().strip("'")
-                if 'dark' in out:
-                    return True
-                if 'light' in out or 'default' in out:
-                    return False
-            except Exception:
-                pass
-            try:
-                out = subprocess.check_output(
-                    ['gsettings', 'get', 'org.gnome.desktop.interface', 'gtk-theme'],
-                    stderr=subprocess.DEVNULL, timeout=2
-                ).decode().strip().strip("'")
-                if 'dark' in out.lower():
-                    return True
-            except Exception:
-                pass
-        # macOS / Windows / fallback: use Qt's colorScheme
-        hints = QApplication.instance().styleHints()
-        if hasattr(hints, 'colorScheme'):
-            scheme = hints.colorScheme()
-            if scheme == Qt.ColorScheme.Dark:
-                return True
-            if scheme == Qt.ColorScheme.Light:
-                return False
-        return False
-
-    def _apply_dark_palette(self):
-        """Apply a dark Fusion palette."""
-        palette = QPalette()
-        bg = QColor('#333333')
-        dark = QColor('#2a2a2a')
-        mid = QColor('#444444')
-        text = QColor('white')
-        highlight = QColor('#238a45')
-        palette.setColor(QPalette.Window, bg)
-        palette.setColor(QPalette.WindowText, text)
-        palette.setColor(QPalette.Base, mid)
-        palette.setColor(QPalette.AlternateBase, dark)
-        palette.setColor(QPalette.ToolTipBase, QColor('#222222'))
-        palette.setColor(QPalette.ToolTipText, text)
-        palette.setColor(QPalette.Text, text)
-        palette.setColor(QPalette.Button, mid)
-        palette.setColor(QPalette.ButtonText, text)
-        palette.setColor(QPalette.BrightText, QColor('red'))
-        palette.setColor(QPalette.Highlight, highlight)
-        palette.setColor(QPalette.HighlightedText, text)
-        palette.setColor(QPalette.Disabled, QPalette.Text, QColor('#888888'))
-        palette.setColor(QPalette.Disabled, QPalette.ButtonText, QColor('#888888'))
-        self.app.setPalette(palette)
+    def _on_theme_change(self, name: str):
+        """Callback when user changes theme from the menu."""
+        apply_theme(self.app, name)
+        settings_manager.set_setting('theme', name)
 
     def setup_callbacks(self):
         """Connect view callbacks to controller methods."""
@@ -147,6 +95,7 @@ class ApplicationController:
         self.view.on_playlist_change_callback = self.on_playlist_change
         self.view.on_browse_callback = self.on_browse_directory
         self.view.on_stop_callback = self.on_stop_download
+        self.view.on_theme_change_callback = self._on_theme_change
     
     def start_conversion(self):
         """Start the conversion process."""
@@ -347,7 +296,7 @@ class ApplicationController:
         remaining_count = playlist_length - current_index
         
         if remaining_count <= 0:
-            return f"Elapsed time: {elapsed_str} — Finishing..."
+            return (f"Elapsed time: {elapsed_str}", "Finishing...")
         
         remaining_durations = []
         entries = []
@@ -413,7 +362,7 @@ class ApplicationController:
                 remaining_for_rest = estimated_element_total * (remaining_count - 1)
             remaining_seconds = int(remaining_for_current + remaining_for_rest)
         else:
-            return f"Elapsed time: {elapsed_str} — Estimated remaining time: calculating..."
+            return (f"Elapsed time: {elapsed_str}", "Estimated remaining time: calculating...")
         
         if remaining_seconds < 60:
             eta_str = f"{remaining_seconds}s"
@@ -425,7 +374,7 @@ class ApplicationController:
             minutes, secs = divmod(remainder, 60)
             eta_str = f"{hours}h {minutes:02d}m {secs:02d}s"
         
-        return f"Elapsed time: {elapsed_str} — Estimated remaining time: ~{eta_str}"
+        return (f"Elapsed time: {elapsed_str}", f"Estimated remaining time: ~{eta_str}")
     
     def on_download_progress(self, progress_data: Dict, video_info: Dict, progress: DownloadProgress):
         """Handle download progress updates (called from download thread)."""

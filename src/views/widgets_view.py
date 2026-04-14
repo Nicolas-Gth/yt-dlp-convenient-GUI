@@ -8,7 +8,7 @@ normalize options, enrich metadata, convert button, and disclaimer.
 from PySide6.QtWidgets import (
     QHBoxLayout, QVBoxLayout, QLabel, QLineEdit, QPushButton,
     QRadioButton, QCheckBox, QComboBox, QButtonGroup, QSpinBox,
-    QSizePolicy
+    QSizePolicy, QGroupBox
 )
 from PySide6.QtGui import QFont, QIcon
 from PySide6.QtCore import Qt, QSize
@@ -26,14 +26,28 @@ class WidgetsMixin:
         self.create_path_input()
         self.create_format_selection()
         self.create_playlist_selection()
-        self.create_normalize_selection()
-        self.create_enrich_selection()
-        self.create_prevent_sleep_selection()
+        self.create_options_selection()
         self.main_layout.addStretch()
+        # Keep a handle to the spacer above the main action button.
+        # This lets the progress summary snap under the checkboxes when active.
+        spacer_item = self.main_layout.itemAt(self.main_layout.count() - 1)
+        self._pre_button_spacer = spacer_item.spacerItem() if spacer_item is not None else None
         self.create_convert_button()
         self.main_layout.addStretch()
         self.create_disclaimer()
         self.adjust_window_size()
+
+    def set_pre_button_spacer_collapsed(self, collapsed: bool):
+        """Collapse/restore the spacer above the convert button."""
+        if not hasattr(self, '_pre_button_spacer') or self._pre_button_spacer is None:
+            return
+
+        if collapsed:
+            self._pre_button_spacer.changeSize(0, 0, QSizePolicy.Minimum, QSizePolicy.Fixed)
+        else:
+            self._pre_button_spacer.changeSize(0, 0, QSizePolicy.Minimum, QSizePolicy.Expanding)
+
+        self.main_layout.invalidate()
 
     # ------------------------------------------------------------------
     # URL input
@@ -84,11 +98,8 @@ class WidgetsMixin:
 
     def create_format_selection(self):
         """Create file format selection widgets."""
-        format_layout = QHBoxLayout()
-        format_layout.setContentsMargins(5, 10, 5, 0)
-
-        format_label = QLabel("  File output format :    ")
-        format_layout.addWidget(format_label)
+        format_box = QGroupBox("File output format")
+        format_layout = QHBoxLayout(format_box)
 
         self.format_group = QButtonGroup(self)
         self.mp3_radio = QRadioButton("Mp3")
@@ -112,7 +123,10 @@ class WidgetsMixin:
         format_layout.addWidget(self.quality_menu)
         format_layout.addStretch()
 
-        self.main_layout.addLayout(format_layout)
+        format_wrapper = QHBoxLayout()
+        format_wrapper.setContentsMargins(5, 10, 5, 0)
+        format_wrapper.addWidget(format_box)
+        self.main_layout.addLayout(format_wrapper)
 
         # Set initial format from preferences
         fmt = self._format_var
@@ -166,11 +180,8 @@ class WidgetsMixin:
 
     def create_playlist_selection(self):
         """Create playlist selection widgets."""
-        self.playlist_layout = QHBoxLayout()
-        self.playlist_layout.setContentsMargins(5, 10, 5, 0)
-
-        playlist_label = QLabel("  Playlist download :    ")
-        self.playlist_layout.addWidget(playlist_label)
+        self.playlist_box = QGroupBox("Playlist download")
+        self.playlist_layout = QHBoxLayout(self.playlist_box)
 
         self.playlist_group = QButtonGroup(self)
         self.no_playlist_radio = QRadioButton("No")
@@ -185,7 +196,7 @@ class WidgetsMixin:
         self.playlist_layout.addWidget(self.yes_playlist_radio)
 
         # Playlist range widgets (hidden by default)
-        self.playlist_from_label = QLabel("                  From video ")
+        self.playlist_from_label = QLabel("          From video ")
         self.playlist_start_entry = QSpinBox()
         self.playlist_start_entry.setRange(1, 9999)
         self.playlist_start_entry.setValue(1)
@@ -202,7 +213,10 @@ class WidgetsMixin:
         self.playlist_layout.addWidget(self.playlist_end_entry)
         self.playlist_layout.addStretch()
 
-        self.main_layout.addLayout(self.playlist_layout)
+        playlist_wrapper = QHBoxLayout()
+        playlist_wrapper.setContentsMargins(5, 10, 5, 0)
+        playlist_wrapper.addWidget(self.playlist_box)
+        self.main_layout.addLayout(playlist_wrapper)
 
         # Set initial state from preferences
         if self._playlist_var == 0:
@@ -239,10 +253,13 @@ class WidgetsMixin:
     # Normalize selection
     # ------------------------------------------------------------------
 
-    def create_normalize_selection(self):
-        """Create volume normalization checkbox and target input."""
+    def create_options_selection(self):
+        """Create options fieldset with normalize, enrich and prevent-sleep checkboxes."""
+        options_box = QGroupBox("Options")
+        options_layout = QVBoxLayout(options_box)
+
+        # Normalize volume
         self.normalize_layout = QHBoxLayout()
-        self.normalize_layout.setContentsMargins(5, 5, 5, 0)
 
         self.normalize_check = QCheckBox("  Normalize volume")
         self.normalize_check.setCursor(Qt.PointingHandCursor)
@@ -265,7 +282,7 @@ class WidgetsMixin:
         self.normalize_layout.addWidget(self.normalize_hint_label)
         self.normalize_layout.addStretch()
 
-        self.main_layout.addLayout(self.normalize_layout)
+        options_layout.addLayout(self.normalize_layout)
 
         # Set initial visibility
         visible = self._normalize_var
@@ -273,26 +290,8 @@ class WidgetsMixin:
         self.normalize_target_entry.setVisible(visible)
         self.normalize_hint_label.setVisible(visible)
 
-    def show_normalize_input(self):
-        """Show the normalize target LUFS input."""
-        self.normalize_target_label.setVisible(True)
-        self.normalize_target_entry.setVisible(True)
-        self.normalize_hint_label.setVisible(True)
-
-    def hide_normalize_input(self):
-        """Hide the normalize target LUFS input."""
-        self.normalize_target_label.setVisible(False)
-        self.normalize_target_entry.setVisible(False)
-        self.normalize_hint_label.setVisible(False)
-
-    # ------------------------------------------------------------------
-    # Enrich metadata selection
-    # ------------------------------------------------------------------
-
-    def create_enrich_selection(self):
-        """Create metadata enrichment checkbox."""
+        # Enrich metadata
         enrich_layout = QHBoxLayout()
-        enrich_layout.setContentsMargins(5, 5, 5, 0)
 
         self.enrich_check = QCheckBox("  Enrich metadata (HD album cover + lyrics)")
         self.enrich_check.setCursor(Qt.PointingHandCursor)
@@ -306,16 +305,10 @@ class WidgetsMixin:
         enrich_layout.addWidget(self.enrich_hint)
         enrich_layout.addStretch()
 
-        self.main_layout.addLayout(enrich_layout)
+        options_layout.addLayout(enrich_layout)
 
-    # ------------------------------------------------------------------
-    # Prevent sleep selection
-    # ------------------------------------------------------------------
-
-    def create_prevent_sleep_selection(self):
-        """Create checkbox to prevent system sleep during downloads."""
+        # Prevent sleep
         sleep_layout = QHBoxLayout()
-        sleep_layout.setContentsMargins(5, 5, 5, 0)
 
         self.prevent_sleep_check = QCheckBox("  Prevent sleep during download")
         self.prevent_sleep_check.setCursor(Qt.PointingHandCursor)
@@ -324,7 +317,25 @@ class WidgetsMixin:
         sleep_layout.addWidget(self.prevent_sleep_check)
         sleep_layout.addStretch()
 
-        self.main_layout.addLayout(sleep_layout)
+        options_layout.addLayout(sleep_layout)
+
+        options_wrapper = QHBoxLayout()
+        options_wrapper.setContentsMargins(5, 10, 5, 0)
+        options_wrapper.addWidget(options_box)
+
+        self.main_layout.addLayout(options_wrapper)
+
+    def show_normalize_input(self):
+        """Show the normalize target LUFS input."""
+        self.normalize_target_label.setVisible(True)
+        self.normalize_target_entry.setVisible(True)
+        self.normalize_hint_label.setVisible(True)
+
+    def hide_normalize_input(self):
+        """Hide the normalize target LUFS input."""
+        self.normalize_target_label.setVisible(False)
+        self.normalize_target_entry.setVisible(False)
+        self.normalize_hint_label.setVisible(False)
 
     # ------------------------------------------------------------------
     # Convert button

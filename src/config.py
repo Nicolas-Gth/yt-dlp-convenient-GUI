@@ -4,7 +4,7 @@ Configuration and constants for the yt-dlp GUI application.
 import os
 
 # Application version
-APP_VERSION = "2.7.0"
+APP_VERSION = "3.0.0"
 
 # Application name
 APP_NAME = "yt-dlp Convenient GUI"
@@ -64,6 +64,9 @@ FILE_FORMATS = {
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 ICON_PATH = os.path.join(SCRIPT_DIR, '..', 'assets', 'icon.ico')
 DOWNLOAD_ICON_PATH = os.path.join(SCRIPT_DIR, '..', 'assets', 'download-icon.svg')
+# Keep a dedicated symbol for the "New download" button icon.
+# Reuse the existing asset until a separate refresh icon is added.
+REFRESH_ICON_PATH = DOWNLOAD_ICON_PATH
 COOKIES_PATH = os.path.join(SCRIPT_DIR, '..', 'cookies.txt')
 COOKIES_DIR = os.path.dirname(COOKIES_PATH)
 
