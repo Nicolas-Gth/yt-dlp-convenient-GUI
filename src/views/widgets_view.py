@@ -128,16 +128,19 @@ class WidgetsMixin:
         )
         self.mp4_radio.grid(row=0, column=3)
 
+        # Opus radio button
+        self.opus_radio = ttk.Radiobutton(
+            self.frame1,
+            text="Opus",
+            command=self._on_opus_selected,
+            variable=self.format_var,
+            value=3,
+            cursor="hand2"
+        )
+        self.opus_radio.grid(row=0, column=5)
+
         # Create the appropriate menu based on saved format
-        if self.format_var.get() == 1:  # MP3
-            self.quality_menu = ttk.OptionMenu(
-                self.frame1,
-                self.bitrate_var,
-                self.bitrate_var.get(),
-                *DEFAULT_BITRATES,
-                command=self._on_bitrate_changed
-            )
-        else:  # MP4
+        if self.format_var.get() == 2:  # MP4
             self.quality_menu = ttk.OptionMenu(
                 self.frame1,
                 self.quality_var,
@@ -145,7 +148,15 @@ class WidgetsMixin:
                 *DEFAULT_QUALITIES,
                 command=self._on_quality_changed
             )
-        self.quality_menu.grid(row=0, column=4)
+        else:  # MP3 or Opus (audio formats use bitrate)
+            self.quality_menu = ttk.OptionMenu(
+                self.frame1,
+                self.bitrate_var,
+                self.bitrate_var.get(),
+                *DEFAULT_BITRATES,
+                command=self._on_bitrate_changed
+            )
+        self.quality_menu.grid(row=0, column=6)
 
     # ------------------------------------------------------------------
     # Playlist selection
@@ -246,7 +257,7 @@ class WidgetsMixin:
             *DEFAULT_QUALITIES,
             command=self._on_quality_changed
         )
-        self.quality_menu.grid(row=0, column=4)
+        self.quality_menu.grid(row=0, column=6)
 
     def switch_to_bitrate_menu(self):
         """Switch from quality to bitrate menu (MP3)."""
@@ -258,7 +269,7 @@ class WidgetsMixin:
             *DEFAULT_BITRATES,
             command=self._on_bitrate_changed
         )
-        self.quality_menu.grid(row=0, column=4)
+        self.quality_menu.grid(row=0, column=6)
 
     # ------------------------------------------------------------------
     # Normalize selection

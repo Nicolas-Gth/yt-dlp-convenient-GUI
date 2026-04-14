@@ -10,7 +10,7 @@ The heavy lifting is split across:
 import tkinter as tk
 from tkinter import StringVar, IntVar, DoubleVar, BooleanVar
 
-from config import COLORS, DEFAULT_BITRATE, DEFAULT_QUALITY, DEFAULT_NORMALIZE_TARGET
+from config import COLORS, DEFAULT_BITRATE, DEFAULT_QUALITY, DEFAULT_NORMALIZE_TARGET, FILE_FORMATS
 from utils import settings_manager
 from models import DownloadConfig
 
@@ -91,7 +91,7 @@ class MainApplicationView(WindowMixin, WidgetsMixin, ProgressMixin, EventHandler
         config = DownloadConfig()
         config.url = self.url_var.get().strip()
         config.output_directory = self.folder_path.get()
-        config.file_format = "mp3" if self.format_var.get() == 1 else "mp4"
+        config.file_format = FILE_FORMATS.get(self.format_var.get(), "mp3")
         config.is_playlist = self.playlist_var.get() == 0
         config.normalize_volume = self.normalize_var.get()
         config.normalize_target = self._get_normalize_target()
@@ -113,12 +113,12 @@ class MainApplicationView(WindowMixin, WidgetsMixin, ProgressMixin, EventHandler
             prevent_sleep=self.prevent_sleep_var.get()
         )
 
-        if config.file_format == "mp3":
+        if config.file_format in ("mp3", "opus"):
             raw_bitrate = self.bitrate_var.get()
-            config.bitrate = "best" if raw_bitrate == "Best" else raw_bitrate.split("Kbps")[0]
+            config.bitrate = "best" if raw_bitrate == "Best" else raw_bitrate.replace("Max ", "").split("Kbps")[0]
         else:
             raw_quality = self.quality_var.get()
-            config.quality = "best" if raw_quality == "Best" else raw_quality.split("p")[0]
+            config.quality = "best" if raw_quality == "Best" else raw_quality.replace("Max ", "").split("p")[0]
 
         if config.is_playlist and hasattr(self, 'playlist_start_entry'):
             try:

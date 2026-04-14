@@ -11,9 +11,21 @@ import yt_dlp
 from mutagen.id3 import ID3, APIC, TDRC, TCON
 from mutagen.mp3 import MP3
 from mutagen.easyid3 import EasyID3
+from mutagen.oggopus import OggOpus
+from mutagen.flac import Picture
 
 from models import DownloadConfig
-from utils import crop_album_cover, enrich_metadata, apply_enriched_metadata_mp3
+from utils import crop_album_cover, enrich_metadata, apply_enriched_metadata_mp3, apply_enriched_metadata_opus
+
+
+def _build_flac_picture(image_data: bytes, mime: str = 'image/jpeg') -> Picture:
+    """Build a FLAC Picture block for embedding in Ogg containers."""
+    pic = Picture()
+    pic.type = 3  # Front cover
+    pic.mime = mime
+    pic.desc = 'Cover'
+    pic.data = image_data
+    return pic
 
 
 class CustomPostProcessor(yt_dlp.postprocessor.PostProcessor):
@@ -57,6 +69,22 @@ class CustomPostProcessor(yt_dlp.postprocessor.PostProcessor):
             print(f"Warning: File {file_path} not found. Conversion may have failed.")
             return [], video_infos
 
+        # For opus: yt-dlp downloads opus audio inside a .webm container.
+        # We remux to a proper .opus (Ogg) file here using the 'ogg' muxer,
+        # because the 'opus' muxer is broken in some ffmpeg builds.
+        if file_format == "opus" and not file_path.endswith('.opus'):
+            file_path = self._remux_to_opus(file_path, video_infos)
+            if file_path is None:
+                return [], video_infos
+
+        # For mp3: convert with bitrate capping (source bitrate as ceiling).
+        # We handle conversion here instead of FFmpegExtractAudio so we can
+        # probe the source and avoid inflating files above their original bitrate.
+        if file_format == "mp3" and not file_path.endswith('.mp3'):
+            file_path = self._convert_to_mp3(file_path, video_infos)
+            if file_path is None:
+                return [], video_infos
+
         # --- Collect all info for this track's summary line ---
         track_info = {
             'type': 'track_summary',
@@ -87,19 +115,220 @@ class CustomPostProcessor(yt_dlp.postprocessor.PostProcessor):
         # Add metadata to the file
         if file_format == "mp3":
             self._add_mp3_metadata(file_path, video_infos, artist_name)
+        elif file_format == "opus":
+            self._add_opus_metadata(file_path, video_infos, artist_name)
 
         # Rename and sanitize the file name
         new_file_path = self._sanitize_and_rename_file(file_path, video_infos, artist_name, file_format)
 
-        # Add album cover for MP3 files
+        # Add album cover for audio files
         if file_format == "mp3" and os.path.exists(new_file_path):
             self._add_album_cover(new_file_path, video_infos, track_info)
+        elif file_format == "opus" and os.path.exists(new_file_path):
+            self._add_opus_album_cover(new_file_path, video_infos, track_info)
 
         # Send combined summary line to UI
         if self.normalize_callback:
             self.normalize_callback(track_info)
 
         return [], video_infos
+
+    # ------------------------------------------------------------------
+    # Opus remux (WebM → Ogg Opus)
+    # ------------------------------------------------------------------
+
+    def _remux_to_opus(self, file_path: str, video_infos: Dict) -> str:
+        """Remux a WebM file containing opus audio to a proper .opus (Ogg) file.
+
+        Uses the 'ogg' muxer instead of the 'opus' muxer to avoid the
+        "Function not implemented" error on some ffmpeg builds.
+        Returns the new file path, or None on failure.
+        """
+        from config import get_ffmpeg_path
+        ffmpeg_dir = get_ffmpeg_path()
+        if ffmpeg_dir:
+            ffmpeg_bin = os.path.join(ffmpeg_dir, 'ffmpeg')
+            if not os.path.exists(ffmpeg_bin):
+                ffmpeg_bin = 'ffmpeg'
+        else:
+            ffmpeg_bin = 'ffmpeg'
+
+        opus_path = os.path.splitext(file_path)[0] + '.opus'
+
+        # Probe source bitrate to avoid useless re-encoding
+        source_bitrate = self._probe_audio_bitrate(file_path, ffmpeg_dir)
+
+        # Determine if we need to re-encode
+        needs_reencode = False
+        target_bitrate = None
+
+        if self.config.bitrate and self.config.bitrate.lower() != 'best':
+            target_bitrate = int(self.config.bitrate)
+            # Only re-encode if the source bitrate is above the target (cap)
+            if source_bitrate and source_bitrate > target_bitrate:
+                needs_reencode = True
+
+        # Build ffmpeg command
+        cmd = [ffmpeg_bin, '-y', '-i', file_path]
+
+        if self.config.normalize_volume:
+            target = self.config.normalize_target
+            # Normalization always requires re-encoding
+            bitrate_args = []
+            if target_bitrate and needs_reencode:
+                bitrate_args = ['-b:a', f'{target_bitrate}k']
+            elif source_bitrate:
+                # Preserve original bitrate during normalization
+                bitrate_args = ['-b:a', f'{source_bitrate}k']
+            cmd += ['-c:a', 'libopus'] + bitrate_args + ['-af', f'loudnorm=I={target}:TP=-1.5:LRA=11']
+        elif needs_reencode:
+            cmd += ['-c:a', 'libopus', '-b:a', f'{target_bitrate}k']
+        else:
+            cmd += ['-c:a', 'copy']
+
+        cmd += ['-f', 'ogg', opus_path]
+
+        print(f"[opus remux] source={source_bitrate}kbps, target={target_bitrate or 'best'}, reencode={needs_reencode}, cmd: {' '.join(cmd)}")
+
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+            if result.returncode != 0:
+                print(f"Warning: Opus remux failed: {result.stderr.strip()}")
+                return None
+            # Remove the original webm file
+            try:
+                os.remove(file_path)
+            except OSError:
+                pass
+            # Update video_infos so downstream code uses the new path
+            video_infos['filepath'] = opus_path
+            return opus_path
+        except Exception as e:
+            print(f"Warning: Opus remux failed: {e}")
+            return None
+
+    # ------------------------------------------------------------------
+    # MP3 conversion (any audio → MP3 with bitrate capping)
+    # ------------------------------------------------------------------
+
+    def _convert_to_mp3(self, file_path: str, video_infos: Dict) -> str:
+        """Convert an audio file to MP3 with bitrate capping.
+
+        Probes the source bitrate and uses it as a ceiling: if the user
+        selected a target bitrate higher than the source, we encode at the
+        source bitrate to avoid inflation.  "Best" uses LAME VBR quality 0.
+        Returns the new file path, or None on failure.
+        """
+        from config import get_ffmpeg_path
+        ffmpeg_dir = get_ffmpeg_path()
+        if ffmpeg_dir:
+            ffmpeg_bin = os.path.join(ffmpeg_dir, 'ffmpeg')
+            if not os.path.exists(ffmpeg_bin):
+                ffmpeg_bin = 'ffmpeg'
+        else:
+            ffmpeg_bin = 'ffmpeg'
+
+        mp3_path = os.path.splitext(file_path)[0] + '.mp3'
+
+        # Probe source bitrate to avoid inflating beyond the original
+        source_bitrate = self._probe_audio_bitrate(file_path, ffmpeg_dir)
+
+        # Determine effective bitrate (cap logic)
+        effective_bitrate = None
+        if self.config.bitrate and self.config.bitrate.lower() != 'best':
+            target_bitrate = int(self.config.bitrate)
+            if source_bitrate and source_bitrate < target_bitrate:
+                effective_bitrate = source_bitrate
+            else:
+                effective_bitrate = target_bitrate
+
+        # Build ffmpeg command
+        cmd = [ffmpeg_bin, '-y', '-i', file_path]
+
+        if self.config.normalize_volume:
+            target = self.config.normalize_target
+            if effective_bitrate:
+                bitrate_args = ['-b:a', f'{effective_bitrate}k']
+            elif source_bitrate:
+                bitrate_args = ['-b:a', f'{source_bitrate}k']
+            else:
+                bitrate_args = ['-q:a', '0']
+            cmd += ['-c:a', 'libmp3lame'] + bitrate_args + ['-af', f'loudnorm=I={target}:TP=-1.5:LRA=11']
+        elif effective_bitrate:
+            cmd += ['-c:a', 'libmp3lame', '-b:a', f'{effective_bitrate}k']
+        else:
+            # "Best" — LAME VBR highest quality
+            cmd += ['-c:a', 'libmp3lame', '-q:a', '0']
+
+        cmd += [mp3_path]
+
+        print(f"[mp3 convert] source={source_bitrate}kbps, target={self.config.bitrate}, effective={effective_bitrate}, cmd: {' '.join(cmd)}")
+
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+            if result.returncode != 0:
+                print(f"Warning: MP3 conversion failed: {result.stderr.strip()}")
+                return None
+            # Remove the original file
+            try:
+                os.remove(file_path)
+            except OSError:
+                pass
+            # Update video_infos so downstream code uses the new path
+            video_infos['filepath'] = mp3_path
+            return mp3_path
+        except Exception as e:
+            print(f"Warning: MP3 conversion failed: {e}")
+            return None
+
+    @staticmethod
+    def _probe_audio_bitrate(file_path: str, ffmpeg_dir: str = None) -> int:
+        """Probe the audio bitrate of a file in kbps using ffprobe.
+        Returns the bitrate as int (kbps), or None if detection fails.
+
+        Tries stream-level bit_rate first, then falls back to container-level
+        bit_rate (useful for WebM/opus where the stream field is often "N/A").
+        """
+        if ffmpeg_dir:
+            ffprobe_bin = os.path.join(ffmpeg_dir, 'ffprobe')
+            if not os.path.exists(ffprobe_bin):
+                ffprobe_bin = 'ffprobe'
+        else:
+            ffprobe_bin = 'ffprobe'
+
+        # Try stream-level bitrate first
+        try:
+            result = subprocess.run(
+                [ffprobe_bin, '-v', 'quiet', '-select_streams', 'a:0',
+                 '-show_entries', 'stream=bit_rate',
+                 '-of', 'default=noprint_wrappers=1:nokey=1', file_path],
+                capture_output=True, text=True, timeout=10
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                val = result.stdout.strip()
+                if val != 'N/A':
+                    bps = int(val)
+                    return bps // 1000  # Convert to kbps
+        except Exception:
+            pass
+
+        # Fallback: container-level bitrate (works for WebM/opus)
+        try:
+            result = subprocess.run(
+                [ffprobe_bin, '-v', 'quiet',
+                 '-show_entries', 'format=bit_rate',
+                 '-of', 'default=noprint_wrappers=1:nokey=1', file_path],
+                capture_output=True, text=True, timeout=10
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                val = result.stdout.strip()
+                if val != 'N/A':
+                    bps = int(val)
+                    return bps // 1000
+        except Exception:
+            pass
+
+        return None
 
     # ------------------------------------------------------------------
     # MP3 metadata
@@ -166,6 +395,40 @@ class CustomPostProcessor(yt_dlp.postprocessor.PostProcessor):
             print(f"Warning: Could not clean genre tag: {e}")
 
     # ------------------------------------------------------------------
+    # Opus metadata
+    # ------------------------------------------------------------------
+
+    def _add_opus_metadata(self, file_path: str, video_infos: Dict, artist_name: str):
+        """Add metadata to Opus file using Vorbis comments."""
+        try:
+            from mutagen import File as MutagenFile
+            audio = MutagenFile(file_path)
+            if audio is None:
+                print(f"Warning: Could not detect audio format for {file_path}")
+                return
+            audio['artist'] = artist_name
+
+            track_name = video_infos.get('track')
+            if not track_name:
+                track_name = self._clean_title(video_infos.get('title', ''))
+            audio['title'] = track_name
+
+            album_name = video_infos.get('album')
+            if album_name:
+                audio['album'] = album_name
+
+            # Year/date
+            release_year = video_infos.get('release_year')
+            if release_year:
+                audio['date'] = str(release_year)
+            elif video_infos.get('upload_date'):
+                audio['date'] = video_infos['upload_date'][:4]
+
+            audio.save()
+        except Exception as e:
+            print(f"Warning: Could not add metadata to Opus file: {e}")
+
+    # ------------------------------------------------------------------
     # Loudness analysis
     # ------------------------------------------------------------------
 
@@ -195,7 +458,7 @@ class CustomPostProcessor(yt_dlp.postprocessor.PostProcessor):
                 loudness_data = json.loads(stderr[json_start:json_end])
                 input_i = float(loudness_data.get('input_i', 0))
                 target = self.config.normalize_target
-                print(f"Normalization: measured at {input_i:.1f} LUFS (target: {target:.1f} LUFS)")
+                print(f"[normalize] Measured at {input_i:.1f} LUFS (target: {target:.1f} LUFS)")
                 return {'measured': input_i, 'target': target}
         except Exception as e:
             print(f"Warning: Could not analyze loudness: {e}")
@@ -243,14 +506,14 @@ class CustomPostProcessor(yt_dlp.postprocessor.PostProcessor):
 
             if enriched:
                 if enriched.cover_data:
-                    print(f"  [metadata] ✓ HD album cover")
+                    print(f"[metadata] HD album cover")
                 if enriched.synced_lyrics:
-                    print(f"  [metadata] ✓ Synced lyrics (LRC) embedded")
+                    print(f"[metadata] Synced lyrics (LRC) embedded")
                 elif enriched.lyrics:
-                    print(f"  [metadata] ✓ Lyrics embedded")
+                    print(f"[metadata] Lyrics embedded")
 
                 if not enriched.cover_data and fallback_cover:
-                    print(f"  [metadata] No HD cover found, using YouTube thumbnail")
+                    print(f"[metadata] No HD cover found, using YouTube thumbnail")
 
                 # Update track_info for the combined summary
                 if track_info is not None:
@@ -277,3 +540,51 @@ class CustomPostProcessor(yt_dlp.postprocessor.PostProcessor):
                 audio.save()
             except Exception as e:
                 print(f"Warning: Could not add album cover to MP3: {e}")
+
+    def _add_opus_album_cover(self, file_path: str, video_infos: Dict, track_info: dict = None):
+        """Add album cover to Opus file, with optional metadata enrichment."""
+        import base64
+        thumbnail_url = video_infos.get('thumbnail', '')
+
+        fallback_cover = None
+        if thumbnail_url:
+            try:
+                fallback_cover = crop_album_cover(thumbnail_url)
+            except Exception as e:
+                print(f"Warning: Could not crop YouTube thumbnail: {e}")
+
+        if self.config.enrich_metadata:
+            enriched = enrich_metadata(video_infos)
+
+            if enriched:
+                if enriched.cover_data:
+                    print(f"[metadata] HD album cover")
+                if enriched.synced_lyrics:
+                    print(f"[metadata] Synced lyrics (LRC) embedded")
+                elif enriched.lyrics:
+                    print(f"[metadata] Lyrics embedded")
+
+                if not enriched.cover_data and fallback_cover:
+                    print(f"[metadata] No HD cover found, using YouTube thumbnail")
+
+                if track_info is not None:
+                    track_info['cover_found'] = bool(enriched.cover_data)
+                    track_info['lyrics_found'] = bool(enriched.synced_lyrics or enriched.lyrics)
+                    track_info['metadata_found'] = bool(
+                        enriched.cover_data or enriched.lyrics or enriched.synced_lyrics or enriched.album
+                    )
+
+                apply_enriched_metadata_opus(file_path, enriched, fallback_cover)
+                return
+
+        # Fallback: just embed the YouTube thumbnail
+        if fallback_cover:
+            try:
+                from mutagen import File as MutagenFile
+                audio = MutagenFile(file_path)
+                if audio is not None:
+                    picture = _build_flac_picture(fallback_cover, 'image/jpeg')
+                    audio['metadata_block_picture'] = [base64.b64encode(picture.write()).decode('ascii')]
+                    audio.save()
+            except Exception as e:
+                print(f"Warning: Could not add album cover to Opus: {e}")

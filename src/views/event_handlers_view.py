@@ -42,7 +42,7 @@ class EventHandlersMixin:
         # For check/radio buttons: block interaction by intercepting clicks
         self._lock_bind_ids = {}
         lock_targets = [
-            'mp3_radio', 'mp4_radio',
+            'mp3_radio', 'mp4_radio', 'opus_radio',
             'no_playlist_radio', 'yes_playlist_radio',
             'normalize_check', 'enrich_check',
             'prevent_sleep_check',
@@ -117,7 +117,7 @@ class EventHandlersMixin:
             self.on_stop_callback()
 
     def _on_download_again_click(self):
-        """Handle 'Download again' button click — return to start screen."""
+        """Handle 'New download' button click — return to start screen."""
         self.hide_progress_widgets()
 
     # ------------------------------------------------------------------
@@ -329,6 +329,23 @@ class EventHandlersMixin:
         )
         if self.on_format_change_callback:
             self.on_format_change_callback("mp4")
+
+    def _on_opus_selected(self):
+        self.bitrate_var.set("Max 128Kbps")
+        self.switch_to_bitrate_menu()
+        # Save the format preference immediately
+        settings_manager.save_format_preferences(
+            format_var=3,
+            bitrate=self.bitrate_var.get(),
+            quality=self.quality_var.get(),
+            playlist_mode=(self.playlist_var.get() == 0),
+            normalize_volume=self.normalize_var.get(),
+            normalize_target=self._get_normalize_target(),
+            enrich_metadata=self.enrich_var.get(),
+            prevent_sleep=self.prevent_sleep_var.get()
+        )
+        if self.on_format_change_callback:
+            self.on_format_change_callback("opus")
 
     def _on_playlist_selected(self):
         self.show_playlist_options()

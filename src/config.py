@@ -4,7 +4,7 @@ Configuration and constants for the yt-dlp GUI application.
 import os
 
 # Application version
-APP_VERSION = "2.6.9"
+APP_VERSION = "2.7.0"
 
 # Application name
 APP_NAME = "yt-dlp Convenient GUI"
@@ -47,16 +47,17 @@ COLORS = {
 }
 
 # Default values
-DEFAULT_BITRATES = ["Best", "32Kbps", "96Kbps", "128Kbps", "192Kbps", "256Kbps", "320Kbps"]
-DEFAULT_QUALITIES = ["Best", "144p", "360p", "480p", "720p", "1080p", "1440p", "2160p"]
+DEFAULT_BITRATES = ["Best", "Max 32Kbps", "Max 96Kbps", "Max 128Kbps", "Max 192Kbps", "Max 256Kbps", "Max 320Kbps"]
+DEFAULT_QUALITIES = ["Best", "Max 144p", "Max 360p", "Max 480p", "Max 720p", "Max 1080p", "Max 1440p", "Max 2160p"]
 DEFAULT_BITRATE = "Best"
-DEFAULT_QUALITY = "720p"
+DEFAULT_QUALITY = "Max 720p"
 DEFAULT_NORMALIZE_TARGET = -14.0  # LUFS
 
 # File formats
 FILE_FORMATS = {
     1: "mp3",
-    2: "mp4"
+    2: "mp4",
+    3: "opus"
 }
 
 # Paths
@@ -96,5 +97,4 @@ def get_ffmpeg_path():
             print("  Arch: sudo pacman -S ffmpeg")
             return None
         else:
-            print(f"Found ffmpeg at: {ffmpeg_executable}")
             return os.path.dirname(ffmpeg_executable)

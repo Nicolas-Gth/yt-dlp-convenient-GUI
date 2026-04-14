@@ -20,7 +20,7 @@ class SettingsManager:
             "window_geometry": "",
             "last_format": "mp3",  # "mp3" or "mp4"
             "last_bitrate": "Best",
-            "last_quality": "720p",
+            "last_quality": "Max 720p",
             "last_playlist_mode": False,  # True for playlist, False for single video
             "last_format_var": 1,  # 1 for MP3, 2 for MP4
             "last_normalize_volume": False,
@@ -107,7 +107,7 @@ class SettingsManager:
         return {
             "format_var": settings.get("last_format_var", 1),
             "bitrate": settings.get("last_bitrate", "Best"),
-            "quality": settings.get("last_quality", "720p"),
+            "quality": settings.get("last_quality", "Max 720p"),
             "playlist_mode": settings.get("last_playlist_mode", False),
             "normalize_volume": settings.get("last_normalize_volume", False),
             "normalize_target": settings.get("last_normalize_target", -14.0),

@@ -572,8 +572,8 @@ class ApplicationController:
         self.download_controller.progress.reset()
         self._playlist_total = 0
         
-        # Show "Download again" button (resets progress bar) BEFORE the popup
-        self.view.show_download_again_button()
+        # Show "New download " button (resets progress bar) BEFORE the popup
+        self.view.show_new_download_button()
         
         # Show age-restricted popup after UI is reset (dialog is blocking)
         age_restricted = self.download_controller._age_restricted_entries

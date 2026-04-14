@@ -167,8 +167,8 @@ class ProgressMixin:
     # Download-again button
     # ------------------------------------------------------------------
 
-    def show_download_again_button(self):
-        """Transform the stop button into a 'Download again' button."""
+    def show_new_download_button(self):
+        """Transform the stop button into a 'New download' button."""
         # Hide element/total progress bars
         for attr in ('progress_label', 'video_progress', 'video_progress_percent',
                       'total_progress_label', 'total_progress', 'total_progress_percent',
@@ -190,7 +190,7 @@ class ProgressMixin:
         if hasattr(self, 'stop_button') and self.stop_button.winfo_exists():
             self.stop_button.configure(
                 state='normal',
-                text="Download again",
+                text="New download",
                 bg=COLORS['button_normal'],
                 activebackground=COLORS['button_active'],
                 cursor="hand2",

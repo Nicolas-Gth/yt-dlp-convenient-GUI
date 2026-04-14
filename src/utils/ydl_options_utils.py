@@ -32,42 +32,54 @@ def build_ydl_options(config: DownloadConfig, ffmpeg_path: Optional[str],
         return _add_mp3_options(base_opts, config, ffmpeg_path)
     elif config.file_format == "mp4":
         return _add_mp4_options(base_opts, config, ffmpeg_path)
+    elif config.file_format == "opus":
+        return _add_opus_options(base_opts, config, ffmpeg_path)
 
     return base_opts
 
 
 def _add_mp3_options(opts: Dict, config: DownloadConfig,
                      ffmpeg_path: Optional[str]) -> Dict:
-    """Add MP3-specific options."""
+    """Add MP3-specific options.
+
+    We skip FFmpegExtractAudio so that the CustomPostProcessor can probe
+    the source bitrate and use it as a ceiling (cap).  This avoids
+    inflating the file when the user selects a bitrate higher than the
+    source (e.g. "Max 320Kbps" on a 128 kbps source).
+    """
     opts['format'] = 'bestaudio/best'
 
     if ffmpeg_path is not None:
         opts['ffmpeg_location'] = ffmpeg_path
-        extract_audio_pp = {
-            'key': 'FFmpegExtractAudio',
-            'preferredcodec': 'mp3',
-        }
-        # "Best" means no quality cap — let yt-dlp use the highest available
-        if config.bitrate and config.bitrate.lower() != 'best':
-            extract_audio_pp['preferredquality'] = config.bitrate
-        else:
-            extract_audio_pp['preferredquality'] = '0'  # 0 = best quality (VBR)
-        opts['postprocessors'] = [
-            extract_audio_pp,
-            {'key': 'FFmpegMetadata', 'add_metadata': True}
-        ]
-
-        # Add volume normalization if enabled
-        # Keys must be lowercase — yt-dlp's _configuration_args does .lower() lookups.
-        if config.normalize_volume:
-            target = config.normalize_target
-            opts['postprocessor_args'] = {
-                'extractaudio': [
-                    '-af', f'loudnorm=I={target}:TP=-1.5:LRA=11'
-                ]
-            }
+        # No FFmpegExtractAudio — conversion is handled by CustomPostProcessor
+        # with proper bitrate capping logic.
+        opts['postprocessors'] = []
     else:
         print("Warning: MP3 conversion disabled - ffmpeg not found")
+        opts['format'] = 'bestaudio'
+
+    return opts
+
+
+def _add_opus_options(opts: Dict, config: DownloadConfig,
+                      ffmpeg_path: Optional[str]) -> Dict:
+    """Add Opus-specific options.
+
+    We deliberately avoid FFmpegExtractAudio with preferredcodec='opus'
+    because the 'opus' muxer in some ffmpeg builds (e.g. Fedora) is broken
+    ("Error opening output files: Function not implemented").
+    Instead, we download the best opus audio (YouTube already serves opus in
+    WebM) and let the CustomPostProcessor remux to a proper .opus file using
+    the reliable 'ogg' muxer.
+    """
+    opts['format'] = 'bestaudio[acodec=opus]/bestaudio/best'
+
+    if ffmpeg_path is not None:
+        opts['ffmpeg_location'] = ffmpeg_path
+        # No FFmpegExtractAudio — remux is handled by CustomPostProcessor
+        opts['postprocessors'] = []
+    else:
+        print("Warning: Opus conversion disabled - ffmpeg not found")
         opts['format'] = 'bestaudio'
 
     return opts

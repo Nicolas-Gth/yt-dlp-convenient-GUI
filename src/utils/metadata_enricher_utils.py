@@ -65,7 +65,7 @@ def _request(url: str, timeout: int = _TIMEOUT) -> Optional[bytes]:
         # 404s etc. are expected (cover art not available for this release)
         return None
     except (urllib.error.URLError, OSError, TimeoutError) as e:
-        print(f"  [metadata] Network error: {e}")
+        print(f"[metadata] Network error: {e}")
         return None
 
 
@@ -163,7 +163,7 @@ def search_musicbrainz(artist: str, title: str, album: str) -> Optional[Dict]:
     })
     
     url = f"{_MB_BASE}/recording?{params}"
-    print(f"  [metadata] Searching MusicBrainz: artist=\"{artist}\", title=\"{title}\", album=\"{album}\"")
+    print(f"[metadata] Searching MusicBrainz: artist=\"{artist}\", title=\"{title}\", album=\"{album}\"")
     
     data = _request(url)
     if not data:
@@ -176,7 +176,7 @@ def search_musicbrainz(artist: str, title: str, album: str) -> Optional[Dict]:
     
     recordings = result.get("recordings", [])
     if not recordings:
-        print("  [metadata] No recordings found on MusicBrainz")
+        print("[metadata] No recordings found on MusicBrainz")
         return None
     
     # Score each recording — album match is mandatory
@@ -217,11 +217,11 @@ def search_musicbrainz(artist: str, title: str, album: str) -> Optional[Dict]:
             best_match = rec
     
     if best_match and best_score >= 60:
-        print(f"  [metadata] Best match: \"{best_match.get('title', '')}\" (score: {best_score:.1f})")
+        print(f"[metadata] Best match: \"{best_match.get('title', '')}\" (score: {best_score:.1f})")
         best_match["_match_score"] = best_score
         return best_match
     else:
-        print(f"  [metadata] No confident match (best score: {best_score:.1f})")
+        print(f"[metadata] No confident match (best score: {best_score:.1f})")
         return None
 
 
@@ -397,10 +397,10 @@ def fetch_cover_art(release_id: str, release_group_id: str = "",
     for url in urls_to_try:
         data = _request(url, timeout=15)
         if data and len(data) > 1000:  # Sanity check: a real image should be > 1KB
-            print(f"  [metadata] Got HD cover: {len(data)} bytes")
+            print(f"[metadata] Got HD cover: {len(data)} bytes")
             return data
     
-    print("  [metadata] No cover art found on Cover Art Archive")
+    print("[metadata] No cover art found on Cover Art Archive")
     return None
 
 
@@ -499,7 +499,7 @@ def fetch_cover_art_itunes(artist: str, album: str, title: str = "") -> Optional
     
     cover_data = _request(hd_url, timeout=15)
     if cover_data and len(cover_data) > 1000:
-        print(f"  [metadata] Got HD cover from iTunes: {len(cover_data)} bytes")
+        print(f"[metadata] Got HD cover from iTunes: {len(cover_data)} bytes")
         return cover_data
     
     return None
@@ -657,7 +657,7 @@ def fetch_lyrics(artist: str, title: str, album: str = "", duration_sec: int = 0
     
     Returns (plain_lyrics, synced_lyrics_lrc) — either or both may be None.
     """
-    print(f"  [metadata] Searching lyrics for: {artist} - {title}")
+    print(f"[metadata] Searching lyrics for: {artist} - {title}")
     
     # Source 1: LRCLIB (best — provides synced lyrics)
     plain, synced = _fetch_lyrics_lrclib(artist, title, album, duration_sec)
@@ -665,22 +665,22 @@ def fetch_lyrics(artist: str, title: str, album: str = "", duration_sec: int = 0
         source = "LRCLIB"
         if synced:
             source += " (synced)"
-        print(f"  [metadata] ✓ Lyrics found via {source}")
+        print(f"[metadata] Lyrics found via {source}")
         return plain, synced
     
     # Source 2: Genius (scraping — large catalog)
     genius_lyrics = _fetch_lyrics_genius(artist, title)
     if genius_lyrics:
-        print(f"  [metadata] ✓ Lyrics found via Genius")
+        print(f"[metadata] Lyrics found via Genius")
         return genius_lyrics, None
     
     # Source 3: lyrics.ovh (simple API fallback)
     ovh_lyrics = _fetch_lyrics_ovh(artist, title)
     if ovh_lyrics:
-        print(f"  [metadata] ✓ Lyrics found via lyrics.ovh")
+        print(f"[metadata] Lyrics found via lyrics.ovh")
         return ovh_lyrics, None
     
-    print(f"  [metadata] No lyrics found from any source")
+    print(f"[metadata] No lyrics found from any source")
     return None, None
 
 
@@ -725,20 +725,20 @@ def enrich_metadata(video_infos: Dict) -> Optional[EnrichedMetadata]:
     if yt_artist and yt_track:
         artist = yt_artist
         title = yt_track
-        print(f"  [metadata] Using YouTube Music metadata: {artist} - {title} [{yt_album}]")
+        print(f"[metadata] Using YouTube Music metadata: {artist} - {title} [{yt_album}]")
     else:
         artist, title = _parse_artist_title_from_video(video_title, uploader)
-        print(f"  [metadata] Parsed from video title: {artist} - {title}")
+        print(f"[metadata] Parsed from video title: {artist} - {title}")
     
     if not artist or not title:
-        print("  [metadata] Skipping enrichment: could not determine artist or title")
+        print("[metadata] Skipping enrichment: could not determine artist or title")
         return None
     
     enriched = EnrichedMetadata()
     
     # --- Step 1: HD album cover (ONLY if YouTube provides album info) ---
     if yt_album:
-        print(f"  [metadata] Album from YouTube: \"{yt_album}\" — searching MusicBrainz for HD cover")
+        print(f"[metadata] Album from YouTube: \"{yt_album}\" — searching MusicBrainz for HD cover")
         recording = search_musicbrainz(artist, title, yt_album)
         
         if recording:
@@ -792,7 +792,7 @@ def enrich_metadata(video_infos: Dict) -> Optional[EnrichedMetadata]:
                 
                 # Fetch HD cover art (release-group → release → fallback releases)
                 if enriched.mb_release_id:
-                    print(f"  [metadata] Fetching HD cover from Cover Art Archive...")
+                    print(f"[metadata] Fetching HD cover from Cover Art Archive...")
                     cover_data = fetch_cover_art(
                         enriched.mb_release_id,
                         release_group_id=release_group_id,
@@ -806,16 +806,16 @@ def enrich_metadata(video_infos: Dict) -> Optional[EnrichedMetadata]:
                             enriched.cover_mime = "image/jpeg"
                     else:
                         # Fallback: try iTunes Search API
-                        print(f"  [metadata] Trying iTunes as fallback...")
+                        print(f"[metadata] Trying iTunes as fallback...")
                         itunes_cover = fetch_cover_art_itunes(artist, yt_album, title)
                         if itunes_cover:
                             enriched.cover_data = itunes_cover
                             enriched.cover_mime = "image/jpeg"
 
             else:
-                print(f"  [metadata] No matching release for album \"{yt_album}\"")
+                print(f"[metadata] No matching release for album \"{yt_album}\"")
                 # Fallback: try iTunes even without a MusicBrainz release match
-                print(f"  [metadata] Trying iTunes as fallback...")
+                print(f"[metadata] Trying iTunes as fallback...")
                 itunes_cover = fetch_cover_art_itunes(artist, yt_album, title)
                 if itunes_cover:
                     enriched.cover_data = itunes_cover
@@ -823,9 +823,9 @@ def enrich_metadata(video_infos: Dict) -> Optional[EnrichedMetadata]:
                     enriched.album = yt_album
 
         else:
-            print(f"  [metadata] MusicBrainz search returned no match for album \"{yt_album}\"")
+            print(f"[metadata] MusicBrainz search returned no match for album \"{yt_album}\"")
             # Fallback: try iTunes directly (doesn't need MusicBrainz)
-            print(f"  [metadata] Trying iTunes as fallback...")
+            print(f"[metadata] Trying iTunes as fallback...")
             itunes_cover = fetch_cover_art_itunes(artist, yt_album, title)
             if itunes_cover:
                 enriched.cover_data = itunes_cover
@@ -833,7 +833,7 @@ def enrich_metadata(video_infos: Dict) -> Optional[EnrichedMetadata]:
                 enriched.album = yt_album
 
     else:
-        print(f"  [metadata] No album info from YouTube — skipping cover art lookup")
+        print(f"[metadata] No album info from YouTube — skipping cover art lookup")
     
     # --- Year: yt-dlp's release_year is authoritative (from YouTube Music) ---
     # It reflects the original release year, while MusicBrainz may return a
@@ -841,7 +841,7 @@ def enrich_metadata(video_infos: Dict) -> Optional[EnrichedMetadata]:
     if yt_release_year:
         yt_year = str(yt_release_year)
         if enriched.date and enriched.date != yt_year:
-            print(f"  [metadata] Overriding MusicBrainz year ({enriched.date}) with yt-dlp release year ({yt_year})")
+            print(f"[metadata] Overriding MusicBrainz year ({enriched.date}) with yt-dlp release year ({yt_year})")
         enriched.date = yt_year
 
     # --- Step 2: Lyrics (always attempted, independent of album) ---
@@ -858,7 +858,7 @@ def enrich_metadata(video_infos: Dict) -> Optional[EnrichedMetadata]:
         fetch_cover_art_itunes(artist, yt_album or "", title)
         if _itunes_last_genre:
             enriched.genre = _itunes_last_genre
-            print(f"  [metadata] \u2713 Genre (iTunes): {enriched.genre}")
+            print(f"[metadata] \u2713 Genre (iTunes): {enriched.genre}")
     
     # Priority 2: MusicBrainz recording + release-group tags (more detailed)
     if not enriched.genre:
@@ -868,7 +868,7 @@ def enrich_metadata(video_infos: Dict) -> Optional[EnrichedMetadata]:
         )
         if mb_genre:
             enriched.genre = mb_genre
-            print(f"  [metadata] \u2713 Genre (MusicBrainz): {enriched.genre}")
+            print(f"[metadata] \u2713 Genre (MusicBrainz): {enriched.genre}")
     
     # Priority 3: Use the genre from yt-dlp (e.g. SoundCloud uploader-set genre).
     # Exclude generic YouTube categories which are not real music genres.
@@ -882,13 +882,13 @@ def enrich_metadata(video_infos: Dict) -> Optional[EnrichedMetadata]:
         source_genre = video_infos.get('genre', '').strip()
         if source_genre and source_genre.lower() not in _YOUTUBE_CATEGORIES:
             enriched.genre = source_genre
-            print(f"  [metadata] ✓ Genre (source): {enriched.genre}")
+            print(f"[metadata] Genre (source): {enriched.genre}")
 
     # Only return if we actually found something useful
     if enriched.cover_data or enriched.lyrics or enriched.synced_lyrics or enriched.genre:
         return enriched
     
-    print("  [metadata] No enrichment data found")
+    print("[metadata] No enrichment data found")
     return None
 
 
@@ -983,4 +983,61 @@ def apply_enriched_metadata_mp3(file_path: str, enriched: EnrichedMetadata,
         )
     
     audio.save(file_path)
-    print(f"  [metadata] Enriched metadata saved to: {file_path}")
+    print(f"[metadata] Enriched metadata saved to: {file_path}")
+
+
+def apply_enriched_metadata_opus(file_path: str, enriched: EnrichedMetadata,
+                                  fallback_cover: Optional[bytes] = None):
+    """
+    Apply enriched metadata to an Opus file using Vorbis comments.
+    """
+    import base64
+    from mutagen import File as MutagenFile
+    from mutagen.flac import Picture
+
+    try:
+        audio = MutagenFile(file_path)
+        if audio is None:
+            print(f"Warning: Could not detect audio format for {file_path}")
+            return
+    except Exception as e:
+        print(f"Warning: Could not open Opus file for metadata: {e}")
+        return
+
+    if enriched.album:
+        audio['album'] = enriched.album
+
+    if enriched.album_artist:
+        audio['albumartist'] = enriched.album_artist
+
+    if enriched.track_number:
+        audio['tracknumber'] = str(enriched.track_number)
+        if enriched.total_tracks:
+            audio['tracktotal'] = str(enriched.total_tracks)
+
+    if enriched.date:
+        audio['date'] = enriched.date[:4]
+
+    if enriched.full_date:
+        audio['originaldate'] = enriched.full_date
+
+    if enriched.genre:
+        audio['genre'] = enriched.genre
+
+    # Lyrics
+    lyrics_text = enriched.synced_lyrics or enriched.lyrics
+    if lyrics_text:
+        audio['lyrics'] = lyrics_text
+
+    # Cover art via METADATA_BLOCK_PICTURE
+    cover_to_use = enriched.cover_data or fallback_cover
+    if cover_to_use:
+        pic = Picture()
+        pic.type = 3  # Front cover
+        pic.mime = enriched.cover_mime if enriched.cover_data else 'image/jpeg'
+        pic.desc = 'Cover'
+        pic.data = cover_to_use
+        audio['metadata_block_picture'] = [base64.b64encode(pic.write()).decode('ascii')]
+
+    audio.save()
+    print(f"[metadata] Enriched metadata saved to: {file_path}")

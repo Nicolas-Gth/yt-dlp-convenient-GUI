@@ -99,7 +99,6 @@ def load_thumbnail(thumbnail_url: str, size: Tuple[int, int] = (100, 60), is_mus
         # Crop to square for music content (removes black bars around album art)
         if is_music:
             im = _crop_to_square_removing_bars(im)
-            size = (60, 60)
         
         im.thumbnail(size)
         return im
