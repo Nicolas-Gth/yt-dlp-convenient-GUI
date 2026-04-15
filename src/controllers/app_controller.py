@@ -52,6 +52,10 @@ class ApplicationController:
     """Main application controller."""
     
     def __init__(self):
+        # Set AppUserModelID on Windows so the taskbar shows our icon instead of generic Python
+        if sys.platform == 'win32':
+            import ctypes
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID('nicolas-gth.yt-dlp-convenient-gui')
         self.app = QApplication.instance() or QApplication(sys.argv)
         self.app.setStyle('Fusion')
         # Apply saved or system theme
