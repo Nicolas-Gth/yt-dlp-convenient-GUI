@@ -13,6 +13,10 @@
   "menu.theme.dark": "Sombre",
   "menu.theme.light": "Clair",
   "menu.legal_notice": "Mentions légales",
+  "menu.help": "Aide",
+  "menu.help.youtube_cookies": "Cookies YouTube",
+
+  "help.cookies.title": "Cookies YouTube",
 
   "legal.title": "Mentions légales",
   "legal.text": "{app_name} v{app_version}\n\nCe logiciel est fourni tel quel, pour un usage personnel uniquement.\n\nIl s'appuie sur yt-dlp, un projet open-source sous licence Unlicense.\nLes utilisateurs sont seuls responsables du respect des lois applicables et des conditions d'utilisation des plateformes de contenu.\n\nCet outil n'héberge, ne stocke et ne distribue aucun contenu protégé par le droit d'auteur.\n\nCréé par Nicolas-Gth",

@@ -6,7 +6,7 @@ menu bar, and dynamic window resizing.
 """
 from PySide6.QtGui import QFont, QIcon, QAction, QActionGroup
 from PySide6.QtWidgets import QMenuBar, QMenu, QMessageBox
-from config import APP_TITLE, APP_NAME, APP_VERSION, ICON_PATH, PLATFORM_SCALE
+from config import APP_TITLE, APP_NAME, APP_VERSION, ICON_PATH, PLATFORM_SCALE, COOKIES_DIR
 from utils.i18n_utils import t, AVAILABLE_LANGUAGES, MENU_LANGUAGES
 
 
@@ -58,6 +58,12 @@ class WindowMixin:
         self._legal_action = menu_bar.addAction(t("menu.legal_notice"))
         self._legal_action.triggered.connect(self._show_legal_notice)
 
+        # --- Help menu ---
+        self._help_menu = menu_bar.addMenu(t("menu.help"))
+        self._cookies_help_action = QAction(t("menu.help.youtube_cookies"), self)
+        self._cookies_help_action.triggered.connect(self._show_cookies_help)
+        self._help_menu.addAction(self._cookies_help_action)
+
     def _on_language_changed(self, code: str):
         """Handle language selection and retranslate the UI."""
         from utils.i18n_utils import set_language
@@ -91,6 +97,8 @@ class WindowMixin:
         self._lang_menu.setTitle(t("menu.language"))
         self._theme_menu.setTitle(t("menu.theme"))
         self._legal_action.setText(t("menu.legal_notice"))
+        self._help_menu.setTitle(t("menu.help"))
+        self._cookies_help_action.setText(t("menu.help.youtube_cookies"))
 
         # "System" language action label
         for action in self._lang_group.actions():
@@ -150,6 +158,16 @@ class WindowMixin:
         msg.setWindowTitle(t("legal.title"))
         msg.setIcon(QMessageBox.Information)
         msg.setText(t("legal.text", app_name=APP_NAME, app_version=APP_VERSION))
+        ok_button = msg.addButton(QMessageBox.Ok)
+        ok_button.setIcon(QIcon())
+        msg.exec()
+
+    def _show_cookies_help(self):
+        """Show the YouTube cookies help dialog."""
+        msg = QMessageBox(self)
+        msg.setWindowTitle(t("help.cookies.title"))
+        msg.setIcon(QMessageBox.Information)
+        msg.setText(t("cookies.instructions", cookies_dir=COOKIES_DIR))
         ok_button = msg.addButton(QMessageBox.Ok)
         ok_button.setIcon(QIcon())
         msg.exec()
