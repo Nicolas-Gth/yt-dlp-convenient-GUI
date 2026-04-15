@@ -1,0 +1,118 @@
+{
+  "_meta": {
+    "language": "Español",
+    "code": "es",
+    "authors": ["Nicolas-Gth"],
+    "version": "1.0.0"
+  },
+
+  "menu.language": "Idioma",
+  "menu.language.system": "Sistema",
+  "menu.theme": "Tema",
+  "menu.theme.system": "Sistema",
+  "menu.theme.dark": "Oscuro",
+  "menu.theme.light": "Claro",
+  "menu.legal_notice": "Aviso legal",
+
+  "legal.title": "Aviso legal",
+  "legal.text": "{app_name} v{app_version}\n\nEste software se proporciona tal cual, únicamente para uso personal.\n\nSe basa en yt-dlp, un proyecto de código abierto bajo la licencia Unlicense.\nLos usuarios son los únicos responsables de garantizar que su uso cumple con las leyes aplicables y las condiciones de servicio de las plataformas de contenido.\n\nEsta herramienta no aloja, almacena ni distribuye ningún contenido protegido por derechos de autor.\n\nCreado por Nicolas-Gth",
+
+  "url.placeholder": "Introduce la URL de un vídeo",
+  "path.placeholder": "Haz clic para elegir una carpeta",
+  "path.dialog_title": "Seleccionar carpeta de descarga",
+
+  "format.group_title": "Formato del archivo de salida",
+  "format.mp3": "Mp3",
+  "format.mp4": "Mp4",
+  "format.opus": "Opus",
+
+  "quality.label": "Calidad :",
+  "quality.best": "Mejor",
+  "quality.max": "Máximo {value}",
+
+  "playlist.group_title": "Descarga de lista de reproducción",
+  "playlist.no": "No",
+  "playlist.yes": "Sí",
+  "playlist.from_video": "Desde el vídeo ",
+  "playlist.to": " hasta ",
+
+  "options.group_title": "Opciones",
+  "options.normalize_volume": "Normalizar volumen",
+  "options.normalize_target": "Objetivo (LUFS) :",
+  "options.normalize_hint": "(-14 recomendado)",
+  "options.enrich_metadata": "Enriquecer metadatos (portada HD + letras)",
+  "options.enrich_hint": "vía MusicBrainz, iTunes, LRCLIB, Genius",
+  "options.prevent_sleep": "Evitar suspensión durante la descarga",
+
+  "button.download": "Haz clic aquí para iniciar la descarga",
+  "button.stop": "Detener descarga",
+  "button.stopping": "Deteniendo...",
+  "button.new_download": "Nueva descarga",
+
+  "progress.element": "Progreso del elemento",
+  "progress.total": "Progreso total",
+  "progress.processing": "Procesando",
+  "progress.done": "Completado",
+
+  "progress.info.title": "Título",
+  "progress.info.author": "Artista",
+  "progress.info.duration": "Duración",
+
+  "progress.skipped_header": "Elementos no disponibles omitidos",
+  "progress.age_restricted": "Restricción de edad",
+  "progress.format_unavailable": "Formato no disponible",
+  "progress.unavailable": "No disponible",
+
+  "progress.downloaded_elements": "Elementos descargados",
+  "progress.table.number": "#",
+  "progress.table.artist": "Artista",
+  "progress.table.title": "Título",
+  "progress.table.metadatas": "Metadatos",
+  "progress.table.lyrics": "Letras",
+  "progress.table.norm": "Norm.",
+
+  "fetching.info": "Recuperando información...",
+  "fetching.playlist": "Recuperando información de la lista...",
+  "fetching.playlist_progress": "Recuperando información de la lista... ({current}/{total})",
+  "fetching.playlist_count": "Recuperando información de la lista... ({current} títulos encontrados)",
+
+  "download.single": "Descargando \"{title}\"",
+  "download.playlist_element": "Descargando elemento {index} de {total} de la lista {playlist_title}",
+  "download.playlist_element_no_total": "Descargando elemento {index}...",
+  "download.processing_element": "Procesando elemento {index}...",
+  "download.processing_single": "Procesando \"{title}\"",
+  "download.playlist_processing": "Procesando lista de reproducción...",
+
+  "completion.aborted_prefix": "Descarga interrumpida. ",
+  "completion.elements_playlist": "{count} elemento(s) descargado(s) de la lista {playlist_title}.",
+  "completion.elements_only": "{count} elemento(s) descargado(s).",
+  "completion.playlist_done": "Lista {playlist_title} descargada.",
+  "completion.download_complete": "Descarga completada.",
+
+  "validation.path_required_title": "Ruta requerida",
+  "validation.path_required_msg": "Selecciona una carpeta de descarga antes de iniciar la descarga.\n\nHaz clic en el campo de ruta para elegir una carpeta.",
+  "validation.invalid_url_title": "URL no válida",
+  "validation.url_empty": "Introduce la URL de un vídeo antes de iniciar la descarga.",
+  "validation.url_invalid": "Introduce una URL válida que empiece por http:// o https://",
+  "validation.invalid_range_title": "Rango no válido",
+  "validation.invalid_range_msg": "El valor final ({end}) no puede ser menor que el valor inicial ({start}).",
+  "validation.download_error_title": "Error de descarga",
+
+  "cookies.warning_title": "Aviso de cookies",
+  "cookies.continue_prompt": "¿Continuar la descarga de todos modos?",
+  "cookies.instructions": "1. Instala la extensión \"Get cookies.txt LOCALLY\" en tu navegador (Chrome / Firefox / Edge).\n\n2. Abre una nueva ventana privada/de incógnito e inicia sesión en YouTube.\n\n3. En la misma ventana y pestaña, navega a: https://www.youtube.com/robots.txt (debe ser la única pestaña privada abierta)\n\n4. Haz clic en el icono de la extensión y exporta tus cookies (\"Export as cookies.txt\"), luego cierra la ventana privada para que la sesión no se reabra en el navegador.\n\n5. Coloca el archivo cookies.txt en la raíz de la aplicación: {cookies_dir}\n\n6. Reinicia la descarga.\n\nYouTube invalida las cookies de las pestañas abiertas. Usar una ventana privada garantiza que las cookies exportadas sigan siendo válidas.",
+  "cookies.invalid_cookies": "El archivo cookies.txt está presente pero no contiene cookies válidas. Esto puede hacer que la descarga falle.\n\nElimina cookies.txt si no lo necesitas, o actualízalo:\n\n{instructions}",
+  "cookies.expired_cookies": "Algunas cookies en cookies.txt han expirado. Esto puede hacer que las descargas de YouTube fallen (detección de bots, contenido con restricción de edad, etc.).\n\nElimina cookies.txt si no lo necesitas, o actualízalo:\n\n{instructions}",
+  "cookies.revoked_cookies": "Las cookies en cookies.txt no son válidas o han sido revocadas por YouTube. Esto puede hacer que las descargas fallen (detección de bots, contenido con restricción de edad, etc.).\n\nElimina cookies.txt si no lo necesitas, o actualízalo:\n\n{instructions}",
+
+  "error.cookie_message": "YouTube te pide que demuestres que no eres un robot.\n\nPara solucionarlo, debes proporcionar las cookies de tu navegador:\n\n{instructions}",
+  "error.age_restricted": "{count} vídeo(s) no se pudieron descargar porque requieren verificación de edad.\n\nPara descargarlos, debes proporcionar las cookies de tu navegador:\n\n{instructions}",
+  "error.video_info_failed": "No se pudo recuperar la información del vídeo. Por favor, verifica la URL.",
+  "error.video_info_auth": "No se pudo recuperar la información del vídeo. Por favor, verifica la URL.\n\nSi la URL es correcta, YouTube puede requerir autenticación. Puedes proporcionar las cookies de tu navegador para solucionarlo:\n\n{instructions}",
+  "error.drm_protected": "Este contenido está protegido por DRM y no se puede descargar.\n\nEl DRM (Digital Rights Management) impide la descarga desde servicios como Spotify, Netflix, etc.",
+
+  "eta.elapsed": "Tiempo transcurrido: {time}",
+  "eta.remaining": "Tiempo restante estimado: ~{time}",
+  "eta.calculating": "Tiempo restante estimado: calculando...",
+  "eta.finishing": "Finalizando..."
+}

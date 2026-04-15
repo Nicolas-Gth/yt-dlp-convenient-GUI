@@ -18,6 +18,7 @@ from utils.cookies_validator_utils import validate_cookies_file
 from utils.sleep_inhibitor_utils import sleep_inhibitor
 from utils.theme_utils import apply_theme
 from utils import settings_manager
+from utils.i18n_utils import t, init as i18n_init
 
 
 class _MainThreadInvoker(QObject):
@@ -56,10 +57,14 @@ class ApplicationController:
         # Apply saved or system theme
         saved_theme = settings_manager.get_setting('theme', 'system')
         apply_theme(self.app, saved_theme)
+        # Initialize i18n with saved language
+        saved_language = settings_manager.get_setting('language', 'system')
+        i18n_init(saved_language)
         # Invoker must be parented to app to prevent GC and ensure main-thread affinity
         self._invoker = _MainThreadInvoker(self.app)
         self.view = MainApplicationView()
         self.view.set_theme_checked(saved_theme)
+        self.view.set_language_checked(saved_language)
         self.download_controller = DownloadController()
         self.current_video_info: Optional[Dict] = None
         self._current_config = None
@@ -88,6 +93,10 @@ class ApplicationController:
         apply_theme(self.app, name)
         settings_manager.set_setting('theme', name)
 
+    def _on_language_change(self, code: str):
+        """Callback when user changes language from the menu."""
+        settings_manager.set_setting('language', code)
+
     def setup_callbacks(self):
         """Connect view callbacks to controller methods."""
         self.view.on_convert_callback = self.start_conversion
@@ -96,6 +105,7 @@ class ApplicationController:
         self.view.on_browse_callback = self.on_browse_directory
         self.view.on_stop_callback = self.on_stop_download
         self.view.on_theme_change_callback = self._on_theme_change
+        self.view.on_language_change_callback = self._on_language_change
     
     def start_conversion(self):
         """Start the conversion process."""
@@ -176,7 +186,7 @@ class ApplicationController:
     def update_single_video_display(self, video_info: Dict):
         """Update display for single video download."""
         video = self.extract_video_info(video_info)
-        song_name = f"Downloading \"{video.title}\""
+        song_name = t("download.single", title=video.title)
         self.view.update_progress_info(video, song_name)
     
     def update_playlist_display(self, video_info: Dict, current_index: int):
@@ -203,14 +213,14 @@ class ApplicationController:
             
             playlist_title = video_info.get('title', '') or ''
             if playlist_length > 0:
-                song_name = f"Downloading element {current_index + 1} out of {playlist_length} from the playlist {playlist_title}"
+                song_name = t("download.playlist_element", index=current_index + 1, total=playlist_length, playlist_title=playlist_title)
             else:
-                song_name = f"Downloading element {current_index + 1}..."
+                song_name = t("download.playlist_element_no_total", index=current_index + 1)
             self.view.update_progress_info(video, song_name, is_playlist=True)
         except Exception as e:
             print(f"Error updating playlist display: {e}")
             video = VideoInfo()
-            song_name = "Processing playlist..."
+            song_name = t("download.playlist_processing")
             self.view.update_progress_info(video, song_name, is_playlist=True)
     
     def update_playlist_display_from_hook(self, video_info: Dict, info_dict: Dict, current_index: int):
@@ -242,14 +252,14 @@ class ApplicationController:
             
             playlist_title = info_dict.get('playlist_title', '') or (video_info or {}).get('title', '') or ''
             if playlist_length > 0:
-                song_name = f"Downloading element {current_index + 1} out of {playlist_length} from the playlist {playlist_title}"
+                song_name = t("download.playlist_element", index=current_index + 1, total=playlist_length, playlist_title=playlist_title)
             else:
-                song_name = f"Downloading element {current_index + 1}..."
+                song_name = t("download.playlist_element_no_total", index=current_index + 1)
             self.view.update_progress_info(video, song_name, is_playlist=True)
         except Exception as e:
             print(f"Error updating playlist display: {e}")
             video = VideoInfo()
-            song_name = "Processing playlist..."
+            song_name = t("download.playlist_processing")
             self.view.update_progress_info(video, song_name, is_playlist=True)
     
     def extract_video_info(self, video_data: Dict) -> VideoInfo:
@@ -296,7 +306,7 @@ class ApplicationController:
         remaining_count = playlist_length - current_index
         
         if remaining_count <= 0:
-            return (f"Elapsed time: {elapsed_str}", "Finishing...")
+            return (t("eta.elapsed", time=elapsed_str), t("eta.finishing"))
         
         remaining_durations = []
         entries = []
@@ -362,7 +372,7 @@ class ApplicationController:
                 remaining_for_rest = estimated_element_total * (remaining_count - 1)
             remaining_seconds = int(remaining_for_current + remaining_for_rest)
         else:
-            return (f"Elapsed time: {elapsed_str}", "Estimated remaining time: calculating...")
+            return (t("eta.elapsed", time=elapsed_str), t("eta.calculating"))
         
         if remaining_seconds < 60:
             eta_str = f"{remaining_seconds}s"
@@ -374,7 +384,7 @@ class ApplicationController:
             minutes, secs = divmod(remainder, 60)
             eta_str = f"{hours}h {minutes:02d}m {secs:02d}s"
         
-        return (f"Elapsed time: {elapsed_str}", f"Estimated remaining time: ~{eta_str}")
+        return (t("eta.elapsed", time=elapsed_str), t("eta.remaining", time=eta_str))
     
     def on_download_progress(self, progress_data: Dict, video_info: Dict, progress: DownloadProgress):
         """Handle download progress updates (called from download thread)."""
@@ -452,15 +462,15 @@ class ApplicationController:
             
             playlist_title = info_dict.get('playlist_title', '') or (video_info or {}).get('title', '') or ''
             if playlist_length > 0:
-                song_name = f"Downloading element {video_index + 1} out of {playlist_length} from the playlist {playlist_title}"
+                song_name = t("download.playlist_element", index=video_index + 1, total=playlist_length, playlist_title=playlist_title)
             else:
-                song_name = f"Processing element {video_index + 1}..."
+                song_name = t("download.processing_element", index=video_index + 1)
                 
             if playlist_length > 0:
                 total_percentage = ((video_index + 1) / playlist_length) * 100
                 self.view.update_total_progress(total_percentage)
         else:
-            song_name = f"Processing \"{title}\""
+            song_name = t("download.processing_single", title=title)
         
         if hasattr(self.view, 'song_label') and self.view.song_label is not None:
             self.view.song_label.setText(song_name)
@@ -522,16 +532,16 @@ class ApplicationController:
         if config and config.is_playlist and self.current_video_info:
             playlist_title = self.current_video_info.get('title', '') or ''
         
-        prefix = "Download aborted. " if cancelled else ""
+        prefix = t("completion.aborted_prefix") if cancelled else ""
         
         if downloaded_count > 0 and playlist_title:
-            msg = f"{downloaded_count} element{'s' if downloaded_count > 1 else ''} downloaded from playlist {playlist_title}."
+            msg = t("completion.elements_playlist", count=downloaded_count, playlist_title=playlist_title)
         elif downloaded_count > 0:
-            msg = f"{downloaded_count} element{'s' if downloaded_count > 1 else ''} downloaded."
+            msg = t("completion.elements_only", count=downloaded_count)
         elif playlist_title:
-            msg = f"Playlist {playlist_title} downloaded."
+            msg = t("completion.playlist_done", playlist_title=playlist_title)
         else:
-            msg = "Download complete."
+            msg = t("completion.download_complete")
         
         return f"{prefix}{msg}"
     
@@ -573,8 +583,8 @@ class ApplicationController:
 
         result = QMessageBox.warning(
             self.view,
-            "Cookies Warning",
-            warning + "\n\nContinue download anyway?",
+            t("cookies.warning_title"),
+            warning + "\n\n" + t("cookies.continue_prompt"),
             QMessageBox.Ok | QMessageBox.Cancel,
             QMessageBox.Cancel
         )

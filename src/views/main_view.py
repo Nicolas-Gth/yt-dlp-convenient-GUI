@@ -12,6 +12,7 @@ from PySide6.QtCore import Qt
 
 from config import DEFAULT_BITRATE, DEFAULT_QUALITY, DEFAULT_NORMALIZE_TARGET, FILE_FORMATS
 from utils import settings_manager
+from utils.i18n_utils import t
 from models import DownloadConfig
 
 from .window_view import WindowMixin
@@ -45,6 +46,7 @@ class MainApplicationView(QMainWindow, WindowMixin, WidgetsMixin, ProgressMixin,
         self.on_playlist_change_callback = None
         self.on_stop_callback = None
         self.on_theme_change_callback = None
+        self.on_language_change_callback = None
 
     # ------------------------------------------------------------------
     # Variables (simple Python attributes instead of Tk vars)
@@ -105,10 +107,10 @@ class MainApplicationView(QMainWindow, WindowMixin, WidgetsMixin, ProgressMixin,
         )
 
         if config.file_format in ("mp3", "opus"):
-            raw_bitrate = self.quality_menu.currentText()
+            raw_bitrate = self.quality_menu.currentData() or "Best"
             config.bitrate = "best" if raw_bitrate == "Best" else raw_bitrate.replace("Max ", "").split("Kbps")[0]
         else:
-            raw_quality = self.quality_menu.currentText()
+            raw_quality = self.quality_menu.currentData() or "Best"
             config.quality = "best" if raw_quality == "Best" else raw_quality.replace("Max ", "").split("p")[0]
 
         if config.is_playlist and hasattr(self, 'playlist_start_entry'):
@@ -119,8 +121,8 @@ class MainApplicationView(QMainWindow, WindowMixin, WidgetsMixin, ProgressMixin,
                     from PySide6.QtWidgets import QMessageBox
                     QMessageBox.warning(
                         self,
-                        "Invalid range",
-                        f"The end value ({config.playlist_end}) cannot be less than the start value ({config.playlist_start})."
+                        t("validation.invalid_range_title"),
+                        t("validation.invalid_range_msg", end=config.playlist_end, start=config.playlist_start)
                     )
                     return None
             except ValueError:

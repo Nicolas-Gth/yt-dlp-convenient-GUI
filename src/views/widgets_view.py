@@ -15,6 +15,7 @@ from PySide6.QtCore import Qt, QSize
 
 from config import DEFAULT_BITRATES, DEFAULT_QUALITIES, DOWNLOAD_ICON_PATH
 from utils import settings_manager
+from utils.i18n_utils import t
 
 
 class WidgetsMixin:
@@ -59,7 +60,7 @@ class WidgetsMixin:
         url_layout.setContentsMargins(5, 10, 5, 0)
 
         self.url_entry = QLineEdit()
-        self.url_entry.setPlaceholderText("Enter a video URL")
+        self.url_entry.setPlaceholderText(t("url.placeholder"))
         self.url_entry.setMinimumWidth(400)
         self.url_entry.setClearButtonEnabled(True)
         url_layout.addWidget(self.url_entry, 1)
@@ -84,7 +85,7 @@ class WidgetsMixin:
         if last_directory:
             self.path_entry.setText(last_directory)
         else:
-            self.path_entry.setPlaceholderText("Click to choose a folder")
+            self.path_entry.setPlaceholderText(t("path.placeholder"))
 
         self.path_entry.mousePressEvent = lambda e: self._on_browse_click()
 
@@ -98,15 +99,15 @@ class WidgetsMixin:
 
     def create_format_selection(self):
         """Create file format selection widgets."""
-        format_box = QGroupBox("File output format")
-        format_layout = QHBoxLayout(format_box)
+        self.format_box = QGroupBox(t("format.group_title"))
+        format_layout = QHBoxLayout(self.format_box)
 
         self.format_group = QButtonGroup(self)
-        self.mp3_radio = QRadioButton("Mp3")
+        self.mp3_radio = QRadioButton(t("format.mp3"))
         self.mp3_radio.setCursor(Qt.PointingHandCursor)
-        self.mp4_radio = QRadioButton("Mp4")
+        self.mp4_radio = QRadioButton(t("format.mp4"))
         self.mp4_radio.setCursor(Qt.PointingHandCursor)
-        self.opus_radio = QRadioButton("Opus")
+        self.opus_radio = QRadioButton(t("format.opus"))
         self.opus_radio.setCursor(Qt.PointingHandCursor)
 
         self.format_group.addButton(self.mp3_radio, 1)
@@ -117,15 +118,17 @@ class WidgetsMixin:
         format_layout.addWidget(self.mp4_radio)
         format_layout.addWidget(self.opus_radio)
 
-        # Quality/bitrate combo box
+        # Quality label + combo box
+        self.quality_label = QLabel(t("quality.label"))
         self.quality_menu = QComboBox()
         self.quality_menu.setMinimumWidth(120)
+        format_layout.addWidget(self.quality_label)
         format_layout.addWidget(self.quality_menu)
         format_layout.addStretch()
 
         format_wrapper = QHBoxLayout()
         format_wrapper.setContentsMargins(5, 10, 5, 0)
-        format_wrapper.addWidget(format_box)
+        format_wrapper.addWidget(self.format_box)
         self.main_layout.addLayout(format_wrapper)
 
         # Set initial format from preferences
@@ -144,14 +147,25 @@ class WidgetsMixin:
         self.mp3_radio.toggled.connect(lambda checked: self._on_mp3_selected() if checked else None)
         self.mp4_radio.toggled.connect(lambda checked: self._on_mp4_selected() if checked else None)
         self.opus_radio.toggled.connect(lambda checked: self._on_opus_selected() if checked else None)
-        self.quality_menu.currentTextChanged.connect(self._on_quality_or_bitrate_changed)
+        self.quality_menu.currentIndexChanged.connect(self._on_quality_or_bitrate_changed)
+
+    @staticmethod
+    def _translate_quality_item(item: str) -> str:
+        """Return the translated display label for a quality/bitrate item."""
+        if item == "Best":
+            return t("quality.best")
+        # "Max 128Kbps" → t("quality.max", value="128Kbps")
+        if item.startswith("Max "):
+            return t("quality.max", value=item[4:])
+        return item
 
     def _populate_bitrate_menu(self):
         """Populate quality_menu with bitrate options."""
         self.quality_menu.blockSignals(True)
         self.quality_menu.clear()
-        self.quality_menu.addItems(DEFAULT_BITRATES)
-        idx = self.quality_menu.findText(self._bitrate_var)
+        for item in DEFAULT_BITRATES:
+            self.quality_menu.addItem(self._translate_quality_item(item), item)
+        idx = self.quality_menu.findData(self._bitrate_var)
         if idx >= 0:
             self.quality_menu.setCurrentIndex(idx)
         self.quality_menu.blockSignals(False)
@@ -160,8 +174,9 @@ class WidgetsMixin:
         """Populate quality_menu with quality options."""
         self.quality_menu.blockSignals(True)
         self.quality_menu.clear()
-        self.quality_menu.addItems(DEFAULT_QUALITIES)
-        idx = self.quality_menu.findText(self._quality_var)
+        for item in DEFAULT_QUALITIES:
+            self.quality_menu.addItem(self._translate_quality_item(item), item)
+        idx = self.quality_menu.findData(self._quality_var)
         if idx >= 0:
             self.quality_menu.setCurrentIndex(idx)
         self.quality_menu.blockSignals(False)
@@ -180,13 +195,13 @@ class WidgetsMixin:
 
     def create_playlist_selection(self):
         """Create playlist selection widgets."""
-        self.playlist_box = QGroupBox("Playlist download")
+        self.playlist_box = QGroupBox(t("playlist.group_title"))
         self.playlist_layout = QHBoxLayout(self.playlist_box)
 
         self.playlist_group = QButtonGroup(self)
-        self.no_playlist_radio = QRadioButton("No")
+        self.no_playlist_radio = QRadioButton(t("playlist.no"))
         self.no_playlist_radio.setCursor(Qt.PointingHandCursor)
-        self.yes_playlist_radio = QRadioButton("Yes")
+        self.yes_playlist_radio = QRadioButton(t("playlist.yes"))
         self.yes_playlist_radio.setCursor(Qt.PointingHandCursor)
 
         self.playlist_group.addButton(self.no_playlist_radio, 1)
@@ -196,12 +211,12 @@ class WidgetsMixin:
         self.playlist_layout.addWidget(self.yes_playlist_radio)
 
         # Playlist range widgets (hidden by default)
-        self.playlist_from_label = QLabel("          From video ")
+        self.playlist_from_label = QLabel(t("playlist.from_video"))
         self.playlist_start_entry = QSpinBox()
         self.playlist_start_entry.setRange(1, 9999)
         self.playlist_start_entry.setValue(1)
         self.playlist_start_entry.setFixedWidth(70)
-        self.playlist_to_label = QLabel(" to ")
+        self.playlist_to_label = QLabel(t("playlist.to"))
         self.playlist_end_entry = QSpinBox()
         self.playlist_end_entry.setRange(1, 9999)
         self.playlist_end_entry.setValue(999)
@@ -255,20 +270,20 @@ class WidgetsMixin:
 
     def create_options_selection(self):
         """Create options fieldset with normalize, enrich and prevent-sleep checkboxes."""
-        options_box = QGroupBox("Options")
-        options_layout = QVBoxLayout(options_box)
+        self.options_box = QGroupBox(t("options.group_title"))
+        options_layout = QVBoxLayout(self.options_box)
 
         # Normalize volume
         self.normalize_layout = QHBoxLayout()
 
-        self.normalize_check = QCheckBox("  Normalize volume")
+        self.normalize_check = QCheckBox(t("options.normalize_volume"))
         self.normalize_check.setCursor(Qt.PointingHandCursor)
         self.normalize_check.setChecked(self._normalize_var)
         self.normalize_check.toggled.connect(self._on_normalize_toggled)
         self.normalize_layout.addWidget(self.normalize_check)
 
         # Normalize target widgets (hidden by default)
-        self.normalize_target_label = QLabel("  Target (LUFS) :")
+        self.normalize_target_label = QLabel(t("options.normalize_target"))
         self.normalize_layout.addWidget(self.normalize_target_label)
 
         self.normalize_target_entry = QLineEdit()
@@ -276,7 +291,7 @@ class WidgetsMixin:
         self.normalize_target_entry.setText(str(self._normalize_target_var))
         self.normalize_layout.addWidget(self.normalize_target_entry)
 
-        self.normalize_hint_label = QLabel("(-14 recommended)")
+        self.normalize_hint_label = QLabel(t("options.normalize_hint"))
         self.normalize_hint_label.setFont(QFont("Arial", 7))
         self.normalize_hint_label.setEnabled(False)
         self.normalize_layout.addWidget(self.normalize_hint_label)
@@ -293,13 +308,13 @@ class WidgetsMixin:
         # Enrich metadata
         enrich_layout = QHBoxLayout()
 
-        self.enrich_check = QCheckBox("  Enrich metadata (HD album cover + lyrics)")
+        self.enrich_check = QCheckBox(t("options.enrich_metadata"))
         self.enrich_check.setCursor(Qt.PointingHandCursor)
         self.enrich_check.setChecked(self._enrich_var)
         self.enrich_check.toggled.connect(self._on_enrich_toggled)
         enrich_layout.addWidget(self.enrich_check)
 
-        self.enrich_hint = QLabel("via MusicBrainz, iTunes, LRCLIB, Genius")
+        self.enrich_hint = QLabel(t("options.enrich_hint"))
         self.enrich_hint.setFont(QFont("Arial", 7))
         self.enrich_hint.setEnabled(False)
         enrich_layout.addWidget(self.enrich_hint)
@@ -310,7 +325,7 @@ class WidgetsMixin:
         # Prevent sleep
         sleep_layout = QHBoxLayout()
 
-        self.prevent_sleep_check = QCheckBox("  Prevent sleep during download")
+        self.prevent_sleep_check = QCheckBox(t("options.prevent_sleep"))
         self.prevent_sleep_check.setCursor(Qt.PointingHandCursor)
         self.prevent_sleep_check.setChecked(self._prevent_sleep_var)
         self.prevent_sleep_check.toggled.connect(self._on_prevent_sleep_toggled)
@@ -321,7 +336,7 @@ class WidgetsMixin:
 
         options_wrapper = QHBoxLayout()
         options_wrapper.setContentsMargins(5, 10, 5, 0)
-        options_wrapper.addWidget(options_box)
+        options_wrapper.addWidget(self.options_box)
 
         self.main_layout.addLayout(options_wrapper)
 
@@ -343,7 +358,7 @@ class WidgetsMixin:
 
     def create_convert_button(self):
         """Create the main convert button."""
-        self.convert_button = QPushButton("  Click here to launch download")
+        self.convert_button = QPushButton(" " + t("button.download"))
         self.convert_button.setIcon(QIcon(DOWNLOAD_ICON_PATH))
         self.convert_button.setIconSize(QSize(18, 18))
         self.convert_button.setFont(QFont("Bahnschrift", 12))

@@ -10,6 +10,7 @@ from PySide6.QtCore import Qt
 
 from config import DEFAULT_NORMALIZE_TARGET
 from utils import settings_manager
+from utils.i18n_utils import t
 
 
 class EventHandlersMixin:
@@ -57,7 +58,7 @@ class EventHandlersMixin:
         """Handle stop button click."""
         if hasattr(self, 'stop_button'):
             self.stop_button.setEnabled(False)
-            self.stop_button.setText("Stopping...")
+            self.stop_button.setText(t("button.stopping"))
             self.stop_button.setStyleSheet("""
                 QPushButton { background-color: #666666; color: white; border: none;
                 border-radius: 4px; padding: 8px 16px; }
@@ -76,7 +77,7 @@ class EventHandlersMixin:
     def _on_browse_click(self):
         """Handle browse button click using native file dialog."""
         directory = QFileDialog.getExistingDirectory(
-            self, "Select Download Directory",
+            self, t("path.dialog_title"),
             self.path_entry.text() or ""
         )
         if directory:
@@ -108,28 +109,27 @@ class EventHandlersMixin:
         """Show dialog indicating that a download path must be selected."""
         QMessageBox.warning(
             self,
-            "Path Required",
-            "Please select a download directory before starting the download.\n\n"
-            "Click the 'Browse' button to choose a folder."
+            t("validation.path_required_title"),
+            t("validation.path_required_msg")
         )
 
     def _validate_url(self) -> tuple:
         """Validate the URL and return (is_valid, error_message)."""
         url = self.url_entry.text().strip()
         if not url:
-            return False, "Please enter a video URL before starting the download."
+            return False, t("validation.url_empty")
         if not (url.startswith('http://') or url.startswith('https://')):
-            return False, "Please enter a valid URL starting with http:// or https://"
+            return False, t("validation.url_invalid")
         return True, ""
 
     def _show_url_tooltip(self, error_message: str):
         """Show dialog with URL error message."""
-        QMessageBox.warning(self, "Invalid URL", error_message)
+        QMessageBox.warning(self, t("validation.invalid_url_title"), error_message)
 
     def show_ytdlp_error(self, error_message: str):
         """Show yt-dlp error in a standard popup dialog."""
         clean_message = error_message.replace("ERROR: ", "").strip()
-        QMessageBox.critical(self, "Download Error", clean_message)
+        QMessageBox.critical(self, t("validation.download_error_title"), clean_message)
 
     # ------------------------------------------------------------------
     # Convert button handler
@@ -160,12 +160,12 @@ class EventHandlersMixin:
         """Get the current bitrate selection."""
         if self.mp4_radio.isChecked():
             return self._bitrate_var
-        return self.quality_menu.currentText() or self._bitrate_var
+        return self.quality_menu.currentData() or self._bitrate_var
 
     def _get_current_quality(self) -> str:
         """Get the current quality selection."""
         if self.mp4_radio.isChecked():
-            return self.quality_menu.currentText() or self._quality_var
+            return self.quality_menu.currentData() or self._quality_var
         return self._quality_var
 
     def _on_mp3_selected(self):
@@ -224,10 +224,13 @@ class EventHandlersMixin:
         """Handle prevent sleep checkbox toggle."""
         self._save_preferences()
 
-    def _on_quality_or_bitrate_changed(self, text):
+    def _on_quality_or_bitrate_changed(self, index):
         """Handle quality/bitrate combo box change."""
+        data = self.quality_menu.itemData(index)
+        if data is None:
+            return
         if self.mp4_radio.isChecked():
-            self._quality_var = text
+            self._quality_var = data
         else:
-            self._bitrate_var = text
+            self._bitrate_var = data
         self._save_preferences()

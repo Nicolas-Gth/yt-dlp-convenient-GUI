@@ -15,6 +15,7 @@ from PySide6.QtCore import Qt, QTimer, QByteArray, QBuffer, QSize
 
 from config import DEFAULT_BITRATES, DEFAULT_QUALITIES, DOWNLOAD_ICON_PATH, REFRESH_ICON_PATH
 from utils import load_thumbnail
+from utils.i18n_utils import t
 from models import VideoInfo
 
 from io import BytesIO
@@ -147,7 +148,7 @@ class ProgressMixin:
         self.info_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
         self.info_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
         self.info_table.verticalHeader().setDefaultSectionSize(20)
-        for row, label in enumerate(["Title", "Author", "Duration"]):
+        for row, label in enumerate([t("progress.info.title"), t("progress.info.author"), t("progress.info.duration")]):
             item = QTableWidgetItem(label)
             item.setFont(QFont("Arial", 8, QFont.Bold))
             item.setFlags(Qt.ItemIsEnabled)
@@ -160,7 +161,7 @@ class ProgressMixin:
         self.progress_layout.addLayout(thumb_info_layout)
 
         # Element progress
-        self.progress_label = QLabel("Element progress")
+        self.progress_label = QLabel(t("progress.element"))
         self.progress_label.setFont(QFont("Arial", 8))
         self.progress_layout.addWidget(self.progress_label)
 
@@ -175,7 +176,7 @@ class ProgressMixin:
 
         # Total progress (for playlists)
         if is_playlist:
-            self.total_progress_label = QLabel("Total progress")
+            self.total_progress_label = QLabel(t("progress.total"))
             self.total_progress_label.setFont(QFont("Arial", 8))
             self.progress_layout.addWidget(self.total_progress_label)
 
@@ -204,7 +205,7 @@ class ProgressMixin:
         self.main_layout.insertWidget(self.main_layout.indexOf(self.convert_button), self.progress_frame, 1)
 
         # Create stop button
-        self.stop_button = QPushButton("Stop download")
+        self.stop_button = QPushButton(t("button.stop"))
         self.stop_button.setFont(QFont("Bahnschrift", 12))
         self.stop_button.setCursor(Qt.PointingHandCursor)
         self.stop_button.setStyleSheet("""
@@ -288,7 +289,7 @@ class ProgressMixin:
 
         if hasattr(self, 'stop_button') and self.stop_button is not None:
             self.stop_button.setEnabled(True)
-            self.stop_button.setText("  New download")
+            self.stop_button.setText(" " + t("button.new_download"))
             self.stop_button.setIcon(QIcon(REFRESH_ICON_PATH))
             self.stop_button.setIconSize(QSize(18, 18))
             self.stop_button.setStyleSheet("""
@@ -370,7 +371,7 @@ class ProgressMixin:
             return
         if status == "processing":
             self.video_progress.setRange(0, 0)  # indeterminate animation
-            self.video_progress.setFormat("Processing")
+            self.video_progress.setFormat(t("progress.processing"))
         else:
             if self.video_progress.maximum() == 0:
                 self.video_progress.setRange(0, 1000)
@@ -383,7 +384,7 @@ class ProgressMixin:
             return
         self.total_progress.setValue(int(percentage * 10))
         if percentage >= 100:
-            self.total_progress.setFormat("Done")
+            self.total_progress.setFormat(t("progress.done"))
         else:
             self.total_progress.setFormat(f"{percentage:.1f}%")
 
@@ -400,7 +401,7 @@ class ProgressMixin:
         skipped_layout = QVBoxLayout(self._skipped_frame)
         skipped_layout.setContentsMargins(5, 2, 5, 2)
 
-        header = QLabel("Skipped unavailable elements")
+        header = QLabel(t("progress.skipped_header"))
         header.setFont(QFont("Arial", 9, QFont.Bold))
         skipped_layout.addWidget(header)
 
@@ -410,11 +411,11 @@ class ProgressMixin:
             title = entry.get('title', 'Unknown')
             channel = entry.get('channel', '')
             if entry.get('age_restricted'):
-                suffix = '  [Age-restricted]'
+                suffix = f'  [{t("progress.age_restricted")}]'
             elif entry.get('format_unavailable'):
-                suffix = '  [Format unavailable]'
+                suffix = f'  [{t("progress.format_unavailable")}]'
             elif entry.get('video_unavailable'):
-                suffix = '  [Unavailable]'
+                suffix = f'  [{t("progress.unavailable")}]'
             else:
                 suffix = ''
             if channel:
@@ -434,15 +435,15 @@ class ProgressMixin:
 
     def show_age_restricted_entries(self, entries: list):
         """Show age-restricted entries in the skipped panel."""
-        self._show_skipped_error_entries(entries, 'age_restricted', 'Age-restricted')
+        self._show_skipped_error_entries(entries, 'age_restricted', t("progress.age_restricted"))
 
     def show_format_unavailable_entries(self, entries: list):
         """Show format-unavailable entries in the skipped panel."""
-        self._show_skipped_error_entries(entries, 'format_unavailable', 'Format unavailable')
+        self._show_skipped_error_entries(entries, 'format_unavailable', t("progress.format_unavailable"))
 
     def show_video_unavailable_entries(self, entries: list):
         """Show video-unavailable entries in the skipped panel."""
-        self._show_skipped_error_entries(entries, 'video_unavailable', 'Unavailable')
+        self._show_skipped_error_entries(entries, 'video_unavailable', t("progress.unavailable"))
 
     def _show_skipped_error_entries(self, entries: list, flag_key: str, label: str):
         """Show error entries in the skipped panel."""
@@ -506,14 +507,15 @@ class ProgressMixin:
         if not hasattr(self, '_normalize_labels') or self._normalize_labels is None:
             self._normalize_labels = []
 
-            self.normalize_outer_frame = QGroupBox("Downloaded elements")
+            self.normalize_outer_frame = QGroupBox(t("progress.downloaded_elements"))
             self.normalize_outer_frame.setFont(QFont("Arial", 9, QFont.Bold))
             norm_layout = QVBoxLayout(self.normalize_outer_frame)
             norm_layout.setContentsMargins(5, 10, 5, 8)
 
             self._normalize_table = CopyableTableWidget(0, 6)
             self._normalize_table.setHorizontalHeaderLabels(
-                ["#", "Artist", "Title", "Metadatas", "Lyrics", "Norm."]
+                [t("progress.table.number"), t("progress.table.artist"), t("progress.table.title"),
+                 t("progress.table.metadatas"), t("progress.table.lyrics"), t("progress.table.norm")]
             )
             self._normalize_table.setFont(QFont("Arial", 8))
             self._normalize_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
@@ -582,7 +584,7 @@ class ProgressMixin:
         fetching_layout.setAlignment(Qt.AlignCenter)
 
         self.fetching_label = QLabel(
-            "Retrieving information..." if not is_playlist else "Retrieving playlist information..."
+            t("fetching.info") if not is_playlist else t("fetching.playlist")
         )
         self.fetching_label.setAlignment(Qt.AlignCenter)
         fetching_layout.addWidget(self.fetching_label)
@@ -606,11 +608,11 @@ class ProgressMixin:
             percentage = (current / total) * 100
             self.fetching_progress.setValue(int(percentage))
             self.fetching_label.setText(
-                f"Retrieving playlist information... ({current}/{total})"
+                t("fetching.playlist_progress", current=current, total=total)
             )
         else:
             self.fetching_label.setText(
-                f"Retrieving playlist information... ({current} titles found)"
+                t("fetching.playlist_count", current=current)
             )
             self.fetching_progress.setValue(min(current % 100, 95))
 
