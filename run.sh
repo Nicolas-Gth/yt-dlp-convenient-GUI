@@ -442,10 +442,23 @@ check_for_updates() {
             else
                 remote_branch="origin/master"
             fi
+            # Save requirements hash before update
+            local old_req_hash=""
+            if [[ -f "requirements.txt" ]]; then
+                old_req_hash=$(md5sum requirements.txt 2>/dev/null | cut -d' ' -f1)
+            fi
             # Force reset to remote (overwrites all local changes)
             git reset --hard "$remote_branch" 2>/dev/null
             if [[ $? -eq 0 ]]; then
                 echo -e "${GREEN}[OK]${NC} Updated successfully!"
+                # Check if requirements.txt changed
+                local new_req_hash=""
+                if [[ -f "requirements.txt" ]]; then
+                    new_req_hash=$(md5sum requirements.txt 2>/dev/null | cut -d' ' -f1)
+                fi
+                if [[ "$old_req_hash" != "$new_req_hash" ]]; then
+                    REQUIREMENTS_CHANGED=1
+                fi
             else
                 echo -e "${RED}[ERROR]${NC} Update failed."
             fi
@@ -456,25 +469,47 @@ check_for_updates() {
     echo
 }
 
-# Function to update yt-dlp
+# Function to update Python dependencies
 update_ytdlp() {
-    echo -e "${YELLOW}Checking for yt-dlp updates...${NC}"
-    if [[ -d "venv" ]]; then
-        source venv/bin/activate
-        pip install --upgrade yt-dlp yt-dlp-ejs >/dev/null 2>&1
-        local result=$?
-        deactivate
+    # If requirements.txt changed after a git update, reinstall all deps
+    if [[ "${REQUIREMENTS_CHANGED:-0}" -eq 1 ]]; then
+        echo -e "${YELLOW}Dependencies changed, updating all Python packages...${NC}"
+        if [[ -d "venv" ]]; then
+            source venv/bin/activate
+            pip install -r requirements.txt >/dev/null 2>&1
+            local result=$?
+            deactivate
+        else
+            pip3 install -r requirements.txt >/dev/null 2>&1 || pip install -r requirements.txt >/dev/null 2>&1
+            local result=$?
+        fi
+        if [ $result -eq 0 ]; then
+            echo -e "${GREEN}[OK]${NC} All Python dependencies updated"
+        else
+            echo -e "${YELLOW}[WARN]${NC} Could not update some dependencies"
+        fi
     else
-        pip3 install --upgrade yt-dlp yt-dlp-ejs >/dev/null 2>&1 || pip install --upgrade yt-dlp yt-dlp-ejs >/dev/null 2>&1
-        local result=$?
-    fi
-    if [ $result -eq 0 ]; then
-        echo -e "${GREEN}[OK]${NC} yt-dlp is up to date"
-    else
-        echo -e "${YELLOW}[WARN]${NC} Could not update yt-dlp"
+        echo -e "${YELLOW}Checking for yt-dlp updates...${NC}"
+        if [[ -d "venv" ]]; then
+            source venv/bin/activate
+            pip install --upgrade yt-dlp yt-dlp-ejs >/dev/null 2>&1
+            local result=$?
+            deactivate
+        else
+            pip3 install --upgrade yt-dlp yt-dlp-ejs >/dev/null 2>&1 || pip install --upgrade yt-dlp yt-dlp-ejs >/dev/null 2>&1
+            local result=$?
+        fi
+        if [ $result -eq 0 ]; then
+            echo -e "${GREEN}[OK]${NC} yt-dlp is up to date"
+        else
+            echo -e "${YELLOW}[WARN]${NC} Could not update yt-dlp"
+        fi
     fi
     echo
 }
+
+# Flag to track if requirements.txt changed during update
+REQUIREMENTS_CHANGED=0
 
 # Main script logic
 check_for_updates

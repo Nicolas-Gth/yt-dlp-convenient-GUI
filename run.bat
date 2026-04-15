@@ -235,6 +235,11 @@ if "!LOCAL!"=="!REMOTE!" (
     echo [UPDATE] !BEHIND! new commit^(s^) available
     set /p "update_response=Update now? (Y/n): "
     if /i not "!update_response!"=="n" (
+        rem Save requirements hash before update for comparison after restart
+        if exist "requirements.txt" (
+            for /f "tokens=*" %%h in ('certutil -hashfile requirements.txt MD5 2^>nul ^| findstr /v ":" ^| findstr /v "CertUtil"') do set "_hash=%%h"
+            echo !_hash!>".req_hash_before"
+        )
         rem Use trampoline script to avoid run.bat being overwritten mid-execution
         echo [INFO] Updating and restarting...
         call :write_updater "reset"
@@ -294,12 +299,34 @@ start /min "" "!_bat!"
 goto :eof
 
 :update_ytdlp
-echo Checking for yt-dlp updates...
-pip install --upgrade yt-dlp yt-dlp-ejs >nul 2>&1
-if !errorLevel! == 0 (
-    echo [OK] yt-dlp is up to date
+:: Check if requirements changed after a git update
+set "_req_changed=0"
+if exist ".req_hash_before" (
+    set /p "_old_hash="<".req_hash_before"
+    del ".req_hash_before" >nul 2>&1
+    if exist "requirements.txt" (
+        for /f "tokens=*" %%h in ('certutil -hashfile requirements.txt MD5 2^>nul ^| findstr /v ":" ^| findstr /v "CertUtil"') do set "_new_hash=%%h"
+        if not "!_old_hash!"=="!_new_hash!" set "_req_changed=1"
+    )
+)
+if !_req_changed! == 1 (
+    echo Dependencies changed, updating all Python packages...
+    if exist "requirements.txt" (
+        pip install -r requirements.txt >nul 2>&1
+    )
+    if !errorLevel! == 0 (
+        echo [OK] All Python dependencies updated
+    ) else (
+        echo [WARN] Could not update some dependencies
+    )
 ) else (
-    echo [WARN] Could not update yt-dlp
+    echo Checking for yt-dlp updates...
+    pip install --upgrade yt-dlp yt-dlp-ejs >nul 2>&1
+    if !errorLevel! == 0 (
+        echo [OK] yt-dlp is up to date
+    ) else (
+        echo [WARN] Could not update yt-dlp
+    )
 )
 echo.
 goto :eof
