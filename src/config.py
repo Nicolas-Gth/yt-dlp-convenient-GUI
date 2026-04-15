@@ -4,7 +4,7 @@ Configuration and constants for the yt-dlp GUI application.
 import os
 
 # Application version
-APP_VERSION = "3.0.1"
+APP_VERSION = "3.0.2"
 
 # Application name
 APP_NAME = "yt-dlp Convenient GUI"
@@ -50,7 +50,7 @@ COLORS = {
 DEFAULT_BITRATES = ["Best", "Max 32Kbps", "Max 96Kbps", "Max 128Kbps", "Max 192Kbps", "Max 256Kbps", "Max 320Kbps"]
 DEFAULT_QUALITIES = ["Best", "Max 144p", "Max 360p", "Max 480p", "Max 720p", "Max 1080p", "Max 1440p", "Max 2160p"]
 DEFAULT_BITRATE = "Best"
-DEFAULT_QUALITY = "Max 720p"
+DEFAULT_QUALITY = "Best"
 DEFAULT_NORMALIZE_TARGET = -14.0  # LUFS
 
 # File formats

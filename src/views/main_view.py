@@ -56,10 +56,13 @@ class MainApplicationView(QMainWindow, WindowMixin, WidgetsMixin, ProgressMixin,
         """Initialize state variables."""
         preferences = settings_manager.get_last_format_preferences()
 
-        self._bitrate_var = preferences.get("bitrate", DEFAULT_BITRATE)
+        self._mp3_bitrate_var = preferences.get("bitrate", DEFAULT_BITRATE)
+        self._opus_bitrate_var = preferences.get("opus_bitrate", DEFAULT_BITRATE)
         self._quality_var = preferences.get("quality", DEFAULT_QUALITY)
         self._format_var = preferences.get("format_var", 1)
         self._playlist_var = 0 if preferences.get("playlist_mode", False) else 1
+        self._playlist_start_var = preferences.get("playlist_start", 1)
+        self._playlist_end_var = preferences.get("playlist_end", 999)
         self._normalize_var = preferences.get("normalize_volume", False)
         self._normalize_target_var = preferences.get("normalize_target", DEFAULT_NORMALIZE_TARGET)
         self._enrich_var = preferences.get("enrich_metadata", False)
@@ -97,9 +100,12 @@ class MainApplicationView(QMainWindow, WindowMixin, WidgetsMixin, ProgressMixin,
         # Save all format preferences
         settings_manager.save_format_preferences(
             format_var=self.format_group.checkedId(),
-            bitrate=self._get_current_bitrate(),
+            bitrate=self._mp3_bitrate_var,
+            opus_bitrate=self._opus_bitrate_var,
             quality=self._get_current_quality(),
             playlist_mode=config.is_playlist,
+            playlist_start=self.playlist_start_entry.value(),
+            playlist_end=self.playlist_end_entry.value(),
             normalize_volume=config.normalize_volume,
             normalize_target=config.normalize_target,
             enrich_metadata=config.enrich_metadata,

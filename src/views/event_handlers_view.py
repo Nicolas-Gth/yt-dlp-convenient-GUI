@@ -147,9 +147,12 @@ class EventHandlersMixin:
         """Save all format preferences to settings."""
         settings_manager.save_format_preferences(
             format_var=self.format_group.checkedId(),
-            bitrate=self._get_current_bitrate(),
+            bitrate=self._mp3_bitrate_var,
+            opus_bitrate=self._opus_bitrate_var,
             quality=self._get_current_quality(),
             playlist_mode=(self.yes_playlist_radio.isChecked()),
+            playlist_start=self.playlist_start_entry.value(),
+            playlist_end=self.playlist_end_entry.value(),
             normalize_volume=self.normalize_check.isChecked(),
             normalize_target=self._get_normalize_target(),
             enrich_metadata=self.enrich_check.isChecked(),
@@ -159,8 +162,8 @@ class EventHandlersMixin:
     def _get_current_bitrate(self) -> str:
         """Get the current bitrate selection."""
         if self.mp4_radio.isChecked():
-            return self._bitrate_var
-        return self.quality_menu.currentData() or self._bitrate_var
+            return self._mp3_bitrate_var
+        return self.quality_menu.currentData() or (self._opus_bitrate_var if self.opus_radio.isChecked() else self._mp3_bitrate_var)
 
     def _get_current_quality(self) -> str:
         """Get the current quality selection."""
@@ -181,7 +184,6 @@ class EventHandlersMixin:
             self.on_format_change_callback("mp4")
 
     def _on_opus_selected(self):
-        self._bitrate_var = "Max 128Kbps"
         self.switch_to_bitrate_menu()
         self._save_preferences()
         if self.on_format_change_callback:
@@ -231,6 +233,12 @@ class EventHandlersMixin:
             return
         if self.mp4_radio.isChecked():
             self._quality_var = data
+        elif self.opus_radio.isChecked():
+            self._opus_bitrate_var = data
         else:
-            self._bitrate_var = data
+            self._mp3_bitrate_var = data
+        self._save_preferences()
+
+    def _on_playlist_range_changed(self):
+        """Handle playlist start/end spinbox change."""
         self._save_preferences()

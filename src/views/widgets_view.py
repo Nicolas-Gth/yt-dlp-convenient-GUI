@@ -165,7 +165,8 @@ class WidgetsMixin:
         self.quality_menu.clear()
         for item in DEFAULT_BITRATES:
             self.quality_menu.addItem(self._translate_quality_item(item), item)
-        idx = self.quality_menu.findData(self._bitrate_var)
+        active = self._opus_bitrate_var if self.opus_radio.isChecked() else self._mp3_bitrate_var
+        idx = self.quality_menu.findData(active)
         if idx >= 0:
             self.quality_menu.setCurrentIndex(idx)
         self.quality_menu.blockSignals(False)
@@ -214,12 +215,12 @@ class WidgetsMixin:
         self.playlist_from_label = QLabel(t("playlist.from_video"))
         self.playlist_start_entry = QSpinBox()
         self.playlist_start_entry.setRange(1, 9999)
-        self.playlist_start_entry.setValue(1)
+        self.playlist_start_entry.setValue(self._playlist_start_var)
         self.playlist_start_entry.setFixedWidth(70)
         self.playlist_to_label = QLabel(t("playlist.to"))
         self.playlist_end_entry = QSpinBox()
         self.playlist_end_entry.setRange(1, 9999)
-        self.playlist_end_entry.setValue(999)
+        self.playlist_end_entry.setValue(self._playlist_end_var)
         self.playlist_end_entry.setFixedWidth(70)
 
         self.playlist_layout.addWidget(self.playlist_from_label)
@@ -248,6 +249,8 @@ class WidgetsMixin:
         self.no_playlist_radio.toggled.connect(
             lambda checked: self._on_no_playlist_selected() if checked else None
         )
+        self.playlist_start_entry.valueChanged.connect(self._on_playlist_range_changed)
+        self.playlist_end_entry.valueChanged.connect(self._on_playlist_range_changed)
 
     def _set_playlist_options_visible(self, visible: bool):
         """Show or hide playlist range widgets."""
