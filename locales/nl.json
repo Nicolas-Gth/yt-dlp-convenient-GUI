@@ -1,0 +1,127 @@
+{
+  "_meta": {
+    "language": "Nederlands",
+    "code": "nl",
+    "authors": ["Nicolas-Gth"],
+    "version": "1.0.0"
+  },
+
+  "menu.language": "Taal",
+  "menu.language.system": "Systeem",
+  "menu.theme": "Thema",
+  "menu.theme.system": "Systeem",
+  "menu.theme.dark": "Donker",
+  "menu.theme.light": "Licht",
+  "menu.legal_notice": "Juridische kennisgeving",
+  "menu.help": "Help",
+  "menu.help.youtube_cookies": "YouTube-cookies",
+
+  "help.cookies.title": "YouTube-cookies",
+
+  "legal.title": "Juridische kennisgeving",
+  "legal.text": "{app_name} v{app_version}\n\nDeze software wordt geleverd zoals ze is, uitsluitend voor persoonlijk gebruik.\n\nHet maakt gebruik van yt-dlp, een open-sourceproject onder de Unlicense-licentie.\nGebruikers zijn zelf verantwoordelijk voor het naleven van de toepasselijke wetgeving en de gebruiksvoorwaarden van contentplatformen.\n\nDeze tool host, slaat op of verspreidt geen auteursrechtelijk beschermde inhoud.\n\nGemaakt door Nicolas-Gth",
+
+  "url.placeholder": "Voer een video-URL in",
+  "path.placeholder": "Klik om een map te kiezen",
+  "path.dialog_title": "Downloadmap selecteren",
+
+  "format.group_title": "Uitvoerbestandsformaat",
+  "format.mp3": "Mp3",
+  "format.mp4": "Mp4",
+  "format.opus": "Opus",
+
+  "quality.label": "Kwaliteit :",
+  "quality.best": "Beste",
+  "quality.max": "Maximaal {value}",
+
+  "playlist.group_title": "Afspeellijst downloaden",
+  "playlist.no": "Nee",
+  "playlist.yes": "Ja",
+  "playlist.from_video": "Vanaf video ",
+  "playlist.to": " tot ",
+
+  "options.group_title": "Opties",
+  "options.normalize_volume": "Volume normaliseren",
+  "options.normalize_target": "Doel (LUFS) :",
+  "options.normalize_hint": "(-14 aanbevolen)",
+  "options.enrich_metadata": "Metadata verrijken (HD-albumhoes + songteksten)",
+  "options.enrich_hint": "via MusicBrainz, iTunes, LRCLIB, Genius",
+  "options.prevent_sleep": "Slaapstand voorkomen tijdens downloaden",
+
+  "button.download": "Klik hier om de download te starten",
+  "button.stop": "Download stoppen",
+  "button.stopping": "Stoppen...",
+  "button.new_download": "Nieuwe download",
+
+  "progress.element": "Elementvoortgang",
+  "progress.total": "Totale voortgang",
+  "progress.processing": "Verwerken",
+  "progress.done": "Voltooid",
+
+  "progress.info.title": "Titel",
+  "progress.info.author": "Artiest",
+  "progress.info.duration": "Duur",
+
+  "progress.skipped_header": "Overgeslagen niet-beschikbare elementen",
+  "progress.age_restricted": "Leeftijdsbeperking",
+  "progress.format_unavailable": "Formaat niet beschikbaar",
+  "progress.unavailable": "Niet beschikbaar",
+
+  "progress.downloaded_element": "Gedownload element",
+  "progress.downloaded_elements": "Gedownloade elementen",
+  "progress.table.number": "#",
+  "progress.table.artist": "Artiest",
+  "progress.table.title": "Titel",
+  "progress.table.metadatas": "Metadata",
+  "progress.table.lyrics": "Songteksten",
+  "progress.table.norm": "Normalisatie",
+  "table.yes": "Ja",
+  "table.none": "Geen",
+
+  "fetching.info": "Informatie ophalen...",
+  "fetching.playlist": "Afspeellijstinformatie ophalen...",
+  "fetching.playlist_progress": "Afspeellijstinformatie ophalen... ({current}/{total})",
+  "fetching.playlist_count": "Afspeellijstinformatie ophalen... ({current} titels gevonden)",
+
+  "download.single": "\"{title}\" downloaden",
+  "download.playlist_element": "Element {index} van {total} downloaden uit de afspeellijst {playlist_title}",
+  "download.playlist_element_no_total": "Element {index} downloaden...",
+  "download.processing_element": "Element {index} verwerken...",
+  "download.processing_single": "\"{title}\" verwerken",
+  "download.playlist_processing": "Afspeellijst verwerken...",
+
+  "completion.aborted_prefix": "Download afgebroken. ",
+  "completion.element_playlist": "{count} element gedownload uit afspeellijst {playlist_title}.",
+  "completion.elements_playlist": "{count} elementen gedownload uit afspeellijst {playlist_title}.",
+  "completion.element_only": "{count} element gedownload.",
+  "completion.elements_only": "{count} elementen gedownload.",
+  "completion.playlist_done": "Afspeellijst {playlist_title} gedownload.",
+  "completion.download_complete": "Download voltooid.",
+
+  "validation.path_required_title": "Pad vereist",
+  "validation.path_required_msg": "Selecteer een downloadmap voordat u de download start.\n\nKlik op het padveld om een map te kiezen.",
+  "validation.invalid_url_title": "Ongeldige URL",
+  "validation.url_empty": "Voer een video-URL in voordat u de download start.",
+  "validation.url_invalid": "Voer een geldige URL in die begint met http:// of https://",
+  "validation.invalid_range_title": "Ongeldig bereik",
+  "validation.invalid_range_msg": "De eindwaarde ({end}) kan niet kleiner zijn dan de beginwaarde ({start}).",
+  "validation.download_error_title": "Downloadfout",
+
+  "cookies.warning_title": "Cookiewaarschuwing",
+  "cookies.continue_prompt": "Toch doorgaan met downloaden?",
+  "cookies.instructions": "1. Installeer de extensie \"Get cookies.txt LOCALLY\" in je browser (Chrome / Firefox / Edge).\n\n2. Open een nieuw privé-/incognitovenster en log in bij YouTube.\n\n3. Navigeer in hetzelfde venster en tabblad naar: https://www.youtube.com/robots.txt (dit moet het enige privétabblad zijn dat open is)\n\n4. Klik op het extensiepictogram en exporteer je cookies (\"Export as cookies.txt\"), sluit vervolgens het privévenster zodat de sessie nooit opnieuw wordt geopend in de browser.\n\n5. Plaats het bestand cookies.txt in de hoofdmap van de applicatie: {cookies_dir}\n\n6. Start de download opnieuw.\n\nYouTube maakt cookies van geopende tabbladen ongeldig. Een privévenster gebruiken zorgt ervoor dat geëxporteerde cookies geldig blijven.",
+  "cookies.invalid_cookies": "Het bestand cookies.txt is aanwezig maar bevat geen geldige cookies. Dit kan ervoor zorgen dat de download mislukt.\n\nVerwijder cookies.txt als je het niet nodig hebt, of werk het bij:\n\n{instructions}",
+  "cookies.expired_cookies": "Sommige cookies in cookies.txt zijn verlopen. Dit kan ervoor zorgen dat YouTube-downloads mislukken (botdetectie, leeftijdsbeperkte inhoud, enz.).\n\nVerwijder cookies.txt als je het niet nodig hebt, of werk het bij:\n\n{instructions}",
+  "cookies.revoked_cookies": "De cookies in cookies.txt zijn niet geldig of zijn ingetrokken door YouTube. Dit kan ervoor zorgen dat downloads mislukken (botdetectie, leeftijdsbeperkte inhoud, enz.).\n\nVerwijder cookies.txt als je het niet nodig hebt, of werk het bij:\n\n{instructions}",
+
+  "error.cookie_message": "YouTube vraagt je te bewijzen dat je geen robot bent.\n\nOm dit op te lossen, moet je je browsercookies opgeven:\n\n{instructions}",
+  "error.age_restricted": "{count} video('s) konden niet worden gedownload omdat leeftijdsverificatie vereist is.\n\nOm te downloaden, moet je je browsercookies opgeven:\n\n{instructions}",
+  "error.video_info_failed": "Kan video-informatie niet ophalen. Controleer de URL.",
+  "error.video_info_auth": "Kan video-informatie niet ophalen. Controleer de URL.\n\nAls de URL correct is, vereist YouTube mogelijk authenticatie. Je kunt je browsercookies opgeven om dit op te lossen:\n\n{instructions}",
+  "error.drm_protected": "Deze inhoud is beschermd door DRM en kan niet worden gedownload.\n\nDRM (Digital Rights Management) voorkomt downloaden van diensten zoals Spotify, Netflix, enz.",
+
+  "eta.elapsed": "Verstreken tijd: {time}",
+  "eta.remaining": "Geschatte resterende tijd: ~{time}",
+  "eta.calculating": "Geschatte resterende tijd: berekenen...",
+  "eta.finishing": "Afronden..."
+}

@@ -1,0 +1,127 @@
+{
+  "_meta": {
+    "language": "Français",
+    "code": "fr",
+    "authors": ["Nicolas-Gth"],
+    "version": "1.0.0"
+  },
+
+  "menu.language": "Langue",
+  "menu.language.system": "Système",
+  "menu.theme": "Thème",
+  "menu.theme.system": "Système",
+  "menu.theme.dark": "Sombre",
+  "menu.theme.light": "Clair",
+  "menu.legal_notice": "Mentions légales",
+  "menu.help": "Aide",
+  "menu.help.youtube_cookies": "Cookies YouTube",
+
+  "help.cookies.title": "Cookies YouTube",
+
+  "legal.title": "Mentions légales",
+  "legal.text": "{app_name} v{app_version}\n\nCe logiciel est fourni tel quel, pour un usage personnel uniquement.\n\nIl s'appuie sur yt-dlp, un projet open-source sous licence Unlicense.\nLes utilisateurs sont seuls responsables du respect des lois applicables et des conditions d'utilisation des plateformes de contenu.\n\nCet outil n'héberge, ne stocke et ne distribue aucun contenu protégé par le droit d'auteur.\n\nCréé par Nicolas-Gth",
+
+  "url.placeholder": "Entrez l'URL d'une vidéo",
+  "path.placeholder": "Cliquez pour choisir un dossier",
+  "path.dialog_title": "Sélectionner le dossier de téléchargement",
+
+  "format.group_title": "Format du fichier de sortie",
+  "format.mp3": "Mp3",
+  "format.mp4": "Mp4",
+  "format.opus": "Opus",
+
+  "quality.label": "Qualité :",
+  "quality.best": "Meilleure",
+  "quality.max": "Maximum {value}",
+
+  "playlist.group_title": "Téléchargement de playlist",
+  "playlist.no": "Non",
+  "playlist.yes": "Oui",
+  "playlist.from_video": "À partir de la vidéo ",
+  "playlist.to": " à ",
+
+  "options.group_title": "Options",
+  "options.normalize_volume": "Normaliser le volume",
+  "options.normalize_target": "Cible (LUFS) :",
+  "options.normalize_hint": "(-14 recommandé)",
+  "options.enrich_metadata": "Enrichir les métadonnées (pochette HD + paroles)",
+  "options.enrich_hint": "via MusicBrainz, iTunes, LRCLIB, Genius",
+  "options.prevent_sleep": "Empêcher la mise en veille pendant le téléchargement",
+
+  "button.download": "Cliquez ici pour lancer le téléchargement",
+  "button.stop": "Arrêter le téléchargement",
+  "button.stopping": "Arrêt en cours...",
+  "button.new_download": "Nouveau téléchargement",
+
+  "progress.element": "Progression de l'élément",
+  "progress.total": "Progression totale",
+  "progress.processing": "Traitement",
+  "progress.done": "Terminé",
+
+  "progress.info.title": "Titre",
+  "progress.info.author": "Artiste",
+  "progress.info.duration": "Durée",
+
+  "progress.skipped_header": "Éléments indisponibles ignorés",
+  "progress.age_restricted": "Restriction d'âge",
+  "progress.format_unavailable": "Format indisponible",
+  "progress.unavailable": "Indisponible",
+
+  "progress.downloaded_element": "Élément téléchargé",
+  "progress.downloaded_elements": "Éléments téléchargés",
+  "progress.table.number": "#",
+  "progress.table.artist": "Artiste",
+  "progress.table.title": "Titre",
+  "progress.table.metadatas": "Métadonnées",
+  "progress.table.lyrics": "Paroles",
+  "progress.table.norm": "Normalisation",
+  "table.yes": "Oui",
+  "table.none": "Aucune",
+
+  "fetching.info": "Récupération des informations...",
+  "fetching.playlist": "Récupération des informations de la playlist...",
+  "fetching.playlist_progress": "Récupération des informations de la playlist... ({current}/{total})",
+  "fetching.playlist_count": "Récupération des informations de la playlist... ({current} titres trouvés)",
+
+  "download.single": "Téléchargement de \"{title}\"",
+  "download.playlist_element": "Téléchargement de l'élément {index} sur {total} de la playlist {playlist_title}",
+  "download.playlist_element_no_total": "Téléchargement de l'élément {index}...",
+  "download.processing_element": "Traitement de l'élément {index}...",
+  "download.processing_single": "Traitement de \"{title}\"",
+  "download.playlist_processing": "Traitement de la playlist...",
+
+  "completion.aborted_prefix": "Téléchargement interrompu. ",
+  "completion.element_playlist": "{count} élément téléchargé depuis la playlist {playlist_title}.",
+  "completion.elements_playlist": "{count} éléments téléchargés depuis la playlist {playlist_title}.",
+  "completion.element_only": "{count} élément téléchargé.",
+  "completion.elements_only": "{count} éléments téléchargés.",
+  "completion.playlist_done": "Playlist {playlist_title} téléchargée.",
+  "completion.download_complete": "Téléchargement terminé.",
+
+  "validation.path_required_title": "Chemin requis",
+  "validation.path_required_msg": "Veuillez sélectionner un dossier de téléchargement avant de lancer le téléchargement.\n\nCliquez sur le champ de chemin pour choisir un dossier.",
+  "validation.invalid_url_title": "URL invalide",
+  "validation.url_empty": "Veuillez entrer l'URL d'une vidéo avant de lancer le téléchargement.",
+  "validation.url_invalid": "Veuillez entrer une URL valide commençant par http:// ou https://",
+  "validation.invalid_range_title": "Plage invalide",
+  "validation.invalid_range_msg": "La valeur de fin ({end}) ne peut pas être inférieure à la valeur de début ({start}).",
+  "validation.download_error_title": "Erreur de téléchargement",
+
+  "cookies.warning_title": "Avertissement cookies",
+  "cookies.continue_prompt": "Continuer le téléchargement quand même ?",
+  "cookies.instructions": "1. Installez l'extension \"Get cookies.txt LOCALLY\" dans votre navigateur (Chrome / Firefox / Edge).\n\n2. Ouvrez une nouvelle fenêtre de navigation privée et connectez-vous à YouTube.\n\n3. Dans la même fenêtre et le même onglet, accédez à : https://www.youtube.com/robots.txt (ce doit être le seul onglet privé ouvert)\n\n4. Cliquez sur l'icône de l'extension et exportez vos cookies (\"Export as cookies.txt\"), puis fermez la fenêtre privée pour que la session ne soit jamais rouverte dans le navigateur.\n\n5. Placez le fichier cookies.txt à la racine de l'application : {cookies_dir}\n\n6. Relancez le téléchargement.\n\nYouTube invalide les cookies des onglets ouverts. Utiliser une fenêtre privée garantit que les cookies exportés restent valides.",
+  "cookies.invalid_cookies": "Le fichier cookies.txt est présent mais ne contient aucun cookie valide. Cela peut faire échouer le téléchargement.\n\nSupprimez cookies.txt si vous n'en avez pas besoin, ou mettez-le à jour :\n\n{instructions}",
+  "cookies.expired_cookies": "Certains cookies dans cookies.txt ont expiré. Cela peut faire échouer les téléchargements YouTube (détection de bot, contenu soumis à une limite d'âge, etc.).\n\nSupprimez cookies.txt si vous n'en avez pas besoin, ou mettez-le à jour :\n\n{instructions}",
+  "cookies.revoked_cookies": "Les cookies dans cookies.txt ne sont pas valides ou ont été révoqués par YouTube. Cela peut faire échouer les téléchargements (détection de bot, contenu soumis à une limite d'âge, etc.).\n\nSupprimez cookies.txt si vous n'en avez pas besoin, ou mettez-le à jour :\n\n{instructions}",
+
+  "error.cookie_message": "YouTube vous demande de prouver que vous n'êtes pas un robot.\n\nPour résoudre ce problème, vous devez fournir les cookies de votre navigateur :\n\n{instructions}",
+  "error.age_restricted": "{count} vidéo(s) n'ont pas pu être téléchargée(s) car elles nécessitent une vérification d'âge.\n\nPour les télécharger, vous devez fournir les cookies de votre navigateur :\n\n{instructions}",
+  "error.video_info_failed": "Impossible de récupérer les informations de la vidéo. Veuillez vérifier l'URL.",
+  "error.video_info_auth": "Impossible de récupérer les informations de la vidéo. Veuillez vérifier l'URL.\n\nSi l'URL est correcte, YouTube peut exiger une authentification. Vous pouvez fournir les cookies de votre navigateur pour résoudre ce problème :\n\n{instructions}",
+  "error.drm_protected": "Ce contenu est protégé par DRM et ne peut pas être téléchargé.\n\nLe DRM (Digital Rights Management) empêche le téléchargement depuis des services comme Spotify, Netflix, etc.",
+
+  "eta.elapsed": "Temps écoulé : {time}",
+  "eta.remaining": "Temps restant estimé : ~{time}",
+  "eta.calculating": "Temps restant estimé : calcul en cours...",
+  "eta.finishing": "Finalisation..."
+}

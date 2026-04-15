@@ -8,6 +8,7 @@ from typing import Optional, Dict
 
 from config import ICON_PATH, APP_NAME
 from models import DownloadProgress
+from utils.i18n_utils import t
 
 
 def send_completion_notification(
@@ -23,12 +24,13 @@ def send_completion_notification(
         playlist_title = video_infos.get('title', 'Unknown Playlist')
         count = progress.current_song if progress else 0
         if count > 0:
-            message = f"{count} element{'s' if count > 1 else ''} downloaded from playlist {playlist_title}."
+            key = "completion.element_playlist" if count == 1 else "completion.elements_playlist"
+            message = t(key, count=count, playlist_title=playlist_title)
         else:
-            message = f"Playlist {playlist_title} downloaded."
+            message = t("completion.playlist_done", playlist_title=playlist_title)
     else:
         title = video_infos.get('title', 'Unknown')
-        message = f"Video \"{title}\" has been downloaded."
+        message = t("download.single", title=title)
 
     try:
         if shutil.which("notify-send"):
@@ -36,7 +38,7 @@ def send_completion_notification(
                 "notify-send",
                 f"--app-name={APP_NAME}",
                 "--expire-time=5000",
-                "Download Complete!",
+                t("completion.download_complete"),
                 message,
             ]
             # Add icon if available

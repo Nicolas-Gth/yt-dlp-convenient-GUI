@@ -5,11 +5,12 @@ import os
 import threading
 from typing import Optional, Dict, Callable
 import yt_dlp
-from config import COOKIES_PATH, COOKIES_INSTRUCTIONS, get_ffmpeg_path
+from config import COOKIES_PATH, COOKIES_DIR, get_ffmpeg_path
 
 from models import DownloadConfig, DownloadProgress
 from utils.playlist_utils import normalize_playlist_url, compute_playlist_offset
 from utils.post_processor_utils import CustomPostProcessor
+from utils.i18n_utils import t
 from utils.ydl_options_utils import build_ydl_options
 from utils.error_messages_utils import cookie_error_message, age_restricted_error_message
 from utils.notification_utils import send_completion_notification
@@ -189,16 +190,12 @@ class DownloadController:
                     "disney" in config.url.lower() or
                     "hulu.com" in config.url.lower() or
                     "amazon" in config.url.lower()):
-                    return None, "This content is protected by DRM and cannot be downloaded.\n\nDRM (Digital Rights Management) prevents downloading from services like Spotify, Netflix, etc."
+                    return None, t("error.drm_protected")
                 else:
                     if not os.path.isfile(COOKIES_PATH):
-                        return None, (
-                            "Could not retrieve video information. Please check the URL.\n\n"
-                            "If the URL is correct, YouTube may be requiring authentication. "
-                            "You can provide your browser cookies to fix this:\n\n"
-                            + COOKIES_INSTRUCTIONS
-                        )
-                    return None, "Could not retrieve video information. Please check the URL."
+                        instructions = t("cookies.instructions", cookies_dir=COOKIES_DIR)
+                        return None, t("error.video_info_auth", instructions=instructions)
+                    return None, t("error.video_info_failed")
             
             # For playlists, slice entries to the user's requested range.
             if config.is_playlist and self.video_infos and 'entries' in self.video_infos:

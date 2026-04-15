@@ -45,7 +45,7 @@ if %errorLevel% neq 0 set componentsOK=0
 
 :: Check critical Python dependencies
 if !componentsOK! == 1 (
-    python -c "import yt_dlp, PIL, ttkthemes, mutagen" >nul 2>&1
+    python -c "import yt_dlp, PIL, PySide6, mutagen" >nul 2>&1
     if !errorLevel! neq 0 set componentsOK=0
 )
 
@@ -95,7 +95,7 @@ echo [3/5] Installing dependencies...
 if exist "requirements.txt" (
     pip install -r requirements.txt
 ) else (
-    pip install yt-dlp>=2023.12.30 yt-dlp-ejs>=0.4.0 Pillow>=10.0.0 ttkthemes>=3.2.2 mutagen>=1.47.0
+    pip install yt-dlp>=2023.12.30 yt-dlp-ejs>=0.4.0 Pillow>=10.0.0 PySide6>=6.5.0 mutagen>=1.47.0
 )
 
 :: FFmpeg installation

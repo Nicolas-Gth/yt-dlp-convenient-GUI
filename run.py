@@ -19,7 +19,7 @@ try:
 except ImportError as e:
     print(f"Error importing application modules: {e}")
     print("Make sure all dependencies are installed:")
-    print("pip install yt-dlp Pillow ttkthemes mutagen")
+    print("pip install yt-dlp Pillow PySide6 mutagen")
     sys.exit(1)
 except Exception as e:
     print(f"Error running application: {e}")

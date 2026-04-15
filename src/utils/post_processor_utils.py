@@ -91,6 +91,7 @@ class CustomPostProcessor(yt_dlp.postprocessor.PostProcessor):
             'volume': None,
             'metadata_found': False,
             'lyrics_found': False,
+            'lyrics_type': 'No',
             'cover_found': False,
             'duration': video_infos.get('duration', 0) or 0,
         }
@@ -107,6 +108,9 @@ class CustomPostProcessor(yt_dlp.postprocessor.PostProcessor):
             track_info['display_name'] = f"{artist_name} - {track_name}"
         else:
             track_info['display_name'] = video_infos.get('title', 'Unknown')
+
+        track_info['artist'] = artist_name or ''
+        track_info['title'] = track_name or video_infos.get('title', 'Unknown')
 
         # Analyze loudness after normalization if enabled
         if self.config.normalize_volume:
@@ -519,6 +523,10 @@ class CustomPostProcessor(yt_dlp.postprocessor.PostProcessor):
                 if track_info is not None:
                     track_info['cover_found'] = bool(enriched.cover_data)
                     track_info['lyrics_found'] = bool(enriched.synced_lyrics or enriched.lyrics)
+                    if enriched.synced_lyrics:
+                        track_info['lyrics_type'] = 'LRC'
+                    elif enriched.lyrics:
+                        track_info['lyrics_type'] = 'Txt'
                     track_info['metadata_found'] = bool(
                         enriched.cover_data or enriched.lyrics or enriched.synced_lyrics or enriched.album
                     )
@@ -570,6 +578,10 @@ class CustomPostProcessor(yt_dlp.postprocessor.PostProcessor):
                 if track_info is not None:
                     track_info['cover_found'] = bool(enriched.cover_data)
                     track_info['lyrics_found'] = bool(enriched.synced_lyrics or enriched.lyrics)
+                    if enriched.synced_lyrics:
+                        track_info['lyrics_type'] = 'LRC'
+                    elif enriched.lyrics:
+                        track_info['lyrics_type'] = 'Txt'
                     track_info['metadata_found'] = bool(
                         enriched.cover_data or enriched.lyrics or enriched.synced_lyrics or enriched.album
                     )

@@ -10,7 +10,13 @@ import time
 import urllib.request
 from typing import Optional
 
-from config import COOKIES_PATH, COOKIES_INSTRUCTIONS
+from config import COOKIES_PATH, COOKIES_DIR
+from utils.i18n_utils import t
+
+
+def _get_instructions() -> str:
+    """Return the translated cookie export instructions."""
+    return t("cookies.instructions", cookies_dir=COOKIES_DIR)
 
 
 def validate_cookies_file() -> Optional[str]:
@@ -69,20 +75,9 @@ def validate_cookies_file() -> Optional[str]:
             has_auth_expired = True
 
     if not has_valid_cookie:
-        return (
-            "The cookies.txt file is present but does not contain any valid cookies. "
-            "This may cause the download to fail.\n\n"
-            "Delete cookies.txt if you don't need it, or update it:\n\n"
-            + COOKIES_INSTRUCTIONS
-        )
+        return t("cookies.invalid_cookies", instructions=_get_instructions())
     if has_auth_expired:
-        return (
-            "Some cookies in cookies.txt have expired. "
-            "This may cause YouTube downloads to fail "
-            "(bot detection, age-restricted content, etc.).\n\n"
-            "Delete cookies.txt if you don't need it, or update it:\n\n"
-            + COOKIES_INSTRUCTIONS
-        )
+        return t("cookies.expired_cookies", instructions=_get_instructions())
 
     # --- 2. Live validation against YouTube ---
     try:
@@ -101,13 +96,7 @@ def validate_cookies_file() -> Optional[str]:
 
         # YouTube embeds a LOGGED_IN flag in its page source
         if '"LOGGED_IN":false' in body:
-            return (
-                "The cookies in cookies.txt are not valid or have been revoked by YouTube. "
-                "This may cause downloads to fail "
-                "(bot detection, age-restricted content, etc.).\n\n"
-                "Delete cookies.txt if you don't need it, or update it:\n\n"
-                + COOKIES_INSTRUCTIONS
-            )
+            return t("cookies.revoked_cookies", instructions=_get_instructions())
     except Exception:
         # Network error or parsing issue – don't block the user
         pass
