@@ -24,7 +24,8 @@ def send_completion_notification(
         playlist_title = video_infos.get('title', 'Unknown Playlist')
         count = progress.current_song if progress else 0
         if count > 0:
-            message = t("completion.elements_playlist", count=count, playlist_title=playlist_title)
+            key = "completion.element_playlist" if count == 1 else "completion.elements_playlist"
+            message = t(key, count=count, playlist_title=playlist_title)
         else:
             message = t("completion.playlist_done", playlist_title=playlist_title)
     else:

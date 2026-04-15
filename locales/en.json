@@ -67,13 +67,16 @@
   "progress.format_unavailable": "Format unavailable",
   "progress.unavailable": "Unavailable",
 
+  "progress.downloaded_element": "Downloaded element",
   "progress.downloaded_elements": "Downloaded elements",
   "progress.table.number": "#",
   "progress.table.artist": "Artist",
   "progress.table.title": "Title",
   "progress.table.metadatas": "Metadatas",
   "progress.table.lyrics": "Lyrics",
-  "progress.table.norm": "Norm.",
+  "progress.table.norm": "Normalization",
+  "table.yes": "Yes",
+  "table.none": "None",
 
   "fetching.info": "Retrieving information...",
   "fetching.playlist": "Retrieving playlist information...",
@@ -88,8 +91,10 @@
   "download.playlist_processing": "Processing playlist...",
 
   "completion.aborted_prefix": "Download aborted. ",
-  "completion.elements_playlist": "{count} element(s) downloaded from playlist {playlist_title}.",
-  "completion.elements_only": "{count} element(s) downloaded.",
+  "completion.element_playlist": "{count} element downloaded from playlist {playlist_title}.",
+  "completion.elements_playlist": "{count} elements downloaded from playlist {playlist_title}.",
+  "completion.element_only": "{count} element downloaded.",
+  "completion.elements_only": "{count} elements downloaded.",
   "completion.playlist_done": "Playlist {playlist_title} downloaded.",
   "completion.download_complete": "Download complete.",
 

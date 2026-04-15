@@ -67,13 +67,16 @@
   "progress.format_unavailable": "Format indisponible",
   "progress.unavailable": "Indisponible",
 
+  "progress.downloaded_element": "Élément téléchargé",
   "progress.downloaded_elements": "Éléments téléchargés",
   "progress.table.number": "#",
   "progress.table.artist": "Artiste",
   "progress.table.title": "Titre",
   "progress.table.metadatas": "Métadonnées",
   "progress.table.lyrics": "Paroles",
-  "progress.table.norm": "Norm.",
+  "progress.table.norm": "Normalisation",
+  "table.yes": "Oui",
+  "table.none": "Aucune",
 
   "fetching.info": "Récupération des informations...",
   "fetching.playlist": "Récupération des informations de la playlist...",
@@ -88,8 +91,10 @@
   "download.playlist_processing": "Traitement de la playlist...",
 
   "completion.aborted_prefix": "Téléchargement interrompu. ",
-  "completion.elements_playlist": "{count} élément(s) téléchargé(s) depuis la playlist {playlist_title}.",
-  "completion.elements_only": "{count} élément(s) téléchargé(s).",
+  "completion.element_playlist": "{count} élément téléchargé depuis la playlist {playlist_title}.",
+  "completion.elements_playlist": "{count} éléments téléchargés depuis la playlist {playlist_title}.",
+  "completion.element_only": "{count} élément téléchargé.",
+  "completion.elements_only": "{count} éléments téléchargés.",
   "completion.playlist_done": "Playlist {playlist_title} téléchargée.",
   "completion.download_complete": "Téléchargement terminé.",
 

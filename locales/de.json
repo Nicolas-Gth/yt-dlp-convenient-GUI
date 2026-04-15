@@ -67,13 +67,16 @@
   "progress.format_unavailable": "Format nicht verfügbar",
   "progress.unavailable": "Nicht verfügbar",
 
+  "progress.downloaded_element": "Heruntergeladenes Element",
   "progress.downloaded_elements": "Heruntergeladene Elemente",
   "progress.table.number": "#",
   "progress.table.artist": "Künstler",
   "progress.table.title": "Titel",
   "progress.table.metadatas": "Metadaten",
   "progress.table.lyrics": "Songtexte",
-  "progress.table.norm": "Norm.",
+  "progress.table.norm": "Normalisierung",
+  "table.yes": "Ja",
+  "table.none": "Keine",
 
   "fetching.info": "Informationen werden abgerufen...",
   "fetching.playlist": "Playlist-Informationen werden abgerufen...",
@@ -88,8 +91,10 @@
   "download.playlist_processing": "Playlist wird verarbeitet...",
 
   "completion.aborted_prefix": "Download abgebrochen. ",
-  "completion.elements_playlist": "{count} Element(e) aus Playlist {playlist_title} heruntergeladen.",
-  "completion.elements_only": "{count} Element(e) heruntergeladen.",
+  "completion.element_playlist": "{count} Element aus Playlist {playlist_title} heruntergeladen.",
+  "completion.elements_playlist": "{count} Elemente aus Playlist {playlist_title} heruntergeladen.",
+  "completion.element_only": "{count} Element heruntergeladen.",
+  "completion.elements_only": "{count} Elemente heruntergeladen.",
   "completion.playlist_done": "Playlist {playlist_title} heruntergeladen.",
   "completion.download_complete": "Download abgeschlossen.",
 

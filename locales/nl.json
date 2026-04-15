@@ -67,13 +67,16 @@
   "progress.format_unavailable": "Formaat niet beschikbaar",
   "progress.unavailable": "Niet beschikbaar",
 
+  "progress.downloaded_element": "Gedownload element",
   "progress.downloaded_elements": "Gedownloade elementen",
   "progress.table.number": "#",
   "progress.table.artist": "Artiest",
   "progress.table.title": "Titel",
   "progress.table.metadatas": "Metadata",
   "progress.table.lyrics": "Songteksten",
-  "progress.table.norm": "Norm.",
+  "progress.table.norm": "Normalisatie",
+  "table.yes": "Ja",
+  "table.none": "Geen",
 
   "fetching.info": "Informatie ophalen...",
   "fetching.playlist": "Afspeellijstinformatie ophalen...",
@@ -88,8 +91,10 @@
   "download.playlist_processing": "Afspeellijst verwerken...",
 
   "completion.aborted_prefix": "Download afgebroken. ",
-  "completion.elements_playlist": "{count} element(en) gedownload uit afspeellijst {playlist_title}.",
-  "completion.elements_only": "{count} element(en) gedownload.",
+  "completion.element_playlist": "{count} element gedownload uit afspeellijst {playlist_title}.",
+  "completion.elements_playlist": "{count} elementen gedownload uit afspeellijst {playlist_title}.",
+  "completion.element_only": "{count} element gedownload.",
+  "completion.elements_only": "{count} elementen gedownload.",
   "completion.playlist_done": "Afspeellijst {playlist_title} gedownload.",
   "completion.download_complete": "Download voltooid.",
 

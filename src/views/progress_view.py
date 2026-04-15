@@ -491,15 +491,17 @@ class ProgressMixin:
 
         artist = info.get('artist', '')
         title = info.get('title', info.get('display_name', 'Unknown'))
-        metadata = "Yes" if info.get('metadata_found') else "No"
+        metadata = t("table.yes") if info.get('metadata_found') else t("table.none")
         lyrics_type = info.get('lyrics_type', 'No')
+        if lyrics_type == 'No':
+            lyrics_type = t("table.none")
 
         volume = info.get('volume')
         if volume:
             diff = volume['measured'] - volume['target']
             norm_str = f"{-diff:+.1f} dB" if diff > 0 else f"{abs(diff):+.1f} dB"
         else:
-            norm_str = ""
+            norm_str = t("table.none")
 
         MAX_VISIBLE = 8
         ROW_HEIGHT = 24
@@ -534,9 +536,9 @@ class ProgressMixin:
             header.setSectionResizeMode(0, QHeaderView.ResizeToContents)  # #
             header.setSectionResizeMode(1, QHeaderView.Stretch)          # Artist
             header.setSectionResizeMode(2, QHeaderView.Stretch)          # Title
-            header.setSectionResizeMode(3, QHeaderView.ResizeToContents)  # Metadatas
-            header.setSectionResizeMode(4, QHeaderView.ResizeToContents)  # Lyrics
-            header.setSectionResizeMode(5, QHeaderView.ResizeToContents)  # Norm.
+            header.setSectionResizeMode(3, QHeaderView.Stretch)          # Metadatas
+            header.setSectionResizeMode(4, QHeaderView.Stretch)          # Lyrics
+            header.setSectionResizeMode(5, QHeaderView.Stretch)          # Norm.
             header.setDefaultAlignment(Qt.AlignLeft | Qt.AlignVCenter)
 
             norm_layout.addWidget(self._normalize_table, 1)
@@ -560,6 +562,9 @@ class ProgressMixin:
         self._normalize_labels.append(num)
 
         count = len(self._normalize_labels)
+        key = "progress.downloaded_element" if count == 1 else "progress.downloaded_elements"
+        self.normalize_outer_frame.setTitle(f"{t(key)} ({count})")
+
         header_h = self._normalize_table.horizontalHeader().height()
         if count <= MAX_VISIBLE:
             self._normalize_table.setMinimumHeight(header_h + count * ROW_HEIGHT + 2)

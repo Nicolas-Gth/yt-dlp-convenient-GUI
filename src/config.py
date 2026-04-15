@@ -64,9 +64,7 @@ FILE_FORMATS = {
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 ICON_PATH = os.path.join(SCRIPT_DIR, '..', 'assets', 'icon.ico')
 DOWNLOAD_ICON_PATH = os.path.join(SCRIPT_DIR, '..', 'assets', 'download-icon.svg')
-# Keep a dedicated symbol for the "New download" button icon.
-# Reuse the existing asset until a separate refresh icon is added.
-REFRESH_ICON_PATH = DOWNLOAD_ICON_PATH
+REFRESH_ICON_PATH = os.path.join(SCRIPT_DIR, '..', 'assets', 'refresh-icon.svg')
 COOKIES_PATH = os.path.join(SCRIPT_DIR, '..', 'cookies.txt')
 COOKIES_DIR = os.path.dirname(COOKIES_PATH)
 

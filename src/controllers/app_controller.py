@@ -535,9 +535,11 @@ class ApplicationController:
         prefix = t("completion.aborted_prefix") if cancelled else ""
         
         if downloaded_count > 0 and playlist_title:
-            msg = t("completion.elements_playlist", count=downloaded_count, playlist_title=playlist_title)
+            key = "completion.element_playlist" if downloaded_count == 1 else "completion.elements_playlist"
+            msg = t(key, count=downloaded_count, playlist_title=playlist_title)
         elif downloaded_count > 0:
-            msg = t("completion.elements_only", count=downloaded_count)
+            key = "completion.element_only" if downloaded_count == 1 else "completion.elements_only"
+            msg = t(key, count=downloaded_count)
         elif playlist_title:
             msg = t("completion.playlist_done", playlist_title=playlist_title)
         else:
