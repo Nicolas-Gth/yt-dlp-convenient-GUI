@@ -198,25 +198,42 @@ exec "\$APP_DIR/install.sh" --launch
 WRAPPER
     chmod +x "$LAUNCHER"
 
+    # Remove from kmenuedit .hidden if a previous removal left it there
+    _kmenuedit_unhide
+    local _comment
+    _comment=$(t "shortcut.comment")
     mkdir -p "$DESKTOP_DIR"
-    cat > "$DESKTOP_FILE" <<EOF
+    # install -m 644 ensures correct permissions regardless of umask
+    # (KDE ignores .desktop files with restrictive permissions like 600)
+    install -m 644 /dev/stdin "$DESKTOP_FILE" <<EOF
 [Desktop Entry]
 Type=Application
 Name=yt-dlp Convenient GUI
-Comment=Download videos and audio with yt-dlp
+Comment=${_comment}
 Exec=${LAUNCHER}
 Icon=${ICON_NAME}
 Terminal=false
-Categories=AudioVideo;Network;
+Categories=AudioVideo;
 StartupWMClass=yt-dlp-convenient-gui
 EOF
-    chmod +x "$DESKTOP_FILE"
-    gtk-update-icon-cache -f -t "$HOME/.local/share/icons/hicolor" 2>/dev/null || true
 }
 
 _remove_shortcut() {
     rm -f "$DESKTOP_FILE" "$LAUNCHER" "$ICON_DEST"
-    gtk-update-icon-cache -f -t "$HOME/.local/share/icons/hicolor" 2>/dev/null || true
+}
+
+# Force desktop menu cache rebuild
+_refresh_menu() {
+    update-desktop-database "$DESKTOP_DIR" >/dev/null 2>&1 || true
+    command -v kbuildsycoca6 >/dev/null 2>&1 && kbuildsycoca6 --noincremental >/dev/null 2>&1 || true
+}
+
+# Remove our .desktop from kmenuedit's .hidden section (KDE adds it there on removal)
+_kmenuedit_unhide() {
+    local kmenu="$HOME/.config/menus/applications-kmenuedit.menu"
+    if [[ -f "$kmenu" ]] && grep -q 'yt-dlp-gui\.desktop' "$kmenu" 2>/dev/null; then
+        sed -i '/<Filename>yt-dlp-gui\.desktop<\/Filename>/d' "$kmenu" 2>/dev/null || true
+    fi
 }
 
 # -------------------------------------------------------------------
@@ -261,7 +278,7 @@ if _shortcut_installed; then
             --ok-label="$(t shortcut.btn_repair)"
         rc=$?
         [[ $rc -eq 2 ]] && exit 0
-        [[ $rc -eq 0 ]] && _install_shortcut
+        [[ $rc -eq 0 ]] && { _install_shortcut; _refresh_menu; }
         _launch_app
     else
         _zenity_ask "$(t shortcut.btn_launch)" --question \
@@ -270,7 +287,7 @@ if _shortcut_installed; then
             --ok-label="$(t shortcut.btn_remove)"
         rc=$?
         [[ $rc -eq 2 ]] && exit 0
-        [[ $rc -eq 0 ]] && { _remove_shortcut; zenity --info --title="$APP_NAME" --text="$(t shortcut.removed)" --ok-label="$BTN_QUIT" --window-icon="$ICON_SRC" 2>/dev/null || true; exit 0; }
+        [[ $rc -eq 0 ]] && { _remove_shortcut; zenity --info --title="$APP_NAME" --text="$(t shortcut.removed)" --ok-label="$BTN_QUIT" --window-icon="$ICON_SRC" 2>/dev/null || true; _refresh_menu; exit 0; }
         _launch_app
     fi
 else
@@ -283,6 +300,7 @@ else
     if [[ $rc -eq 0 ]]; then
         _install_shortcut
         zenity --info --title="$APP_NAME" --text="$(t shortcut.created)" --ok-label="$BTN_QUIT" --window-icon="$ICON_SRC" 2>/dev/null || true
+        _refresh_menu
         exit 0
     fi
     _launch_app

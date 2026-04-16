@@ -153,5 +153,6 @@
   "shortcut.btn_no_repair": "Launch without repair",
   "shortcut.removed": "Shortcut removed.",
   "shortcut.moved": "The app folder has been moved or deleted.\nExpected: {path}\n\nPlease run install.sh again from the new location.",
-  "shortcut.btn_quit": "Quit"
+  "shortcut.btn_quit": "Quit",
+  "shortcut.comment": "Download videos and audio with yt-dlp"
 }

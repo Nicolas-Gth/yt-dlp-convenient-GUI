@@ -153,5 +153,6 @@
   "shortcut.btn_no_repair": "Ejecutar sin reparar",
   "shortcut.removed": "Acceso directo eliminado.",
   "shortcut.moved": "La carpeta de la aplicación fue movida o eliminada.\nEsperada: {path}\n\nEjecute install.sh desde la nueva ubicación.",
-  "shortcut.btn_quit": "Salir"
+  "shortcut.btn_quit": "Salir",
+  "shortcut.comment": "Descargar vídeos y audio con yt-dlp"
 }

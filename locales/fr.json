@@ -153,5 +153,6 @@
   "shortcut.btn_no_repair": "Lancer sans réparer",
   "shortcut.removed": "Raccourci supprimé.",
   "shortcut.moved": "Le dossier de l'application a été déplacé ou supprimé.\nAttendu : {path}\n\nRelancez install.sh depuis le nouveau dossier.",
-  "shortcut.btn_quit": "Quitter"
+  "shortcut.btn_quit": "Quitter",
+  "shortcut.comment": "Télécharger des vidéos et de l'audio avec yt-dlp"
 }

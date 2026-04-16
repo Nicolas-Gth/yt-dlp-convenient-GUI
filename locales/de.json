@@ -153,5 +153,6 @@
   "shortcut.btn_no_repair": "Ohne Reparatur starten",
   "shortcut.removed": "Verknüpfung entfernt.",
   "shortcut.moved": "Der Anwendungsordner wurde verschoben oder gelöscht.\nErwartet: {path}\n\nFühren Sie install.sh erneut vom neuen Speicherort aus.",
-  "shortcut.btn_quit": "Beenden"
+  "shortcut.btn_quit": "Beenden",
+  "shortcut.comment": "Videos und Audio mit yt-dlp herunterladen"
 }

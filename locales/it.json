@@ -153,5 +153,6 @@
   "shortcut.btn_no_repair": "Avvia senza riparare",
   "shortcut.removed": "Collegamento rimosso.",
   "shortcut.moved": "La cartella dell'applicazione è stata spostata o eliminata.\nPrevista: {path}\n\nRiesegui install.sh dalla nuova posizione.",
-  "shortcut.btn_quit": "Esci"
+  "shortcut.btn_quit": "Esci",
+  "shortcut.comment": "Scarica video e audio con yt-dlp"
 }

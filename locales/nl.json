@@ -153,5 +153,6 @@
   "shortcut.btn_no_repair": "Starten zonder herstel",
   "shortcut.removed": "Snelkoppeling verwijderd.",
   "shortcut.moved": "De toepassingsmap is verplaatst of verwijderd.\nVerwacht: {path}\n\nVoer install.sh opnieuw uit vanuit de nieuwe locatie.",
-  "shortcut.btn_quit": "Afsluiten"
+  "shortcut.btn_quit": "Afsluiten",
+  "shortcut.comment": "Download video's en audio met yt-dlp"
 }
