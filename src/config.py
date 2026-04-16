@@ -2,6 +2,7 @@
 Configuration and constants for the yt-dlp GUI application.
 """
 import os
+import sys
 
 from version import get_version
 
@@ -68,7 +69,8 @@ FILE_FORMATS = {
 
 # Paths
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-ICON_PATH = os.path.join(SCRIPT_DIR, '..', 'assets', 'icon.ico')
+ICON_PATH = os.path.join(SCRIPT_DIR, '..', 'assets',
+                         'yt-dlp_convenient_gui_icon.png' if sys.platform != 'win32' else 'icon.ico')
 DOWNLOAD_ICON_PATH = os.path.join(SCRIPT_DIR, '..', 'assets', 'download-icon.svg')
 REFRESH_ICON_PATH = os.path.join(SCRIPT_DIR, '..', 'assets', 'refresh-icon.svg')
 COOKIES_PATH = os.path.join(SCRIPT_DIR, '..', 'cookies.txt')

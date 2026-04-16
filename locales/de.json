@@ -2,10 +2,11 @@
   "_meta": {
     "language": "Deutsch",
     "code": "de",
-    "authors": ["Nicolas-Gth"],
+    "authors": [
+      "Nicolas-Gth"
+    ],
     "version": "1.0.0"
   },
-
   "menu.language": "Sprache",
   "menu.language.system": "System",
   "menu.theme": "Design",
@@ -17,34 +18,26 @@
   "menu.help.youtube_cookies": "YouTube-Cookies",
   "menu.infos": "Über",
   "menu.infos.author": "Autor",
-
   "help.cookies.title": "YouTube-Cookies",
-
   "legal.title": "Rechtlicher Hinweis",
   "legal.text": "{app_name} v{app_version}\n\nDiese Software wird ohne Gewähr ausschließlich für den persönlichen Gebrauch bereitgestellt.\n\nSie basiert auf yt-dlp, einem Open-Source-Projekt unter der Unlicense-Lizenz.\nDie Nutzer sind allein dafür verantwortlich, dass ihre Nutzung den geltenden Gesetzen und den Nutzungsbedingungen der Inhaltsplattformen entspricht.\n\nDieses Tool hostet, speichert oder verbreitet keine urheberrechtlich geschützten Inhalte.\n\nErstellt von Nicolas-Gth",
-
   "author.title": "Autor",
   "author.text": "{author}<br><br>GitHub: <a href='{url}'>{url}</a>",
-
   "url.placeholder": "Video-URL eingeben",
   "path.placeholder": "Klicken, um einen Ordner auszuwählen",
   "path.dialog_title": "Download-Ordner auswählen",
-
   "format.group_title": "Ausgabedateiformat",
   "format.mp3": "Mp3",
   "format.mp4": "Mp4",
   "format.opus": "Opus",
-
   "quality.label": "Qualität :",
   "quality.best": "Beste",
   "quality.max": "Maximal {value}",
-
   "playlist.group_title": "Playlist herunterladen",
   "playlist.no": "Nein",
   "playlist.yes": "Ja",
   "playlist.from_video": "Ab Video ",
   "playlist.to": " bis ",
-
   "options.group_title": "Optionen",
   "options.normalize_volume": "Lautstärke normalisieren",
   "options.normalize_target": "Ziel (LUFS) :",
@@ -52,26 +45,21 @@
   "options.enrich_metadata": "Metadaten anreichern (HD-Albumcover + Songtexte)",
   "options.enrich_hint": "über MusicBrainz, iTunes, LRCLIB, Genius",
   "options.prevent_sleep": "Ruhezustand während des Downloads verhindern",
-
   "button.download": "Hier klicken, um den Download zu starten",
   "button.stop": "Download stoppen",
   "button.stopping": "Wird gestoppt...",
   "button.new_download": "Neuer Download",
-
   "progress.element": "Elementfortschritt",
   "progress.total": "Gesamtfortschritt",
   "progress.processing": "Verarbeitung",
   "progress.done": "Fertig",
-
   "progress.info.title": "Titel",
   "progress.info.author": "Künstler",
   "progress.info.duration": "Dauer",
-
   "progress.skipped_header": "Übersprungene nicht verfügbare Elemente",
   "progress.age_restricted": "Altersbeschränkung",
   "progress.format_unavailable": "Format nicht verfügbar",
   "progress.unavailable": "Nicht verfügbar",
-
   "progress.downloaded_element": "Heruntergeladenes Element",
   "progress.downloaded_elements": "Heruntergeladene Elemente",
   "progress.table.number": "#",
@@ -82,19 +70,16 @@
   "progress.table.norm": "Normalisierung",
   "table.yes": "Ja",
   "table.none": "Keine",
-
   "fetching.info": "Informationen werden abgerufen...",
   "fetching.playlist": "Playlist-Informationen werden abgerufen...",
   "fetching.playlist_progress": "Playlist-Informationen werden abgerufen... ({current}/{total})",
   "fetching.playlist_count": "Playlist-Informationen werden abgerufen... ({current} Titel gefunden)",
-
   "download.single": "\"{title}\" wird heruntergeladen",
   "download.playlist_element": "Element {index} von {total} aus der Playlist {playlist_title} wird heruntergeladen",
   "download.playlist_element_no_total": "Element {index} wird heruntergeladen...",
   "download.processing_element": "Element {index} wird verarbeitet...",
   "download.processing_single": "\"{title}\" wird verarbeitet",
   "download.playlist_processing": "Playlist wird verarbeitet...",
-
   "completion.aborted_prefix": "Download abgebrochen. ",
   "completion.element_playlist": "{count} Element aus Playlist {playlist_title} heruntergeladen.",
   "completion.elements_playlist": "{count} Elemente aus Playlist {playlist_title} heruntergeladen.",
@@ -102,7 +87,6 @@
   "completion.elements_only": "{count} Elemente heruntergeladen.",
   "completion.playlist_done": "Playlist {playlist_title} heruntergeladen.",
   "completion.download_complete": "Download abgeschlossen.",
-
   "validation.path_required_title": "Pfad erforderlich",
   "validation.path_required_msg": "Bitte wählen Sie einen Download-Ordner aus, bevor Sie den Download starten.\n\nKlicken Sie auf das Pfadfeld, um einen Ordner auszuwählen.",
   "validation.invalid_url_title": "Ungültige URL",
@@ -111,22 +95,63 @@
   "validation.invalid_range_title": "Ungültiger Bereich",
   "validation.invalid_range_msg": "Der Endwert ({end}) darf nicht kleiner als der Startwert ({start}) sein.",
   "validation.download_error_title": "Download-Fehler",
-
   "cookies.warning_title": "Cookie-Warnung",
   "cookies.continue_prompt": "Download trotzdem fortsetzen?",
   "cookies.instructions": "1. Installiere die Erweiterung \"Get cookies.txt LOCALLY\" in deinem Browser (Chrome / Firefox / Edge).\n\n2. Öffne ein neues privates/Inkognito-Fenster und melde dich bei YouTube an.\n\n3. Navigiere im selben Fenster und Tab zu: https://www.youtube.com/robots.txt (es darf nur dieser eine private Tab geöffnet sein)\n\n4. Klicke auf das Symbol der Erweiterung und exportiere deine Cookies (\"Export as cookies.txt\"), dann schließe das private Fenster, damit die Sitzung nie wieder im Browser geöffnet wird.\n\n5. Lege die Datei cookies.txt im Stammverzeichnis der Anwendung ab: {cookies_dir}\n\n6. Starte den Download neu.\n\nYouTube macht Cookies offener Tabs ungültig. Ein privates Fenster stellt sicher, dass exportierte Cookies gültig bleiben.",
   "cookies.invalid_cookies": "Die Datei cookies.txt ist vorhanden, enthält aber keine gültigen Cookies. Dies kann dazu führen, dass der Download fehlschlägt.\n\nLösche cookies.txt, wenn du sie nicht brauchst, oder aktualisiere sie:\n\n{instructions}",
   "cookies.expired_cookies": "Einige Cookies in cookies.txt sind abgelaufen. Dies kann dazu führen, dass YouTube-Downloads fehlschlagen (Bot-Erkennung, altersbeschränkte Inhalte usw.).\n\nLösche cookies.txt, wenn du sie nicht brauchst, oder aktualisiere sie:\n\n{instructions}",
   "cookies.revoked_cookies": "Die Cookies in cookies.txt sind ungültig oder wurden von YouTube widerrufen. Dies kann dazu führen, dass Downloads fehlschlagen (Bot-Erkennung, altersbeschränkte Inhalte usw.).\n\nLösche cookies.txt, wenn du sie nicht brauchst, oder aktualisiere sie:\n\n{instructions}",
-
   "error.cookie_message": "YouTube fordert dich auf zu beweisen, dass du kein Roboter bist.\n\nUm das Problem zu beheben, musst du deine Browser-Cookies angeben:\n\n{instructions}",
   "error.age_restricted": "{count} Video(s) konnten nicht heruntergeladen werden, da eine Altersverifizierung erforderlich ist.\n\nZum Herunterladen musst du deine Browser-Cookies angeben:\n\n{instructions}",
   "error.video_info_failed": "Videoinformationen konnten nicht abgerufen werden. Bitte überprüfe die URL.",
   "error.video_info_auth": "Videoinformationen konnten nicht abgerufen werden. Bitte überprüfe die URL.\n\nWenn die URL korrekt ist, verlangt YouTube möglicherweise eine Authentifizierung. Du kannst deine Browser-Cookies angeben, um das Problem zu beheben:\n\n{instructions}",
   "error.drm_protected": "Dieser Inhalt ist durch DRM geschützt und kann nicht heruntergeladen werden.\n\nDRM (Digital Rights Management) verhindert das Herunterladen von Diensten wie Spotify, Netflix usw.",
-
   "eta.elapsed": "Verstrichene Zeit: {time}",
   "eta.remaining": "Geschätzte Restzeit: ~{time}",
   "eta.calculating": "Geschätzte Restzeit: wird berechnet...",
-  "eta.finishing": "Wird abgeschlossen..."
+  "eta.finishing": "Wird abgeschlossen...",
+  "startup.initializing": "Initialisierung…",
+  "startup.checking_deps": "Abhängigkeiten werden überprüft…",
+  "startup.status_installed": "Installiert",
+  "startup.status_missing": "Fehlt",
+  "startup.status_outdated": "Veraltet",
+  "startup.status_installing": "Wird installiert…",
+  "startup.installing": "Komponenten werden installiert…",
+  "startup.install_ok": "Installation erfolgreich!",
+  "startup.install_failed": "Einige Komponenten konnten nicht installiert werden.",
+  "startup.install_failed_detail": "Eine oder mehrere Komponenten konnten nicht automatisch installiert werden.\nMöglicherweise müssen Sie sie manuell installieren.",
+  "startup.checking_updates": "Suche nach Updates…",
+  "startup.update_title": "Update verfügbar",
+  "startup.update_prompt": "{count} neue(s) Update(s) verfügbar. Jetzt aktualisieren?",
+  "startup.applying_update": "Update wird angewendet…",
+  "startup.update_restart": "Update erfolgreich angewendet! Die Anwendung wird jetzt geschlossen.\nBitte starten Sie sie neu.",
+  "startup.update_failed": "Update fehlgeschlagen.",
+  "startup.updating_ytdlp": "Suche nach yt-dlp-Updates…",
+  "startup.ready": "Bereit!",
+  "startup.downloading_ffmpeg": "FFmpeg wird heruntergeladen…",
+  "startup.extracting_ffmpeg": "FFmpeg wird entpackt…",
+  "startup.installing_ffmpeg": "FFmpeg wird installiert…",
+  "startup.installing_formula": "{name} wird installiert…",
+  "startup.installing_deno": "Deno wird installiert…",
+  "startup.installing_deps": "Python-Abhängigkeiten werden installiert…",
+  "startup.installing_pyside6": "PySide6 wird installiert…",
+  "startup.updating_ytdlp_pip": "yt-dlp wird aktualisiert…",
+  "shortcut.create": "Verknüpfung im Anwendungsmenü erstellen?",
+  "shortcut.btn_create": "Verknüpfung erstellen",
+  "shortcut.btn_no_create": "Ohne Verknüpfung starten",
+  "shortcut.created": "Verknüpfung im Anwendungsmenü erstellt.",
+  "install.python_not_found": "Python 3 wird benötigt, wurde aber nicht gefunden.\nJetzt installieren?",
+  "install.python_installing": "Python 3 wird installiert…",
+  "install.python_failed": "Die Installation von Python 3 ist fehlgeschlagen.\nBitte manuell installieren.",
+  "install.python_immutable": "Python 3 wird benötigt, wurde aber nicht gefunden.\nAuf einem immutablen System verwenden Sie Toolbox oder Distrobox:\n\n  toolbox enter\n  sudo dnf install -y python3",
+  "install.python_restart": "Python 3 wurde installiert.\nBitte starten Sie dieses Skript erneut.",
+  "shortcut.remove": "Eine Verknüpfung existiert bereits.\nMöchten Sie sie entfernen?",
+  "shortcut.btn_remove": "Verknüpfung entfernen",
+  "shortcut.btn_launch": "Anwendung starten",
+  "shortcut.repair": "Die Verknüpfung zeigt auf einen alten Ordner.\nVerknüpfung aktualisieren?",
+  "shortcut.btn_repair": "Reparieren und starten",
+  "shortcut.btn_no_repair": "Ohne Reparatur starten",
+  "shortcut.removed": "Verknüpfung entfernt.",
+  "shortcut.moved": "Der Anwendungsordner wurde verschoben oder gelöscht.\nErwartet: {path}\n\nFühren Sie install.sh erneut vom neuen Speicherort aus.",
+  "shortcut.btn_quit": "Beenden"
 }
