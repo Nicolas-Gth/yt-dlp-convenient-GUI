@@ -5,8 +5,9 @@ Handles window initialisation, font/style configuration,
 menu bar, and dynamic window resizing.
 """
 from PySide6.QtGui import QFont, QIcon, QAction, QActionGroup
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QMenuBar, QMenu, QMessageBox
-from config import APP_TITLE, APP_NAME, APP_VERSION, ICON_PATH, PLATFORM_SCALE, COOKIES_DIR
+from config import APP_TITLE, APP_NAME, APP_VERSION, APP_AUTHOR, APP_AUTHOR_URL, ICON_PATH, PLATFORM_SCALE, COOKIES_DIR
 from utils.i18n_utils import t, AVAILABLE_LANGUAGES, MENU_LANGUAGES
 
 
@@ -54,15 +55,20 @@ class WindowMixin:
             self._theme_menu.addAction(action)
         self._theme_group.actions()[0].setChecked(True)
 
-        # --- Legal notice ---
-        self._legal_action = menu_bar.addAction(t("menu.legal_notice"))
-        self._legal_action.triggered.connect(self._show_legal_notice)
-
         # --- Help menu ---
         self._help_menu = menu_bar.addMenu(t("menu.help"))
         self._cookies_help_action = QAction(t("menu.help.youtube_cookies"), self)
         self._cookies_help_action.triggered.connect(self._show_cookies_help)
         self._help_menu.addAction(self._cookies_help_action)
+
+        # --- Infos menu ---
+        self._infos_menu = menu_bar.addMenu(t("menu.infos"))
+        self._legal_action = QAction(t("menu.legal_notice"), self)
+        self._legal_action.triggered.connect(self._show_legal_notice)
+        self._infos_menu.addAction(self._legal_action)
+        self._author_action = QAction(t("menu.infos.author"), self)
+        self._author_action.triggered.connect(self._show_author_info)
+        self._infos_menu.addAction(self._author_action)
 
     def _on_language_changed(self, code: str):
         """Handle language selection and retranslate the UI."""
@@ -96,9 +102,11 @@ class WindowMixin:
         # Menu titles
         self._lang_menu.setTitle(t("menu.language"))
         self._theme_menu.setTitle(t("menu.theme"))
-        self._legal_action.setText(t("menu.legal_notice"))
         self._help_menu.setTitle(t("menu.help"))
         self._cookies_help_action.setText(t("menu.help.youtube_cookies"))
+        self._infos_menu.setTitle(t("menu.infos"))
+        self._legal_action.setText(t("menu.legal_notice"))
+        self._author_action.setText(t("menu.infos.author"))
 
         # "System" language action label
         for action in self._lang_group.actions():
@@ -158,6 +166,17 @@ class WindowMixin:
         msg.setWindowTitle(t("legal.title"))
         msg.setIcon(QMessageBox.Information)
         msg.setText(t("legal.text", app_name=APP_NAME, app_version=APP_VERSION))
+        ok_button = msg.addButton(QMessageBox.Ok)
+        ok_button.setIcon(QIcon())
+        msg.exec()
+
+    def _show_author_info(self):
+        """Show the author info dialog."""
+        msg = QMessageBox(self)
+        msg.setWindowTitle(t("author.title"))
+        msg.setIcon(QMessageBox.Information)
+        msg.setTextFormat(Qt.RichText)
+        msg.setText(t("author.text", author=APP_AUTHOR, url=APP_AUTHOR_URL))
         ok_button = msg.addButton(QMessageBox.Ok)
         ok_button.setIcon(QIcon())
         msg.exec()

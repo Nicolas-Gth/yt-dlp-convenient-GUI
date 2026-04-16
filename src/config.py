@@ -4,13 +4,17 @@ Configuration and constants for the yt-dlp GUI application.
 import os
 
 # Application version
-APP_VERSION = "3.0.2"
+APP_VERSION = "3.0.3"
 
 # Application name
 APP_NAME = "yt-dlp Convenient GUI"
 
 # Application constants
-APP_TITLE = f"{APP_NAME} [v{APP_VERSION}] - Made by Nicolas-Gth"
+APP_TITLE = f"{APP_NAME} [v{APP_VERSION}]"
+
+# Author
+APP_AUTHOR = "Nicolas-Gth"
+APP_AUTHOR_URL = "https://github.com/Nicolas-Gth"
 
 # Default window dimensions
 DEFAULT_WINDOW_SIZE = {

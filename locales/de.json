@@ -15,11 +15,16 @@
   "menu.legal_notice": "Rechtlicher Hinweis",
   "menu.help": "Hilfe",
   "menu.help.youtube_cookies": "YouTube-Cookies",
+  "menu.infos": "Infos",
+  "menu.infos.author": "Autor",
 
   "help.cookies.title": "YouTube-Cookies",
 
   "legal.title": "Rechtlicher Hinweis",
   "legal.text": "{app_name} v{app_version}\n\nDiese Software wird ohne Gewähr ausschließlich für den persönlichen Gebrauch bereitgestellt.\n\nSie basiert auf yt-dlp, einem Open-Source-Projekt unter der Unlicense-Lizenz.\nDie Nutzer sind allein dafür verantwortlich, dass ihre Nutzung den geltenden Gesetzen und den Nutzungsbedingungen der Inhaltsplattformen entspricht.\n\nDieses Tool hostet, speichert oder verbreitet keine urheberrechtlich geschützten Inhalte.\n\nErstellt von Nicolas-Gth",
+
+  "author.title": "Autor",
+  "author.text": "{author}<br><br>GitHub: <a href='{url}'>{url}</a>",
 
   "url.placeholder": "Video-URL eingeben",
   "path.placeholder": "Klicken, um einen Ordner auszuwählen",
