@@ -111,6 +111,7 @@
   "eta.calculating": "Geschatte resterende tijd: berekenen...",
   "eta.finishing": "Afronden...",
   "startup.initializing": "Initialiseren…",
+  "startup.loading": "Laden…",
   "startup.checking_deps": "Afhankelijkheden controleren…",
   "startup.status_installed": "Geïnstalleerd",
   "startup.status_missing": "Ontbreekt",

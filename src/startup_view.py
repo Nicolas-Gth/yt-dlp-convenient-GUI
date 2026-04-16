@@ -209,6 +209,8 @@ class StartupDialog(QDialog):
             for name in report.missing:
                 self._set_comp_status(name, "installing")
             self._set_status(t("startup.installing"))
+            # Switch to indeterminate (marquee) mode during install
+            self._progress.setRange(0, 0)
             self._do_install(report.missing)
 
     def _do_install(self, missing: list):
@@ -218,6 +220,9 @@ class StartupDialog(QDialog):
         self._install_worker.start()
 
     def _on_install_done(self, success: bool):
+        # Restore determinate progress bar
+        self._progress.setRange(0, self._total_steps)
+        self._progress.setValue(self._current_step)
         if success:
             self._set_status(t("startup.install_ok"))
             self._run_checks()

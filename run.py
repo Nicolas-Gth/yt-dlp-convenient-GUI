@@ -7,13 +7,14 @@ This script handles the full bootstrap:
   2. Installs PySide6 (the only dep required to show the GUI)
   3. Launches the application
 
-If PySide6 is not yet installed, an OS-native dialog (zenity on Linux,
-PowerShell/WinForms on Windows, osascript on macOS) shows progress
-so the user never has to see a terminal window.
+On Windows, all GUI feedback uses tkinter (bundled with Python) so that
+pythonw.exe can show dialogs without ever spawning a console window.
+On Linux, zenity is used. On macOS, osascript.
 """
 import os
 import sys
 import subprocess
+import threading
 import venv
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -36,6 +37,27 @@ def _venv_python() -> str:
     return os.path.join(VENV_DIR, "bin", "python")
 
 
+def _venv_pythonw() -> str:
+    """Return the path to the windowless venv Python interpreter (Windows)."""
+    if sys.platform == "win32":
+        pw = os.path.join(VENV_DIR, "Scripts", "pythonw.exe")
+        if os.path.isfile(pw):
+            return pw
+    return _venv_python()
+
+
+def _win_no_window_kwargs() -> dict:
+    """Return subprocess kwargs that prevent any console window on Windows."""
+    if sys.platform != "win32":
+        return {}
+    si = subprocess.STARTUPINFO()
+    si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    return {
+        "startupinfo": si,
+        "creationflags": subprocess.CREATE_NO_WINDOW,
+    }
+
+
 def _ensure_venv():
     """Create the virtual environment if it doesn't exist."""
     if not os.path.isfile(_venv_python()):
@@ -45,69 +67,76 @@ def _ensure_venv():
 def _pyside6_available() -> bool:
     """Check whether PySide6 is importable inside the venv."""
     r = subprocess.run(
-        [_venv_python(), "-c", "import PySide6"],
+        [_venv_pythonw(), "-c", "import PySide6"],
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        **_win_no_window_kwargs(),
     )
     return r.returncode == 0
 
 
 def _pip_install_pyside6():
     """Run pip to upgrade pip and install PySide6 inside the venv."""
+    kw = _win_no_window_kwargs()
     subprocess.run(
-        [_venv_python(), "-m", "pip", "install", "--upgrade", "pip"],
+        [_venv_pythonw(), "-m", "pip", "install", "--upgrade", "pip"],
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        **kw,
     )
     subprocess.run(
-        [_venv_python(), "-m", "pip", "install", "PySide6>=6.5.0"],
+        [_venv_pythonw(), "-m", "pip", "install", "PySide6>=6.5.0"],
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        **kw,
     )
+
+
+# ---------------------------------------------------------------------------
+# tkinter-based GUI helpers (no console window, works from pythonw.exe)
+# ---------------------------------------------------------------------------
+
+def _tk_root(title="yt-dlp Convenient GUI"):
+    """Create a tkinter root window with the app icon."""
+    import tkinter as tk
+    root = tk.Tk()
+    root.title(title)
+    root.resizable(False, False)
+    root.attributes("-topmost", True)
+    icon_path = os.path.join(SCRIPT_DIR, "assets", "icon.ico")
+    if os.path.isfile(icon_path):
+        try:
+            root.iconbitmap(icon_path)
+        except tk.TclError:
+            pass
+    return root
 
 
 def _install_pyside6_with_gui():
-    """Install PySide6 inside the venv, showing an OS-native progress dialog."""
+    """Install PySide6 inside the venv, showing a progress dialog."""
     import shutil
 
     msg = _bootstrap_t("startup.installing_pyside6")
 
     if sys.platform == "win32":
-        # Windows — PowerShell popup with marquee progress bar
-        ps_script = '''
-Add-Type -AssemblyName System.Windows.Forms
-$form = New-Object System.Windows.Forms.Form
-$form.Text = "yt-dlp Convenient GUI"
-$form.Size = New-Object System.Drawing.Size(380, 120)
-$form.StartPosition = "CenterScreen"
-$form.FormBorderStyle = "FixedDialog"
-$form.MaximizeBox = $false
-$form.MinimizeBox = $false
-$label = New-Object System.Windows.Forms.Label
-$label.Text = "''' + msg.replace('"', '`"') + '''"
-$label.AutoSize = $true
-$label.Location = New-Object System.Drawing.Point(20, 15)
-$form.Controls.Add($label)
-$bar = New-Object System.Windows.Forms.ProgressBar
-$bar.Style = "Marquee"
-$bar.MarqueeAnimationSpeed = 30
-$bar.Location = New-Object System.Drawing.Point(20, 45)
-$bar.Size = New-Object System.Drawing.Size(320, 25)
-$form.Controls.Add($bar)
-$form.Show()
-$form.Refresh()
-[Console]::In.ReadLine()
-$form.Close()
-'''
-        dialog = subprocess.Popen(
-            ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_script],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-        )
-        _pip_install_pyside6()
-        dialog.stdin.write(b"\n")
-        dialog.stdin.close()
-        dialog.wait()
+        # Windows — tkinter dialog (runs inside pythonw = no console at all)
+        import tkinter as tk
+        from tkinter import ttk
+
+        root = _tk_root()
+        root.geometry("380x100")
+        root.protocol("WM_DELETE_WINDOW", lambda: None)  # prevent closing
+
+        tk.Label(root, text=msg, font=("Segoe UI", 10)).pack(pady=(15, 5))
+        bar = ttk.Progressbar(root, mode="indeterminate", length=320)
+        bar.pack(pady=5)
+        bar.start(20)
+
+        def do_install():
+            _pip_install_pyside6()
+            root.after(0, root.destroy)
+
+        threading.Thread(target=do_install, daemon=True).start()
+        root.mainloop()
 
     elif shutil.which("zenity"):
-        # Linux/macOS with zenity
         dialog = subprocess.Popen(
             [
                 "zenity", "--progress", "--pulsate", "--no-cancel", "--auto-close",
@@ -119,12 +148,10 @@ $form.Close()
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         )
         _pip_install_pyside6()
-        # Close the dialog by closing stdin (triggers auto-close)
         dialog.stdin.close()
         dialog.wait()
 
     elif sys.platform == "darwin" and shutil.which("osascript"):
-        # macOS without zenity — AppleScript notification
         subprocess.Popen(
             ["osascript", "-e",
              f'display notification "{msg}" with title "yt-dlp Convenient GUI"'],
@@ -133,8 +160,51 @@ $form.Close()
         _pip_install_pyside6()
 
     else:
-        # No dialog tool available — install silently
         _pip_install_pyside6()
+
+
+# ---------------------------------------------------------------------------
+# Splash screen (shown during bootstrap before PySide6 is ready)
+# ---------------------------------------------------------------------------
+
+_splash_root = None
+
+
+def _show_splash():
+    """Show a splash window while the app loads."""
+    if sys.platform != "win32":
+        return
+    try:
+        import tkinter as tk
+        from tkinter import ttk
+
+        global _splash_root
+        root = _tk_root()
+        root.geometry("340x90")
+        root.protocol("WM_DELETE_WINDOW", lambda: None)
+
+        bar = ttk.Progressbar(root, mode="indeterminate", length=280)
+        bar.pack(pady=(18, 5))
+        bar.start(20)
+
+        msg = _bootstrap_t("startup.loading")
+        tk.Label(root, text=msg, font=("Segoe UI", 9), fg="gray").pack()
+
+        _splash_root = root
+        root.update()
+    except Exception:
+        pass
+
+
+def _close_splash():
+    """Close the splash window if it's open."""
+    global _splash_root
+    if _splash_root is not None:
+        try:
+            _splash_root.destroy()
+        except Exception:
+            pass
+        _splash_root = None
 
 
 # ---------------------------------------------------------------------------
@@ -142,20 +212,29 @@ $form.Close()
 # ---------------------------------------------------------------------------
 
 def main():
+    _show_splash()
+
     _ensure_venv()
 
     if not _pyside6_available():
+        _close_splash()
         _install_pyside6_with_gui()
+        _show_splash()
 
     # Re-launch inside the venv if we're not already in it
-    venv_python = _venv_python()
-    if os.path.abspath(sys.executable) != os.path.abspath(venv_python):
+    current_exe = os.path.abspath(sys.executable).lower()
+    venv_dir_abs = os.path.abspath(VENV_DIR).lower()
+    if not current_exe.startswith(venv_dir_abs):
+        _close_splash()
         app_main = os.path.join(SRC_DIR, "main.py")
-        sys.exit(subprocess.call([venv_python, app_main]))
+        sys.exit(subprocess.call(
+            [_venv_pythonw(), app_main],
+            **_win_no_window_kwargs(),
+        ))
     else:
-        # We're already in the venv — just run
         sys.path.insert(0, SRC_DIR)
         from main import main as app_main
+        _close_splash()
         app_main()
 
 

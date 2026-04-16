@@ -111,6 +111,7 @@
   "eta.calculating": "Estimated remaining time: calculating...",
   "eta.finishing": "Finishing...",
   "startup.initializing": "Initializing…",
+  "startup.loading": "Loading…",
   "startup.checking_deps": "Checking dependencies…",
   "startup.status_installed": "Installed",
   "startup.status_missing": "Missing",

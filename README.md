@@ -15,7 +15,7 @@ A simple and intuitive graphical interface for yt-dlp that allows you to downloa
 ## Quick Start
 First download and extract the [.zip archive](https://github.com/Nicolas-Gth/yt-dlp-convenient-GUI/archive/refs/heads/main.zip) or clone the project with `git clone https://github.com/Nicolas-Gth/yt-dlp-convenient-GUI.git`.
 ### Windows Users
-Double-click `install.bat`
+Right-click `install.ps1` → **Run with PowerShell**
 
 ### macOS & Linux Users
 Open a terminal, then:
@@ -62,7 +62,7 @@ The script automatically:
 
 ## Troubleshooting
 ### Windows
-- If Python installation fails, restart your computer and run `install.bat` again
+- If Python installation fails, restart your computer and run `install.ps1` again
 - For antivirus issues, add the project folder to exceptions
 
 ### macOS & Linux

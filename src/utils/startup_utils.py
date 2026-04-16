@@ -42,18 +42,45 @@ class StartupReport:
 
 
 # ---------------------------------------------------------------------------
+# Subprocess helper
+# ---------------------------------------------------------------------------
+
+def _run(cmd: List[str], **kwargs) -> subprocess.CompletedProcess:
+    """Run a command, suppressing the console window on Windows."""
+    startupinfo = None
+    creationflags = 0
+    if sys.platform == "win32":
+        startupinfo = subprocess.STARTUPINFO()
+        startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        creationflags = subprocess.CREATE_NO_WINDOW
+    return subprocess.run(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        startupinfo=startupinfo,
+        creationflags=creationflags,
+        **kwargs,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Individual checks
 # ---------------------------------------------------------------------------
 
 def check_ffmpeg() -> ComponentStatus:
     """Check whether FFmpeg is available."""
+    # Ensure the local ffmpeg/bin is on PATH (it may not be loaded from config yet)
+    project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+    local_ffmpeg_bin = os.path.join(project_root, "ffmpeg", "bin")
+    if os.path.isdir(local_ffmpeg_bin) and local_ffmpeg_bin not in os.environ.get("PATH", ""):
+        os.environ["PATH"] = local_ffmpeg_bin + os.pathsep + os.environ.get("PATH", "")
+
     path = shutil.which("ffmpeg")
     if path:
         try:
-            out = subprocess.check_output(
-                ["ffmpeg", "-version"], stderr=subprocess.DEVNULL, text=True
-            )
-            version = out.splitlines()[0] if out else ""
+            r = _run(["ffmpeg", "-version"])
+            version = r.stdout.splitlines()[0] if r.stdout else ""
             return ComponentStatus("ffmpeg", True, version)
         except Exception:
             return ComponentStatus("ffmpeg", True)
@@ -70,10 +97,8 @@ def check_deno() -> ComponentStatus:
     path = shutil.which("deno")
     if path:
         try:
-            out = subprocess.check_output(
-                ["deno", "--version"], stderr=subprocess.DEVNULL, text=True
-            )
-            version = out.splitlines()[0] if out else ""
+            r = _run(["deno", "--version"])
+            version = r.stdout.splitlines()[0] if r.stdout else ""
             return ComponentStatus("deno", True, version)
         except Exception:
             return ComponentStatus("deno", True)
@@ -104,21 +129,6 @@ def run_all_checks() -> StartupReport:
 # ---------------------------------------------------------------------------
 # Installation helpers (non-blocking wrappers around system commands)
 # ---------------------------------------------------------------------------
-
-def _run(cmd: List[str], **kwargs) -> subprocess.CompletedProcess:
-    """Run a command, suppressing the console window on Windows."""
-    startupinfo = None
-    if sys.platform == "win32":
-        startupinfo = subprocess.STARTUPINFO()
-        startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-    return subprocess.run(
-        cmd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        startupinfo=startupinfo,
-        **kwargs,
-    )
 
 
 def install_ffmpeg(on_progress: Optional[Callable[[str], None]] = None) -> bool:

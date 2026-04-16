@@ -111,6 +111,7 @@
   "eta.calculating": "Geschätzte Restzeit: wird berechnet...",
   "eta.finishing": "Wird abgeschlossen...",
   "startup.initializing": "Initialisierung…",
+  "startup.loading": "Laden…",
   "startup.checking_deps": "Abhängigkeiten werden überprüft…",
   "startup.status_installed": "Installiert",
   "startup.status_missing": "Fehlt",

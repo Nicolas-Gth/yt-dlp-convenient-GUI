@@ -30,7 +30,15 @@ def main():
     available.  ApplicationController is imported lazily, after the dialog
     has confirmed (and possibly installed) all dependencies.
     """
+    # On Windows, set the AppUserModelID so the taskbar shows our icon
+    # instead of the default Python icon.
+    if sys.platform == "win32":
+        import ctypes
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("nicolasgth.ytdlp-convenient-gui")
+
     from PySide6.QtWidgets import QApplication
+    from PySide6.QtGui import QIcon
+    from config import ICON_PATH
     from utils.i18n_utils import init as i18n_init
     from utils.settings_utils import settings_manager
     from utils.theme_utils import apply_theme
@@ -39,6 +47,8 @@ def main():
     app = QApplication.instance() or QApplication(sys.argv)
     app.setStyle('Fusion')
     app.setDesktopFileName('yt-dlp-gui')
+    if os.path.isfile(ICON_PATH):
+        app.setWindowIcon(QIcon(ICON_PATH))
 
     # Apply saved theme & language so the startup dialog is translated
     saved_theme = settings_manager.get_setting('theme', 'system')

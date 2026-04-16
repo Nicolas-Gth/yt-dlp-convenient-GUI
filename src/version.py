@@ -20,11 +20,17 @@ def get_version():
     """Get app version from git describe, or from the archive-expanded placeholder."""
     # 1. Try live git describe (normal dev environment)
     try:
+        _kw = {}
+        if os.name == 'nt':
+            si = subprocess.STARTUPINFO()
+            si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            _kw = {'startupinfo': si, 'creationflags': subprocess.CREATE_NO_WINDOW}
         desc = subprocess.check_output(
             ["git", "describe", "--tags", "--match", "v*"],
             stderr=subprocess.DEVNULL,
             cwd=_DIR,
             text=True,
+            **_kw,
         ).strip()
         return _parse_describe(desc)
     except Exception:
