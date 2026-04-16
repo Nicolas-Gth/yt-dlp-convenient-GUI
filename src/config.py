@@ -3,7 +3,7 @@ Configuration and constants for the yt-dlp GUI application.
 """
 import os
 
-from .version import get_version
+from version import get_version
 
 # Application version
 APP_VERSION = get_version()
@@ -12,7 +12,7 @@ APP_VERSION = get_version()
 APP_NAME = "yt-dlp Convenient GUI"
 
 # Application constants
-APP_TITLE = f"{APP_NAME} [v{APP_VERSION}]"
+APP_TITLE = f"{APP_NAME} v{APP_VERSION}"
 
 # Author
 APP_AUTHOR = "Nicolas-Gth"
