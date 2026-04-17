@@ -71,8 +71,10 @@ FILE_FORMATS = {
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 ICON_PATH = os.path.join(SCRIPT_DIR, '..', 'assets',
                          'yt-dlp_convenient_gui_icon.png' if sys.platform != 'win32' else 'icon.ico')
-DOWNLOAD_ICON_PATH = os.path.join(SCRIPT_DIR, '..', 'assets', 'download-icon.svg')
-REFRESH_ICON_PATH = os.path.join(SCRIPT_DIR, '..', 'assets', 'refresh-icon.svg')
+DOWNLOAD_ICON_PATH = os.path.join(SCRIPT_DIR, '..', 'assets', 'ui', 'download-icon.svg')
+REFRESH_ICON_PATH = os.path.join(SCRIPT_DIR, '..', 'assets', 'ui', 'refresh-icon.svg')
+STOP_ICON_PATH = os.path.join(SCRIPT_DIR, '..', 'assets', 'ui', 'stop-icon.svg')
+INFO_ICON_PATH = os.path.join(SCRIPT_DIR, '..', 'assets', 'ui', 'info-icon.svg')
 COOKIES_PATH = os.path.join(SCRIPT_DIR, '..', 'cookies.txt')
 COOKIES_DIR = os.path.dirname(COOKIES_PATH)
 

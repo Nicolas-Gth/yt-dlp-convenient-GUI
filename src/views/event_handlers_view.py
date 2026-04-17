@@ -7,6 +7,7 @@ preference-saving logic.
 """
 from PySide6.QtWidgets import QFileDialog, QMessageBox
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QIcon
 
 from config import DEFAULT_NORMALIZE_TARGET
 from utils import settings_manager
@@ -59,6 +60,7 @@ class EventHandlersMixin:
         if hasattr(self, 'stop_button'):
             self.stop_button.setEnabled(False)
             self.stop_button.setText(t("button.stopping"))
+            self.stop_button.setIcon(QIcon())
             self.stop_button.setStyleSheet("""
                 QPushButton { background-color: #666666; color: white; border: none;
                 border-radius: 4px; padding: 8px 16px; }

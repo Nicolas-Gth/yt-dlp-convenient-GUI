@@ -153,10 +153,8 @@ class WindowMixin:
             self.options_box.setTitle(t("options.group_title"))
             self.normalize_check.setText(t("options.normalize_volume"))
             self.normalize_target_label.setText(t("options.normalize_target"))
-            self.normalize_hint_label.setText(t("options.normalize_hint"))
         if hasattr(self, 'enrich_check'):
             self.enrich_check.setText(t("options.enrich_metadata"))
-            self.enrich_hint.setText(t("options.enrich_hint"))
         if hasattr(self, 'prevent_sleep_check'):
             self.prevent_sleep_check.setText(t("options.prevent_sleep"))
 

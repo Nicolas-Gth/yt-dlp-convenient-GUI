@@ -45,7 +45,6 @@ def main():
     from startup_view import StartupDialog
 
     app = QApplication.instance() or QApplication(sys.argv)
-    app.setStyle('Fusion')
     app.setDesktopFileName('yt-dlp-gui')
     if os.path.isfile(ICON_PATH):
         app.setWindowIcon(QIcon(ICON_PATH))

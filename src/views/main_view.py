@@ -31,7 +31,8 @@ class MainApplicationView(QMainWindow, WindowMixin, WidgetsMixin, ProgressMixin,
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         self.main_layout = QVBoxLayout(central_widget)
-        self.main_layout.setContentsMargins(5, 5, 5, 5)
+        self.main_layout.setContentsMargins(5, 5, 5, 10)
+        self.main_layout.setSpacing(8)
 
         self.setup_window()
         self.setup_fonts()

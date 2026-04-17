@@ -8,12 +8,12 @@ normalize options, enrich metadata, convert button, and disclaimer.
 from PySide6.QtWidgets import (
     QHBoxLayout, QVBoxLayout, QLabel, QLineEdit, QPushButton,
     QRadioButton, QCheckBox, QComboBox, QButtonGroup, QSpinBox,
-    QSizePolicy, QGroupBox
+    QSizePolicy, QGroupBox, QMessageBox
 )
 from PySide6.QtGui import QFont, QIcon
 from PySide6.QtCore import Qt, QSize
 
-from config import DEFAULT_BITRATES, DEFAULT_QUALITIES, DOWNLOAD_ICON_PATH
+from config import DEFAULT_BITRATES, DEFAULT_QUALITIES, DOWNLOAD_ICON_PATH, INFO_ICON_PATH
 from utils import settings_manager
 from utils.i18n_utils import t
 
@@ -127,7 +127,7 @@ class WidgetsMixin:
         format_layout.addStretch()
 
         format_wrapper = QHBoxLayout()
-        format_wrapper.setContentsMargins(5, 10, 5, 0)
+        format_wrapper.setContentsMargins(5, 0, 5, 0)
         format_wrapper.addWidget(self.format_box)
         self.main_layout.addLayout(format_wrapper)
 
@@ -230,7 +230,7 @@ class WidgetsMixin:
         self.playlist_layout.addStretch()
 
         playlist_wrapper = QHBoxLayout()
-        playlist_wrapper.setContentsMargins(5, 10, 5, 0)
+        playlist_wrapper.setContentsMargins(5, 0, 5, 0)
         playlist_wrapper.addWidget(self.playlist_box)
         self.main_layout.addLayout(playlist_wrapper)
 
@@ -294,10 +294,16 @@ class WidgetsMixin:
         self.normalize_target_entry.setText(str(self._normalize_target_var))
         self.normalize_layout.addWidget(self.normalize_target_entry)
 
-        self.normalize_hint_label = QLabel(t("options.normalize_hint"))
-        self.normalize_hint_label.setFont(QFont("Arial", 7))
-        self.normalize_hint_label.setEnabled(False)
-        self.normalize_layout.addWidget(self.normalize_hint_label)
+        self.normalize_info_btn = QPushButton()
+        self.normalize_info_btn.setIcon(QIcon(INFO_ICON_PATH))
+        self.normalize_info_btn.setIconSize(QSize(14, 14))
+        self.normalize_info_btn.setFlat(True)
+        self.normalize_info_btn.setCursor(Qt.PointingHandCursor)
+        self.normalize_info_btn.setFixedSize(20, 20)
+        self.normalize_info_btn.clicked.connect(
+            lambda: QMessageBox.information(self, t("options.normalize_volume"), t("options.normalize_tooltip"))
+        )
+        self.normalize_layout.addWidget(self.normalize_info_btn)
         self.normalize_layout.addStretch()
 
         options_layout.addLayout(self.normalize_layout)
@@ -306,7 +312,7 @@ class WidgetsMixin:
         visible = self._normalize_var
         self.normalize_target_label.setVisible(visible)
         self.normalize_target_entry.setVisible(visible)
-        self.normalize_hint_label.setVisible(visible)
+        self.normalize_info_btn.setVisible(visible)
 
         # Enrich metadata
         enrich_layout = QHBoxLayout()
@@ -317,10 +323,16 @@ class WidgetsMixin:
         self.enrich_check.toggled.connect(self._on_enrich_toggled)
         enrich_layout.addWidget(self.enrich_check)
 
-        self.enrich_hint = QLabel(t("options.enrich_hint"))
-        self.enrich_hint.setFont(QFont("Arial", 7))
-        self.enrich_hint.setEnabled(False)
-        enrich_layout.addWidget(self.enrich_hint)
+        self.enrich_info_btn = QPushButton()
+        self.enrich_info_btn.setIcon(QIcon(INFO_ICON_PATH))
+        self.enrich_info_btn.setIconSize(QSize(14, 14))
+        self.enrich_info_btn.setFlat(True)
+        self.enrich_info_btn.setCursor(Qt.PointingHandCursor)
+        self.enrich_info_btn.setFixedSize(20, 20)
+        self.enrich_info_btn.clicked.connect(
+            lambda: QMessageBox.information(self, t("options.enrich_metadata"), t("options.enrich_tooltip"))
+        )
+        enrich_layout.addWidget(self.enrich_info_btn)
         enrich_layout.addStretch()
 
         options_layout.addLayout(enrich_layout)
@@ -338,7 +350,7 @@ class WidgetsMixin:
         options_layout.addLayout(sleep_layout)
 
         options_wrapper = QHBoxLayout()
-        options_wrapper.setContentsMargins(5, 10, 5, 0)
+        options_wrapper.setContentsMargins(5, 0, 5, 0)
         options_wrapper.addWidget(self.options_box)
 
         self.main_layout.addLayout(options_wrapper)
@@ -347,13 +359,13 @@ class WidgetsMixin:
         """Show the normalize target LUFS input."""
         self.normalize_target_label.setVisible(True)
         self.normalize_target_entry.setVisible(True)
-        self.normalize_hint_label.setVisible(True)
+        self.normalize_info_btn.setVisible(True)
 
     def hide_normalize_input(self):
         """Hide the normalize target LUFS input."""
         self.normalize_target_label.setVisible(False)
         self.normalize_target_entry.setVisible(False)
-        self.normalize_hint_label.setVisible(False)
+        self.normalize_info_btn.setVisible(False)
 
     # ------------------------------------------------------------------
     # Convert button
