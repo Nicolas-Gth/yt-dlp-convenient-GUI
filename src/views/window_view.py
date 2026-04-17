@@ -4,8 +4,8 @@ Window management mixin for the main application view.
 Handles window initialisation, font/style configuration,
 menu bar, and dynamic window resizing.
 """
-from PySide6.QtGui import QFont, QIcon, QAction, QActionGroup
-from PySide6.QtCore import Qt
+from PySide6.QtGui import QFont, QIcon, QAction, QActionGroup, QDesktopServices
+from PySide6.QtCore import Qt, QUrl
 from PySide6.QtWidgets import QMenuBar, QMenu, QMessageBox
 from config import APP_TITLE, APP_NAME, APP_VERSION, APP_AUTHOR, APP_AUTHOR_URL, ICON_PATH, PLATFORM_SCALE, COOKIES_DIR
 from utils.i18n_utils import t, AVAILABLE_LANGUAGES, MENU_LANGUAGES
@@ -69,6 +69,9 @@ class WindowMixin:
         self._author_action = QAction(t("menu.infos.author"), self)
         self._author_action.triggered.connect(self._show_author_info)
         self._infos_menu.addAction(self._author_action)
+        self._open_folder_action = QAction(t("menu.infos.open_folder"), self)
+        self._open_folder_action.triggered.connect(self._open_install_folder)
+        self._infos_menu.addAction(self._open_folder_action)
 
     def _on_language_changed(self, code: str):
         """Handle language selection and retranslate the UI."""
@@ -107,6 +110,7 @@ class WindowMixin:
         self._infos_menu.setTitle(t("menu.infos"))
         self._legal_action.setText(t("menu.legal_notice"))
         self._author_action.setText(t("menu.infos.author"))
+        self._open_folder_action.setText(t("menu.infos.open_folder"))
 
         # "System" language action label
         for action in self._lang_group.actions():
@@ -159,6 +163,10 @@ class WindowMixin:
         # Convert button (only if not mid-download)
         if hasattr(self, 'convert_button') and self.convert_button.isVisible():
             self.convert_button.setText(" " + t("button.download"))
+
+    def _open_install_folder(self):
+        """Open the application installation folder in the system file browser."""
+        QDesktopServices.openUrl(QUrl.fromLocalFile(COOKIES_DIR))
 
     def _show_legal_notice(self):
         """Show the legal notice dialog."""

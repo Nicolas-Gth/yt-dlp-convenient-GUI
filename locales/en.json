@@ -18,6 +18,7 @@
   "menu.help.youtube_cookies": "YouTube Cookies",
   "menu.infos": "About",
   "menu.infos.author": "Author",
+  "menu.infos.open_folder": "Open installation folder",
   "help.cookies.title": "YouTube Cookies",
   "legal.title": "Legal notice",
   "legal.text": "{app_name} v{app_version}\n\nThis software is provided as-is for personal use only.\n\nIt relies on yt-dlp, an open-source project licensed under the Unlicense.\nUsers are solely responsible for ensuring their use complies with applicable laws and the terms of service of content platforms.\n\nThis tool does not host, store, or distribute any copyrighted content.\n\nMade by Nicolas-Gth",

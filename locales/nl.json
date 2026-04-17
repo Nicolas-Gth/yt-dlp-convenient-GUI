@@ -18,6 +18,7 @@
   "menu.help.youtube_cookies": "YouTube-cookies",
   "menu.infos": "Info",
   "menu.infos.author": "Auteur",
+  "menu.infos.open_folder": "Installatiemap openen",
   "help.cookies.title": "YouTube-cookies",
   "legal.title": "Juridische kennisgeving",
   "legal.text": "{app_name} v{app_version}\n\nDeze software wordt geleverd zoals ze is, uitsluitend voor persoonlijk gebruik.\n\nHet maakt gebruik van yt-dlp, een open-sourceproject onder de Unlicense-licentie.\nGebruikers zijn zelf verantwoordelijk voor het naleven van de toepasselijke wetgeving en de gebruiksvoorwaarden van contentplatformen.\n\nDeze tool host, slaat op of verspreidt geen auteursrechtelijk beschermde inhoud.\n\nGemaakt door Nicolas-Gth",
