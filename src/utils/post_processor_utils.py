@@ -5,11 +5,21 @@ import json
 import os
 import re
 import subprocess
+import sys
 from typing import Optional, Dict, Callable
 
 import yt_dlp
 from mutagen.id3 import ID3, APIC, TDRC, TCON
 from mutagen.mp3 import MP3
+
+
+def _no_window_kwargs():
+    """Return subprocess kwargs that prevent console windows on Windows."""
+    if sys.platform != 'win32':
+        return {}
+    si = subprocess.STARTUPINFO()
+    si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    return {'startupinfo': si, 'creationflags': subprocess.CREATE_NO_WINDOW}
 from mutagen.easyid3 import EasyID3
 from mutagen.oggopus import OggOpus
 from mutagen.flac import Picture
@@ -195,7 +205,7 @@ class CustomPostProcessor(yt_dlp.postprocessor.PostProcessor):
         print(f"[opus remux] source={source_bitrate}kbps, target={target_bitrate or 'best'}, reencode={needs_reencode}, cmd: {' '.join(cmd)}")
 
         try:
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300, **_no_window_kwargs())
             if result.returncode != 0:
                 print(f"Warning: Opus remux failed: {result.stderr.strip()}")
                 return None
@@ -269,7 +279,7 @@ class CustomPostProcessor(yt_dlp.postprocessor.PostProcessor):
         print(f"[mp3 convert] source={source_bitrate}kbps, target={self.config.bitrate}, effective={effective_bitrate}, cmd: {' '.join(cmd)}")
 
         try:
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300, **_no_window_kwargs())
             if result.returncode != 0:
                 print(f"Warning: MP3 conversion failed: {result.stderr.strip()}")
                 return None
@@ -306,7 +316,8 @@ class CustomPostProcessor(yt_dlp.postprocessor.PostProcessor):
                 [ffprobe_bin, '-v', 'quiet', '-select_streams', 'a:0',
                  '-show_entries', 'stream=bit_rate',
                  '-of', 'default=noprint_wrappers=1:nokey=1', file_path],
-                capture_output=True, text=True, timeout=10
+                capture_output=True, text=True, timeout=10,
+                **_no_window_kwargs(),
             )
             if result.returncode == 0 and result.stdout.strip():
                 val = result.stdout.strip()
@@ -322,7 +333,8 @@ class CustomPostProcessor(yt_dlp.postprocessor.PostProcessor):
                 [ffprobe_bin, '-v', 'quiet',
                  '-show_entries', 'format=bit_rate',
                  '-of', 'default=noprint_wrappers=1:nokey=1', file_path],
-                capture_output=True, text=True, timeout=10
+                capture_output=True, text=True, timeout=10,
+                **_no_window_kwargs(),
             )
             if result.returncode == 0 and result.stdout.strip():
                 val = result.stdout.strip()
@@ -450,7 +462,8 @@ class CustomPostProcessor(yt_dlp.postprocessor.PostProcessor):
 
             result = subprocess.run(
                 [ffmpeg_bin, '-i', file_path, '-af', 'loudnorm=print_format=json', '-f', 'null', '-'],
-                capture_output=True, text=True, timeout=60
+                capture_output=True, text=True, timeout=60,
+                **_no_window_kwargs(),
             )
 
             # Parse the loudnorm JSON output from stderr
@@ -581,7 +594,7 @@ class CustomPostProcessor(yt_dlp.postprocessor.PostProcessor):
                     if enriched.synced_lyrics:
                         track_info['lyrics_type'] = 'LRC'
                     elif enriched.lyrics:
-                        track_info['lyrics_type'] = 'Txt'
+                        track_info['lyrics_type'] = 'TXT'
                     track_info['metadata_found'] = bool(
                         enriched.cover_data or enriched.lyrics or enriched.synced_lyrics or enriched.album
                     )

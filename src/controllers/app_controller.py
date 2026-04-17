@@ -57,7 +57,6 @@ class ApplicationController:
             import ctypes
             ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID('nicolas-gth.yt-dlp-convenient-gui')
         self.app = QApplication.instance() or QApplication(sys.argv)
-        self.app.setStyle('Fusion')
         # Apply saved or system theme
         saved_theme = settings_manager.get_setting('theme', 'system')
         apply_theme(self.app, saved_theme)
@@ -169,10 +168,6 @@ class ApplicationController:
         
         if config.is_playlist:
             self.view.set_eta_callback(self._compute_eta_for_timer)
-        
-        hidden = self.download_controller._hidden_entries
-        if hidden:
-            self.view.show_skipped_entries(hidden)
         
         self.update_initial_progress_display(video_info, config)
         self.download_controller.start_download(config)
@@ -514,15 +509,15 @@ class ApplicationController:
     
     def on_age_restricted_entry(self, entry: dict):
         """Handle a single age-restricted entry detected during download."""
-        self._invoker.invoke(lambda e=entry: self.view.show_age_restricted_entries([e]))
+        self._invoker.invoke(lambda e=entry: self.view.add_skipped_entry(e, t("progress.age_restricted")))
 
     def on_format_unavailable_entry(self, entry: dict):
         """Handle a single format-unavailable entry detected during download."""
-        self._invoker.invoke(lambda e=entry: self.view.show_format_unavailable_entries([e]))
+        self._invoker.invoke(lambda e=entry: self.view.add_skipped_entry(e, t("progress.format_unavailable")))
 
     def on_video_unavailable_entry(self, entry: dict):
         """Handle a single video-unavailable entry detected during download."""
-        self._invoker.invoke(lambda e=entry: self.view.show_video_unavailable_entries([e]))
+        self._invoker.invoke(lambda e=entry: self.view.add_skipped_entry(e, t("progress.unavailable")))
     
     def on_download_complete(self):
         """Handle download completion (called from download thread)."""

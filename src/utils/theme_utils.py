@@ -109,6 +109,7 @@ def _build_light_palette() -> QPalette:
 
 def apply_theme(app: QApplication, name: str):
     """Apply the given theme ('system', 'dark', or 'light') to *app*."""
+    app.setStyle('Fusion')
     if name == 'dark':
         app.setPalette(_build_dark_palette())
     elif name == 'light':

@@ -15,20 +15,20 @@ A simple and intuitive graphical interface for yt-dlp that allows you to downloa
 ## Quick Start
 First download and extract the [.zip archive](https://github.com/Nicolas-Gth/yt-dlp-convenient-GUI/archive/refs/heads/main.zip) or clone the project with `git clone https://github.com/Nicolas-Gth/yt-dlp-convenient-GUI.git`.
 ### Windows Users
-Double-click `run.bat`
+Right-click `install.ps1` → **Run with PowerShell**
 
 ### macOS & Linux Users
 Open a terminal, then:
 ```bash
 # Go into the project main directory
 cd /path/to/the/extracted/app/folder
-# Run the script
-./run.sh
+# Run the installer
+./install.sh
 ```
 If you have a permission issue, you can do
 ```bash
 # Make executable
-chmod +x run.sh
+chmod +x install.sh
 ```
 
 The script automatically:
@@ -37,6 +37,7 @@ The script automatically:
 - Installs all Python dependencies
 - Prompts you to install Git if you don't have it already
 - Updates the application automatically if Git is installed
+- Creates a desktop shortcut so you can launch the app from your application menu
 - Launches the application
 
 ## Features
@@ -61,11 +62,11 @@ The script automatically:
 
 ## Troubleshooting
 ### Windows
-- If Python installation fails, restart your computer and run `run.bat` again
+- If Python installation fails, restart your computer and run `install.ps1` again
 - For antivirus issues, add the project folder to exceptions
 
 ### macOS & Linux
-- Make sure the script is executable: `chmod +x run.sh`
+- Make sure the script is executable: `chmod +x install.sh`
 - For permission issues, the script will prompt for your password when needed
 - If the launcher couldn't install the needed packages you might have to install them manually. This process will depend on your OS and you will have to install the following:
   - Python 3, pip, and FFmpeg using your package manager

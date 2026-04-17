@@ -36,6 +36,7 @@ class DownloadController:
         self._current_config: Optional[DownloadConfig] = None
         self._ydl_instance: Optional[yt_dlp.YoutubeDL] = None
         self._playlist_urls: list = []
+        self._interleaved_sequence: list = []  # ('url', url, entry) | ('hidden', entry)
         self._current_playlist_index: int = 0
         self._playlist_total_count: int = 0
         self._hidden_entries: list = []  # Entries in API but hidden on YouTube
@@ -224,16 +225,31 @@ class DownloadController:
                     # Only use individual downloads if user specified a sub-range
                     if start_idx > 0 or end_idx < total_count:
                         sliced = all_entries[start_idx:end_idx]
-                        # Filter only None/truly-broken entries from the slice
-                        valid = [e for e in sliced if e and isinstance(e, dict) and e.get('id')]
-                        self._playlist_urls = []
-                        for entry in valid:
-                            vid_id = entry.get('id') or entry.get('url')
-                            url = entry.get('url', '')
-                            if not url.startswith('http'):
-                                url = f"https://www.youtube.com/watch?v={vid_id}"
-                            self._playlist_urls.append(url)
 
+                        # Build interleaved sequence: valid URLs + hidden entries at
+                        # their natural positions so they can be emitted live during download.
+                        hidden_ids = {e.get('id') for e in self._hidden_entries if e.get('id')}
+                        self._interleaved_sequence = []
+                        valid = []
+                        for entry in sliced:
+                            if not entry or not isinstance(entry, dict) or not entry.get('id'):
+                                self._interleaved_sequence.append(('hidden', {'title': '<Unknown>', 'channel': ''}))
+                            elif entry.get('id') in hidden_ids:
+                                self._interleaved_sequence.append(('hidden', {
+                                    'title': entry.get('title', '<Unknown>'),
+                                    'channel': entry.get('channel') or entry.get('uploader', ''),
+                                }))
+                            else:
+                                vid_id = entry.get('id') or entry.get('url')
+                                url = entry.get('url', '')
+                                if not url.startswith('http'):
+                                    url = f"https://www.youtube.com/watch?v={vid_id}"
+                                self._interleaved_sequence.append(('url', url, entry))
+                                valid.append(entry)
+
+                        self._playlist_urls = [
+                            item[1] for item in self._interleaved_sequence if item[0] == 'url'
+                        ]
                         self.video_infos['entries'] = valid
                         self.video_infos['playlist_count'] = len(valid)
 
@@ -389,26 +405,35 @@ class DownloadController:
                 # indexing offset caused by deleted/unavailable entries.
                 ydl_opts['noplaylist'] = True
                 self._playlist_total_count = len(self._playlist_urls)
-                
+
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     self._ydl_instance = ydl
                     ydl.add_post_processor(
                         CustomPostProcessor(config, normalize_callback=self.normalize_callback),
                         when='post_process'
                     )
-                    for i, url in enumerate(self._playlist_urls, 1):
+                    url_index = 0
+                    sequence = self._interleaved_sequence if self._interleaved_sequence else [
+                        ('url', url, {}) for url in self._playlist_urls
+                    ]
+                    for item in sequence:
                         if self._cancelled:
                             break
-                        self._current_playlist_index = i
-                        # Resolve video title/channel from fetched info for error tracking
-                        video_title = ''
-                        video_channel = ''
-                        if self.video_infos and 'entries' in self.video_infos:
-                            entries = self.video_infos['entries']
-                            if isinstance(entries, list) and i - 1 < len(entries) and entries[i - 1]:
-                                video_title = entries[i - 1].get('title', '')
-                                video_channel = (entries[i - 1].get('channel')
-                                                 or entries[i - 1].get('uploader', ''))
+                        if item[0] == 'hidden':
+                            # Emit hidden entry live at its natural position
+                            hidden_entry = item[1]
+                            if self.video_unavailable_callback:
+                                self.video_unavailable_callback(hidden_entry)
+                            continue
+                        # item == ('url', url, entry)
+                        _, url, entry_meta = item
+                        url_index += 1
+                        self._current_playlist_index = url_index
+                        video_title = entry_meta.get('title', '') if entry_meta else ''
+                        video_channel = (
+                            (entry_meta.get('channel') or entry_meta.get('uploader', ''))
+                            if entry_meta else ''
+                        )
                         ydl.download([url])
                         if _check_cookie_error():
                             self._ydl_instance = None
