@@ -117,6 +117,7 @@
   "startup.status_missing": "Fehlt",
   "startup.status_outdated": "Veraltet",
   "startup.status_installing": "Wird installiert…",
+  "startup.status_extracting": "Wird entpackt…",
   "startup.installing": "Komponenten werden installiert…",
   "startup.install_ok": "Installation erfolgreich!",
   "startup.install_failed": "Einige Komponenten konnten nicht installiert werden.",

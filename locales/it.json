@@ -117,6 +117,7 @@
   "startup.status_missing": "Mancante",
   "startup.status_outdated": "Obsoleto",
   "startup.status_installing": "Installazione…",
+  "startup.status_extracting": "Estrazione…",
   "startup.installing": "Installazione dei componenti…",
   "startup.install_ok": "Installazione riuscita!",
   "startup.install_failed": "Alcuni componenti non sono stati installati.",

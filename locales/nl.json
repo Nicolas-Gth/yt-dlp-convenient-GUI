@@ -117,6 +117,7 @@
   "startup.status_missing": "Ontbreekt",
   "startup.status_outdated": "Verouderd",
   "startup.status_installing": "Installeren…",
+  "startup.status_extracting": "Uitpakken…",
   "startup.installing": "Componenten worden geïnstalleerd…",
   "startup.install_ok": "Installatie geslaagd!",
   "startup.install_failed": "Sommige componenten konden niet worden geïnstalleerd.",

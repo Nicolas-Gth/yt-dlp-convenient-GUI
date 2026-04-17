@@ -131,62 +131,160 @@ def run_all_checks() -> StartupReport:
 # ---------------------------------------------------------------------------
 
 
-def install_ffmpeg(on_progress: Optional[Callable[[str], None]] = None) -> bool:
+def install_ffmpeg(
+    on_progress: Optional[Callable[[str], None]] = None,
+    on_percent: Optional[Callable[[int], None]] = None,
+    on_status: Optional[Callable[[str], None]] = None,
+) -> bool:
     """Attempt to install FFmpeg using the system package manager."""
     if sys.platform == "win32":
-        return _install_ffmpeg_windows(on_progress)
+        return _install_ffmpeg_windows(on_progress, on_percent, on_status)
     elif sys.platform == "darwin":
         return _install_with_brew("ffmpeg", on_progress)
     else:
         return _install_ffmpeg_linux(on_progress)
 
 
-def _install_ffmpeg_windows(on_progress: Optional[Callable[[str], None]] = None) -> bool:
-    """Download and install FFmpeg into a local ffmpeg/bin directory on Windows."""
+def _download_with_progress(
+    url: str,
+    dest: str,
+    on_progress: Optional[Callable[[str], None]] = None,
+    on_percent: Optional[Callable[[int], None]] = None,
+) -> bool:
+    """Download *url* to *dest*, reporting percentage progress.
+
+    Uses curl (ships with Windows 10+) for speed, falls back to urllib.
+    """
+    curl = shutil.which("curl")
+    if curl:
+        return _download_with_curl(curl, url, dest, on_percent)
+    return _download_with_urllib(url, dest, on_percent)
+
+
+def _download_with_curl(
+    curl: str,
+    url: str,
+    dest: str,
+    on_percent: Optional[Callable[[int], None]] = None,
+) -> bool:
+    """Download using system curl with progress bar parsing."""
+    import re
+    kw: dict = {}
+    if sys.platform == "win32":
+        si = subprocess.STARTUPINFO()
+        si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        kw["startupinfo"] = si
+        kw["creationflags"] = subprocess.CREATE_NO_WINDOW
+
+    proc = subprocess.Popen(
+        [curl, "-L", "-#", "-o", dest, url],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        **kw,
+    )
+    buf = b""
+    pct_re = re.compile(rb"(\d+(?:\.\d+)?)\s*%")
+    while True:
+        chunk = proc.stderr.read(64)
+        if not chunk:
+            break
+        buf += chunk
+        # Keep only the latest carriage-return segment
+        parts = buf.split(b"\r")
+        buf = parts[-1]
+        for part in parts[:-1]:
+            m = pct_re.search(part)
+            if m and on_percent:
+                on_percent(min(int(float(m.group(1))), 100))
+    proc.wait()
+    return proc.returncode == 0 and os.path.isfile(dest)
+
+
+def _download_with_urllib(
+    url: str,
+    dest: str,
+    on_percent: Optional[Callable[[int], None]] = None,
+) -> bool:
+    """Fallback download using Python urllib."""
+    import urllib.request
+
     try:
-        if on_progress:
-            on_progress(t("startup.downloading_ffmpeg"))
-        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-        ffmpeg_bin = os.path.join(project_root, "ffmpeg", "bin")
-        os.makedirs(ffmpeg_bin, exist_ok=True)
-        temp_dir = os.path.join(project_root, "temp")
-        os.makedirs(temp_dir, exist_ok=True)
-        zip_path = os.path.join(temp_dir, "ffmpeg.zip")
-
-        _run([
-            "powershell", "-Command",
-            f"$ProgressPreference='SilentlyContinue'; "
-            f"Invoke-WebRequest -Uri 'https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip' "
-            f"-OutFile '{zip_path}'"
-        ])
-
-        if not os.path.isfile(zip_path):
-            return False
-
-        if on_progress:
-            on_progress(t("startup.extracting_ffmpeg"))
-        extract_dir = os.path.join(temp_dir, "ffmpeg-extract")
-        _run([
-            "powershell", "-Command",
-            f"Expand-Archive -Path '{zip_path}' -DestinationPath '{extract_dir}' -Force"
-        ])
-
-        # Copy binaries
-        for entry in os.listdir(extract_dir):
-            bin_src = os.path.join(extract_dir, entry, "bin")
-            if os.path.isdir(bin_src):
-                for f in os.listdir(bin_src):
-                    shutil.copy2(os.path.join(bin_src, f), ffmpeg_bin)
-                break
-
-        # Add to PATH for this session
-        os.environ["PATH"] = ffmpeg_bin + os.pathsep + os.environ.get("PATH", "")
-
-        # Cleanup
-        shutil.rmtree(temp_dir, ignore_errors=True)
-        return shutil.which("ffmpeg") is not None
+        req = urllib.request.Request(url)
+        with urllib.request.urlopen(req) as resp:
+            total = int(resp.headers.get("Content-Length", 0))
+            downloaded = 0
+            chunk_size = 256 * 1024
+            with open(dest, "wb") as fp:
+                while True:
+                    chunk = resp.read(chunk_size)
+                    if not chunk:
+                        break
+                    fp.write(chunk)
+                    downloaded += len(chunk)
+                    if total > 0 and on_percent:
+                        on_percent(min(int(downloaded * 100 / total), 100))
+        return os.path.isfile(dest)
     except Exception:
         return False
+
+
+def _install_ffmpeg_windows(
+    on_progress: Optional[Callable[[str], None]] = None,
+    on_percent: Optional[Callable[[int], None]] = None,
+    on_status: Optional[Callable[[str], None]] = None,
+) -> bool:
+    """Download and install FFmpeg into a local ffmpeg/bin directory on Windows."""
+    import zipfile
+
+    _MAX_RETRIES = 2
+    project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+    ffmpeg_bin = os.path.join(project_root, "ffmpeg", "bin")
+    os.makedirs(ffmpeg_bin, exist_ok=True)
+    temp_dir = os.path.join(project_root, "temp")
+    os.makedirs(temp_dir, exist_ok=True)
+    zip_path = os.path.join(temp_dir, "ffmpeg.zip")
+
+    url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
+
+    for attempt in range(_MAX_RETRIES + 1):
+        try:
+            # Download
+            ok = _download_with_progress(url, zip_path, on_progress, on_percent)
+            if not ok:
+                continue
+
+            # Validate zip integrity before extracting
+            if not zipfile.is_zipfile(zip_path):
+                os.remove(zip_path)
+                continue
+
+            if on_status:
+                on_status("extracting")
+            if on_percent:
+                on_percent(-1)
+
+            # Extract only the binaries we need (ffmpeg, ffprobe, ffplay)
+            with zipfile.ZipFile(zip_path, "r") as zf:
+                for member in zf.namelist():
+                    basename = os.path.basename(member)
+                    if basename.lower() in ("ffmpeg.exe", "ffprobe.exe", "ffplay.exe"):
+                        with zf.open(member) as src, open(os.path.join(ffmpeg_bin, basename), "wb") as dst:
+                            shutil.copyfileobj(src, dst)
+
+            # Add to PATH for this session
+            os.environ["PATH"] = ffmpeg_bin + os.pathsep + os.environ.get("PATH", "")
+
+            # Cleanup
+            shutil.rmtree(temp_dir, ignore_errors=True)
+            return shutil.which("ffmpeg") is not None
+        except (zipfile.BadZipFile, OSError):
+            if os.path.isfile(zip_path):
+                os.remove(zip_path)
+            continue
+
+    shutil.rmtree(temp_dir, ignore_errors=True)
+    return False
 
 
 def _install_ffmpeg_linux(on_progress: Optional[Callable[[str], None]] = None) -> bool:

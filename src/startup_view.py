@@ -41,6 +41,8 @@ class _CheckWorker(QThread):
 class _InstallWorker(QThread):
     """Installs missing components in a background thread."""
     progress = Signal(str)
+    percent = Signal(int)
+    comp_status = Signal(str, str)  # (component_name, status_key)
     finished_signal = Signal(bool)
 
     def __init__(self, missing: list, parent=None):
@@ -50,14 +52,20 @@ class _InstallWorker(QThread):
     def run(self):
         all_ok = True
         for name in self._missing:
+            self.comp_status.emit(name, "installing")
             if name == "ffmpeg":
-                ok = startup_utils.install_ffmpeg(on_progress=lambda msg: self.progress.emit(msg))
+                ok = startup_utils.install_ffmpeg(
+                    on_progress=lambda msg: self.progress.emit(msg),
+                    on_percent=lambda pct: self.percent.emit(pct),
+                    on_status=lambda s, _n=name: self.comp_status.emit(_n, s),
+                )
             elif name == "deno":
                 ok = startup_utils.install_deno(on_progress=lambda msg: self.progress.emit(msg))
             elif name == "yt-dlp":
                 ok = startup_utils.install_requirements(on_progress=lambda msg: self.progress.emit(msg))
             else:
                 ok = False
+            self.comp_status.emit(name, "installed" if ok else "missing")
             if not ok:
                 all_ok = False
         self.finished_signal.emit(all_ok)
@@ -106,6 +114,7 @@ class StartupDialog(QDialog):
         "missing": "#e74c3c",
         "outdated": "#f39c12",
         "installing": None,
+        "extracting": None,
     }
 
     def __init__(self, parent=None):
@@ -138,8 +147,9 @@ class StartupDialog(QDialog):
 
         self._comp_names: dict[str, QLabel] = {}
         self._comp_statuses: dict[str, QLabel] = {}
+        _DISPLAY_NAMES = {"ffmpeg": "FFmpeg", "deno": "deno", "yt-dlp": "yt-dlp"}
         for row, name in enumerate(("ffmpeg", "deno", "yt-dlp")):
-            name_lbl = QLabel(name)
+            name_lbl = QLabel(_DISPLAY_NAMES.get(name, name))
             name_font = QFont()
             name_font.setPointSize(10)
             name_lbl.setFont(name_font)
@@ -169,7 +179,7 @@ class StartupDialog(QDialog):
     # ------------------------------------------------------------------
 
     def _set_comp_status(self, name: str, status: str):
-        """Update a component's status label. status: installed|missing|outdated|installing"""
+        """Update a component's status label. status: installed|missing|outdated|installing|extracting"""
         lbl = self._comp_statuses.get(name)
         if not lbl:
             return
@@ -178,6 +188,7 @@ class StartupDialog(QDialog):
             "missing": t("startup.status_missing"),
             "outdated": t("startup.status_outdated"),
             "installing": t("startup.status_installing"),
+            "extracting": t("startup.status_extracting"),
         }
         lbl.setText(text_map.get(status, status))
         color = self._STATUS_COLORS.get(status, "gray")
@@ -205,10 +216,7 @@ class StartupDialog(QDialog):
         if report.all_ok:
             self._check_updates()
         else:
-            # Auto-install missing components
-            for name in report.missing:
-                self._set_comp_status(name, "installing")
-            self._set_status(t("startup.installing"))
+            self._set_status(t("startup.checking_deps"))
             # Switch to indeterminate (marquee) mode during install
             self._progress.setRange(0, 0)
             self._do_install(report.missing)
@@ -216,8 +224,21 @@ class StartupDialog(QDialog):
     def _do_install(self, missing: list):
         self._install_worker = _InstallWorker(missing, self)
         self._install_worker.progress.connect(self._set_status)
+        self._install_worker.percent.connect(self._on_install_percent)
+        self._install_worker.comp_status.connect(
+            lambda name, status: self._set_comp_status(name, status)
+        )
         self._install_worker.finished_signal.connect(self._on_install_done)
         self._install_worker.start()
+
+    def _on_install_percent(self, pct: int):
+        """Update the progress bar with a download percentage (0-100), or -1 for indeterminate."""
+        if pct < 0:
+            self._progress.setRange(0, 0)
+        else:
+            if self._progress.maximum() == 0:
+                self._progress.setRange(0, 100)
+            self._progress.setValue(pct)
 
     def _on_install_done(self, success: bool):
         # Restore determinate progress bar
