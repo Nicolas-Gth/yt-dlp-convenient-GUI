@@ -12,8 +12,8 @@
 
 ## Preview
 <p align="center">
-  <img src="https://github.com/user-attachments/assets/49605fe5-894f-4047-9af7-f832ea62f187" width="300" align="middle"/>
-  <img src="https://github.com/user-attachments/assets/83271379-f116-4e17-81b2-99919d1bdb68" width="600" align="middle"/>
+  <img src="https://github.com/user-attachments/assets/49605fe5-894f-4047-9af7-f832ea62f187" width="30%" align="middle"/>
+  <img src="https://github.com/user-attachments/assets/83271379-f116-4e17-81b2-99919d1bdb68" width="60%" align="middle"/>
 </p>
 
 ## Quick Start
