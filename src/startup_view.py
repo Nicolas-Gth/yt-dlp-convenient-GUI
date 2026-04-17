@@ -15,7 +15,6 @@ from PySide6.QtWidgets import (
     QLabel,
     QProgressBar,
     QMessageBox,
-    QApplication,
     QGridLayout,
 )
 
@@ -274,15 +273,16 @@ class StartupDialog(QDialog):
         self._remote_branch = remote_branch
         if behind > 0:
             self._pending_update = True
-            reply = QMessageBox.question(
-                self,
-                t("startup.update_title"),
-                t("startup.update_prompt", count=behind),
-                QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.Yes,
-            )
+            msg = QMessageBox(self)
+            msg.setWindowTitle(t("startup.update_title"))
+            msg.setText(t("startup.update_prompt", count=behind))
+            msg.setIcon(QMessageBox.Question)
+            yes_btn = msg.addButton(t("playlist.yes"), QMessageBox.YesRole)
+            msg.addButton(t("playlist.no"), QMessageBox.NoRole)
+            msg.setDefaultButton(yes_btn)
+            msg.exec()
             self._pending_update = False
-            if reply == QMessageBox.Yes:
+            if msg.clickedButton() is yes_btn:
                 self._apply_update()
             else:
                 self._update_ytdlp()
@@ -299,7 +299,7 @@ class StartupDialog(QDialog):
                 t("startup.update_title"),
                 t("startup.update_restart"),
             )
-            QApplication.quit()
+            self.reject()
             return
         self._update_ytdlp()
 
@@ -317,7 +317,7 @@ class StartupDialog(QDialog):
                 t("startup.update_title"),
                 t("startup.update_restart"),
             )
-            QApplication.quit()
+            self.reject()
         else:
             self._set_status(t("startup.update_failed"))
             self._update_ytdlp()
