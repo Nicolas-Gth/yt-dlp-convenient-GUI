@@ -201,9 +201,9 @@ class WindowMixin:
 
     def setup_fonts(self):
         """Configure fonts."""
-        self.default_font = QFont("Arial", 9)
-        self.title_font = QFont("Arial", 10, QFont.Bold)
-        self.setFont(self.default_font)
+        self.default_font = self.font()
+        self.title_font = self.font()
+        self.title_font.setBold(True)
 
     def adjust_window_size(self, extra_height: int = 0):
         """Adjust window size to fit content automatically."""
