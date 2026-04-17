@@ -16,13 +16,20 @@
   <img src="https://github.com/user-attachments/assets/83271379-f116-4e17-81b2-99919d1bdb68" width="60%" align="middle"/>
 </p>
 
-## Quick Start
-First download and extract the [.zip archive](https://github.com/Nicolas-Gth/yt-dlp-convenient-GUI/archive/refs/heads/main.zip) or clone the project with `git clone https://github.com/Nicolas-Gth/yt-dlp-convenient-GUI.git`.
+## Installation
+
+### Download
+You have two options:
+- Download and extract the [.zip archive](https://github.com/Nicolas-Gth/yt-dlp-convenient-GUI/archive/refs/heads/main.zip)
+- Clone the project with `git clone https://github.com/Nicolas-Gth/yt-dlp-convenient-GUI.git`
+
+Both should be done in the directory where you want the app to be installed. 
+
 ### Windows Users
-Right-click `install.ps1` → **Run with PowerShell**
+Right-click `install.ps1` then select *Run with PowerShell*.
 
 ### macOS & Linux Users
-Depending on your desktop environment, you may be able to double-click `install.sh` or right-click it and select "Run in Terminal".
+Depending on your desktop environment, you might be able to double-click `install.sh` or right-click it and select *Run in Terminal* or a similar option.
 
 If that isn't possible, open a terminal and do these commands:
 ```bash
