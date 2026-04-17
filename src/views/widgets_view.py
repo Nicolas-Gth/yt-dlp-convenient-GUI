@@ -35,6 +35,9 @@ class WidgetsMixin:
         self._pre_button_spacer = spacer_item.spacerItem() if spacer_item is not None else None
         self.create_convert_button()
         self.main_layout.addStretch()
+        # Keep a handle to the spacer below the main action button.
+        spacer_item = self.main_layout.itemAt(self.main_layout.count() - 1)
+        self._post_button_spacer = spacer_item.spacerItem() if spacer_item is not None else None
         self.create_disclaimer()
         self.adjust_window_size()
 
@@ -47,6 +50,18 @@ class WidgetsMixin:
             self._pre_button_spacer.changeSize(0, 0, QSizePolicy.Minimum, QSizePolicy.Fixed)
         else:
             self._pre_button_spacer.changeSize(0, 0, QSizePolicy.Minimum, QSizePolicy.Expanding)
+
+        self.main_layout.invalidate()
+
+    def set_post_button_spacer_collapsed(self, collapsed: bool):
+        """Collapse/restore the spacer below the convert button."""
+        if not hasattr(self, '_post_button_spacer') or self._post_button_spacer is None:
+            return
+
+        if collapsed:
+            self._post_button_spacer.changeSize(0, 0, QSizePolicy.Minimum, QSizePolicy.Fixed)
+        else:
+            self._post_button_spacer.changeSize(0, 0, QSizePolicy.Minimum, QSizePolicy.Expanding)
 
         self.main_layout.invalidate()
 

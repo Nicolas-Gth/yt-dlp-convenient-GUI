@@ -8,7 +8,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QProgressBar, QFrame, QGroupBox, QSizePolicy, QSpacerItem,
     QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView,
-    QApplication, QMenu
+    QApplication, QMenu, QSplitter, QWidget
 )
 from PySide6.QtGui import QFont, QPixmap, QImage, QIcon, QKeySequence, QPainter, QPainterPath
 from PySide6.QtCore import Qt, QTimer, QByteArray, QBuffer, QSize
@@ -122,7 +122,7 @@ class ProgressMixin:
 
         # Create progress container as fieldset
         self.progress_frame = QGroupBox("")
-        self.progress_frame.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
+        self.progress_frame.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
         self.progress_frame.setAlignment(Qt.AlignLeft)
         self.progress_layout = QVBoxLayout(self.progress_frame)
         self.progress_layout.setContentsMargins(7, 5, 7, 5)
@@ -207,10 +207,13 @@ class ProgressMixin:
             self._eta_timer.timeout.connect(self._update_eta_timer)
             self._eta_timer.start(1000)
 
-        progress_wrapper = QHBoxLayout()
-        progress_wrapper.setContentsMargins(5, 0, 5, 0)
-        progress_wrapper.addWidget(self.progress_frame)
-        self.main_layout.insertLayout(self.main_layout.indexOf(self.convert_button), progress_wrapper)
+        insert_idx = self.main_layout.indexOf(self.convert_button)
+        self._progress_wrapper = QWidget()
+        wrapper_layout = QVBoxLayout(self._progress_wrapper)
+        wrapper_layout.setContentsMargins(5, 0, 5, 0)
+        wrapper_layout.setSpacing(0)
+        wrapper_layout.addWidget(self.progress_frame)
+        self.main_layout.insertWidget(insert_idx, self._progress_wrapper, 1)
 
         # Create stop button
         self.stop_button = QPushButton(" " + t("button.stop"))
@@ -254,6 +257,11 @@ class ProgressMixin:
             self.progress_frame.deleteLater()
             self.progress_frame = None
 
+        if hasattr(self, '_progress_wrapper') and self._progress_wrapper is not None:
+            self._progress_wrapper.hide()
+            self._progress_wrapper.deleteLater()
+            self._progress_wrapper = None
+
         if hasattr(self, 'normalize_outer_frame') and self.normalize_outer_frame is not None:
             self.normalize_outer_frame.hide()
             self.normalize_outer_frame.deleteLater()
@@ -262,9 +270,14 @@ class ProgressMixin:
             self._normalize_table = None
             self._info_item_count = None
 
+        self._tables_splitter = None
+        self._splitter_user_moved = False
+
         self.convert_button.show()
         if hasattr(self, 'set_pre_button_spacer_collapsed'):
             self.set_pre_button_spacer_collapsed(False)
+        if hasattr(self, 'set_post_button_spacer_collapsed'):
+            self.set_post_button_spacer_collapsed(False)
         self.set_convert_button_enabled(True)
         self.enable_interactive_widgets()
 
@@ -305,6 +318,9 @@ class ProgressMixin:
             """)
             self.stop_button.clicked.disconnect()
             self.stop_button.clicked.connect(self._on_download_again_click)
+
+        if hasattr(self, 'progress_frame') and self.progress_frame is not None:
+            self.progress_frame.setTitle(t("completion.download_complete"))
 
     # ------------------------------------------------------------------
     # ETA management
@@ -392,6 +408,41 @@ class ProgressMixin:
             self.total_progress.setFormat(f"{percentage:.1f}%")
 
     # ------------------------------------------------------------------
+    # Splitter for the two summary tables
+    # ------------------------------------------------------------------
+
+    def _get_or_create_tables_splitter(self):
+        """Lazily create the QSplitter that holds the two summary tables."""
+        if not hasattr(self, '_tables_splitter') or self._tables_splitter is None:
+            self._tables_splitter = QSplitter(Qt.Vertical)
+            self._tables_splitter.setChildrenCollapsible(False)
+            self._splitter_user_moved = False
+            self._tables_splitter.splitterMoved.connect(
+                lambda: setattr(self, '_splitter_user_moved', True)
+            )
+            self.progress_layout.addSpacing(6)
+            self.progress_layout.addWidget(self._tables_splitter, 1)
+        return self._tables_splitter
+
+    def _snap_splitter_to_skipped(self):
+        """Give the skipped table its natural size and leave the rest to normalize."""
+        if getattr(self, '_splitter_user_moved', False):
+            return
+        splitter = getattr(self, '_tables_splitter', None)
+        if splitter is None or splitter.count() < 2:
+            return
+        def _do():
+            if splitter is None or splitter.count() < 2:
+                return
+            total = splitter.height()
+            if total < 20:
+                return
+            skipped_h = self._skipped_group.sizeHint().height()
+            norm_h = max(80, total - skipped_h)
+            splitter.setSizes([norm_h, skipped_h])
+        QTimer.singleShot(0, _do)
+
+    # ------------------------------------------------------------------
     # Skipped entries panel
     # ------------------------------------------------------------------
 
@@ -435,9 +486,11 @@ class ProgressMixin:
             header.setDefaultAlignment(Qt.AlignLeft | Qt.AlignVCenter)
 
             skipped_layout.addWidget(self._skipped_table, 1)
-            self.progress_layout.addWidget(self._skipped_group)
+            splitter = self._get_or_create_tables_splitter()
+            splitter.addWidget(self._skipped_group)
             self._skipped_count = 0
             self.progress_frame.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
+            self._snap_splitter_to_skipped()
 
         # Add row
         self._skipped_count += 1
@@ -452,19 +505,15 @@ class ProgressMixin:
         self._skipped_table.setItem(row, 2, QTableWidgetItem(entry.get('title', '') or ''))
         self._skipped_table.setItem(row, 3, QTableWidgetItem(reason))
 
-        # Update height and stretch
+        # Update height
         count = self._skipped_count
         header_h = self._skipped_table.horizontalHeader().height()
         visible = min(count, MAX_VISIBLE)
         self._skipped_table.setMinimumHeight(header_h + visible * ROW_HEIGHT + 2)
 
-        idx = self.progress_layout.indexOf(self._skipped_group)
-        if idx >= 0:
-            self.progress_layout.setStretch(idx, 1)
-
         # Update group title
         key = "progress.skipped_header"
-        self._skipped_group.setTitle(f"{t(key)} ({count})")
+        self._skipped_group.setTitle(t(key))
 
     # ------------------------------------------------------------------
     # Normalize feedback (per-track summary)
@@ -530,14 +579,10 @@ class ProgressMixin:
             header.setDefaultAlignment(Qt.AlignLeft | Qt.AlignVCenter)
 
             norm_layout.addWidget(self._normalize_table, 1)
-            self.progress_layout.addSpacing(10)
-            self.progress_layout.addWidget(self.normalize_outer_frame)
-
-            # Let the table area stretch immediately
-            idx = self.progress_layout.indexOf(self.normalize_outer_frame)
-            if idx >= 0:
-                self.progress_layout.setStretch(idx, 1)
+            splitter = self._get_or_create_tables_splitter()
+            splitter.insertWidget(0, self.normalize_outer_frame)
             self.progress_frame.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
+            self._snap_splitter_to_skipped()
 
         # Add a row
         row = self._normalize_table.rowCount()
@@ -551,7 +596,7 @@ class ProgressMixin:
 
         count = len(self._normalize_labels)
         key = "progress.downloaded_element" if count == 1 else "progress.downloaded_elements"
-        self.normalize_outer_frame.setTitle(f"{t(key)} ({count})")
+        self.normalize_outer_frame.setTitle(t(key))
 
         header_h = self._normalize_table.horizontalHeader().height()
         if count <= MAX_VISIBLE:
@@ -620,4 +665,6 @@ class ProgressMixin:
         self.convert_button.show()
         if hasattr(self, 'set_pre_button_spacer_collapsed'):
             self.set_pre_button_spacer_collapsed(False)
+        if hasattr(self, 'set_post_button_spacer_collapsed'):
+            self.set_post_button_spacer_collapsed(False)
         self.set_convert_button_enabled(True)
