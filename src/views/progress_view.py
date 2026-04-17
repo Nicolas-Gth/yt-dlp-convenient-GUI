@@ -144,8 +144,8 @@ class ProgressMixin:
         self.info_table.setFocusPolicy(Qt.NoFocus)
         self.info_table.setFrameShape(QFrame.NoFrame)
         self.info_table.setStyleSheet(
-            "QTableWidget { border: none; background: transparent; padding: 0; margin: 0; }"
-            "QTableWidget::item { padding: 0px; margin: 0px; }"
+            "QTableWidget { border: none; background: transparent; color: palette(text); padding: 0; margin: 0; }"
+            "QTableWidget::item { padding: 0px; margin: 0px; color: palette(text); }"
         )
         self.info_table.setContentsMargins(0, 0, 0, 0)
         self.info_table.setViewportMargins(0, 0, 0, 0)
@@ -422,10 +422,10 @@ class ProgressMixin:
             self._skipped_table.verticalHeader().setVisible(False)
             self._skipped_table.setShowGrid(False)
             self._skipped_table.setStyleSheet(
-                "QTableWidget { border: none; background: transparent; }"
+                "QTableWidget { border: none; background: transparent; color: palette(text); }"
                 "QTableWidget QTableCornerButton::section { background: transparent; }"
-                "QHeaderView { background: transparent; }"
-                "QHeaderView::section { border: none; border-bottom: 1px solid palette(mid); background: transparent; }"
+                "QHeaderView { background: transparent; color: palette(text); }"
+                "QHeaderView::section { border: none; border-bottom: 1px solid palette(mid); background: transparent; color: palette(text); }"
             )
             header = self._skipped_table.horizontalHeader()
             header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
@@ -514,10 +514,10 @@ class ProgressMixin:
             self._normalize_table.verticalHeader().setVisible(False)
             self._normalize_table.setShowGrid(False)
             self._normalize_table.setStyleSheet(
-                "QTableWidget { border: none; background: transparent; }"
+                "QTableWidget { border: none; background: transparent; color: palette(text); }"
                 "QTableWidget QTableCornerButton::section { background: transparent; }"
-                "QHeaderView { background: transparent; }"
-                "QHeaderView::section { border: none; border-bottom: 1px solid palette(mid); background: transparent; }"
+                "QHeaderView { background: transparent; color: palette(text); }"
+                "QHeaderView::section { border: none; border-bottom: 1px solid palette(mid); background: transparent; color: palette(text); }"
             )
 
             header = self._normalize_table.horizontalHeader()
