@@ -594,7 +594,7 @@ class CustomPostProcessor(yt_dlp.postprocessor.PostProcessor):
                     if enriched.synced_lyrics:
                         track_info['lyrics_type'] = 'LRC'
                     elif enriched.lyrics:
-                        track_info['lyrics_type'] = 'Txt'
+                        track_info['lyrics_type'] = 'TXT'
                     track_info['metadata_found'] = bool(
                         enriched.cover_data or enriched.lyrics or enriched.synced_lyrics or enriched.album
                     )

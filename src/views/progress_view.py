@@ -244,10 +244,10 @@ class ProgressMixin:
             self.stop_button.deleteLater()
             self.stop_button = None
 
-        if hasattr(self, '_skipped_frame') and self._skipped_frame is not None:
-            self._skipped_frame.hide()
-            self._skipped_frame.deleteLater()
-            self._skipped_frame = None
+        if hasattr(self, '_skipped_group') and self._skipped_group is not None:
+            self._skipped_group.hide()
+            self._skipped_group.deleteLater()
+            self._skipped_group = None
 
         if hasattr(self, 'progress_frame') and self.progress_frame is not None:
             self.progress_frame.hide()
@@ -360,7 +360,6 @@ class ProgressMixin:
         if video_info.thumbnail:
             thumbnail = load_thumbnail(video_info.thumbnail, (100, 100), video_info.is_music)
             if thumbnail:
-                # Convert PIL Image to QPixmap
                 buf = BytesIO()
                 thumbnail.save(buf, format="PNG")
                 buf.seek(0)
@@ -407,14 +406,8 @@ class ProgressMixin:
         # Lazy-create the group box and table
         if not hasattr(self, '_skipped_group') or self._skipped_group is None:
             self._skipped_group = QGroupBox()
-            self._skipped_group.setFlat(True)
-            group_layout = QVBoxLayout(self._skipped_group)
-            group_layout.setContentsMargins(0, 4, 0, 0)
-            group_layout.setSpacing(4)
-
-            self._skipped_header_label = QLabel()
-            self._skipped_header_label.setFont(QFont("", -1, QFont.Bold))
-            group_layout.addWidget(self._skipped_header_label)
+            skipped_layout = QVBoxLayout(self._skipped_group)
+            skipped_layout.setContentsMargins(5, 10, 5, 8)
 
             self._skipped_table = CopyableTableWidget()
             self._skipped_table.setColumnCount(4)
@@ -425,18 +418,26 @@ class ProgressMixin:
                 t("progress.table.reason"),
             ])
             self._skipped_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
-            self._skipped_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+            self._skipped_table.setSelectionMode(QAbstractItemView.ExtendedSelection)
             self._skipped_table.verticalHeader().setVisible(False)
-            self._skipped_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
-            self._skipped_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
-            self._skipped_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
-            self._skipped_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeToContents)
-            self._skipped_table.setAlternatingRowColors(True)
-            self._skipped_table.setFixedHeight(ROW_HEIGHT * MAX_VISIBLE + self._skipped_table.horizontalHeader().height())
+            self._skipped_table.setShowGrid(False)
+            self._skipped_table.setStyleSheet(
+                "QTableWidget { border: none; background: transparent; }"
+                "QTableWidget QTableCornerButton::section { background: transparent; }"
+                "QHeaderView { background: transparent; }"
+                "QHeaderView::section { border: none; border-bottom: 1px solid palette(mid); background: transparent; }"
+            )
+            header = self._skipped_table.horizontalHeader()
+            header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
+            header.setSectionResizeMode(1, QHeaderView.Stretch)
+            header.setSectionResizeMode(2, QHeaderView.Stretch)
+            header.setSectionResizeMode(3, QHeaderView.Stretch)
+            header.setDefaultAlignment(Qt.AlignLeft | Qt.AlignVCenter)
 
-            group_layout.addWidget(self._skipped_table)
+            skipped_layout.addWidget(self._skipped_table, 1)
             self.progress_layout.addWidget(self._skipped_group)
             self._skipped_count = 0
+            self.progress_frame.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
 
         # Add row
         self._skipped_count += 1
@@ -445,23 +446,25 @@ class ProgressMixin:
         self._skipped_table.setRowHeight(row, ROW_HEIGHT)
 
         num_item = QTableWidgetItem(str(self._skipped_count))
-        num_item.setTextAlignment(Qt.AlignCenter)
+        num_item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         self._skipped_table.setItem(row, 0, num_item)
         self._skipped_table.setItem(row, 1, QTableWidgetItem(entry.get('channel', '') or ''))
         self._skipped_table.setItem(row, 2, QTableWidgetItem(entry.get('title', '') or ''))
         self._skipped_table.setItem(row, 3, QTableWidgetItem(reason))
 
-        # Update table height if below max visible
-        actual_rows = self._skipped_table.rowCount()
-        if actual_rows <= MAX_VISIBLE:
-            self._skipped_table.setFixedHeight(
-                ROW_HEIGHT * actual_rows + self._skipped_table.horizontalHeader().height()
-            )
+        # Update height and stretch
+        count = self._skipped_count
+        header_h = self._skipped_table.horizontalHeader().height()
+        visible = min(count, MAX_VISIBLE)
+        self._skipped_table.setMinimumHeight(header_h + visible * ROW_HEIGHT + 2)
 
-        # Update header label
-        self._skipped_header_label.setText(
-            t("progress.skipped_header") + f" ({self._skipped_count})"
-        )
+        idx = self.progress_layout.indexOf(self._skipped_group)
+        if idx >= 0:
+            self.progress_layout.setStretch(idx, 1)
+
+        # Update group title
+        key = "progress.skipped_header"
+        self._skipped_group.setTitle(f"{t(key)} ({count})")
 
     # ------------------------------------------------------------------
     # Normalize feedback (per-track summary)
@@ -498,7 +501,6 @@ class ProgressMixin:
             self._normalize_labels = []
 
             self.normalize_outer_frame = QGroupBox(t("progress.downloaded_elements"))
-            self.normalize_outer_frame.setFont(QFont("Arial", 9, QFont.Bold))
             norm_layout = QVBoxLayout(self.normalize_outer_frame)
             norm_layout.setContentsMargins(5, 10, 5, 8)
 
@@ -507,7 +509,6 @@ class ProgressMixin:
                 [t("progress.table.number"), t("progress.table.artist"), t("progress.table.title"),
                  t("progress.table.metadatas"), t("progress.table.lyrics"), t("progress.table.norm")]
             )
-            self._normalize_table.setFont(QFont("Arial", 8))
             self._normalize_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
             self._normalize_table.setSelectionMode(QAbstractItemView.ExtendedSelection)
             self._normalize_table.verticalHeader().setVisible(False)
@@ -520,7 +521,6 @@ class ProgressMixin:
             )
 
             header = self._normalize_table.horizontalHeader()
-            header.setFont(QFont("Arial", 8, QFont.Bold))
             header.setSectionResizeMode(0, QHeaderView.ResizeToContents)  # #
             header.setSectionResizeMode(1, QHeaderView.Stretch)          # Artist
             header.setSectionResizeMode(2, QHeaderView.Stretch)          # Title
