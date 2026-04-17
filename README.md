@@ -22,16 +22,18 @@ First download and extract the [.zip archive](https://github.com/Nicolas-Gth/yt-
 Right-click `install.ps1` → **Run with PowerShell**
 
 ### macOS & Linux Users
-Open a terminal, then:
+Depending on your desktop environment, you may be able to double-click `install.sh` or right-click it and select "Run in Terminal".
+
+If that isn't possible, open a terminal and do these commands:
 ```bash
-# Go into the project main directory
+# Go to the project root directory (replace with the path to where you downloaded the folder)
 cd /path/to/the/extracted/app/folder
 # Run the installer
 ./install.sh
 ```
-If you have a permission issue, you can do
+If you encounter a permission issue, run:
 ```bash
-# Make executable
+# Make the script executable
 chmod +x install.sh
 ```
 
