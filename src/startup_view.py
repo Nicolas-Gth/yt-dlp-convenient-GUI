@@ -128,6 +128,7 @@ class StartupDialog(QDialog):
         self._remote_branch: str = ""
         self._current_step = 0
         self._total_steps = 5
+        self._pending_update = False
 
         layout = QVBoxLayout(self)
         layout.setSpacing(12)
@@ -272,6 +273,7 @@ class StartupDialog(QDialog):
     def _on_update_info(self, behind: int, remote_branch: str):
         self._remote_branch = remote_branch
         if behind > 0:
+            self._pending_update = True
             reply = QMessageBox.question(
                 self,
                 t("startup.update_title"),
@@ -279,12 +281,18 @@ class StartupDialog(QDialog):
                 QMessageBox.Yes | QMessageBox.No,
                 QMessageBox.Yes,
             )
+            self._pending_update = False
             if reply == QMessageBox.Yes:
                 self._apply_update()
-                return
+            else:
+                self._update_ytdlp()
+            return
         self._update_ytdlp()
 
     def _on_update_check_done(self, applied: bool):
+        if self._pending_update:
+            # _on_update_info is still handling the QMessageBox; it will call the next step
+            return
         if applied:
             QMessageBox.information(
                 self,
