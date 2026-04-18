@@ -127,6 +127,8 @@
   "startup.install_ok": "Installation erfolgreich!",
   "startup.install_failed": "Einige Komponenten konnten nicht installiert werden.",
   "startup.install_failed_detail": "Eine oder mehrere Komponenten konnten nicht automatisch installiert werden.\nMöglicherweise müssen Sie sie manuell installieren.",
+  "startup.continue_anyway": "Trotzdem fortfahren",
+  "startup.quit": "Beenden",
   "startup.checking_updates": "Suche nach Updates…",
   "startup.update_title": "Update verfügbar",
   "startup.update_prompt": "{count} neue(s) Update(s) verfügbar. Jetzt aktualisieren?",

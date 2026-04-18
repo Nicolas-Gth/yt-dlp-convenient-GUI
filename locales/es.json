@@ -127,6 +127,8 @@
   "startup.install_ok": "¡Instalación exitosa!",
   "startup.install_failed": "Algunos componentes no pudieron instalarse.",
   "startup.install_failed_detail": "Uno o más componentes no pudieron instalarse automáticamente.\nEs posible que necesite instalarlos manualmente.",
+  "startup.continue_anyway": "Continuar de todos modos",
+  "startup.quit": "Salir",
   "startup.checking_updates": "Buscando actualizaciones…",
   "startup.update_title": "Actualización disponible",
   "startup.update_prompt": "{count} actualización(es) nueva(s) disponible(s). ¿Actualizar ahora?",

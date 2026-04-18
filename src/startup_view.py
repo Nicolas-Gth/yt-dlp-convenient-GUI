@@ -52,17 +52,21 @@ class _InstallWorker(QThread):
         all_ok = True
         for name in self._missing:
             self.comp_status.emit(name, "installing")
-            if name == "ffmpeg":
-                ok = startup_utils.install_ffmpeg(
-                    on_progress=lambda msg: self.progress.emit(msg),
-                    on_percent=lambda pct: self.percent.emit(pct),
-                    on_status=lambda s, _n=name: self.comp_status.emit(_n, s),
-                )
-            elif name == "deno":
-                ok = startup_utils.install_deno(on_progress=lambda msg: self.progress.emit(msg))
-            elif name == "yt-dlp":
-                ok = startup_utils.install_requirements(on_progress=lambda msg: self.progress.emit(msg))
-            else:
+            try:
+                if name == "ffmpeg":
+                    ok = startup_utils.install_ffmpeg(
+                        on_progress=None,
+                        on_percent=lambda pct: self.percent.emit(pct),
+                        on_status=lambda s, _n=name: self.comp_status.emit(_n, s),
+                    )
+                elif name == "deno":
+                    ok = startup_utils.install_deno(on_progress=lambda msg: self.progress.emit(msg))
+                elif name == "yt-dlp":
+                    ok = startup_utils.install_requirements(on_progress=lambda msg: self.progress.emit(msg))
+                else:
+                    ok = False
+            except Exception as exc:
+                self.progress.emit(f"Error installing {name}: {exc}")
                 ok = False
             self.comp_status.emit(name, "installed" if ok else "missing")
             if not ok:
@@ -214,6 +218,34 @@ class StartupDialog(QDialog):
 
     def _on_checks_done(self, report: startup_utils.StartupReport):
         if report.all_ok:
+            self._recheck_after_install = False
+            self._check_updates()
+        elif getattr(self, '_recheck_after_install', False):
+            # We already tried installing — warn the user
+            self._recheck_after_install = False
+            self._set_status(t("startup.install_failed"))
+
+            # Separate critical (ffmpeg) from optional failures
+            critical_missing = [n for n in report.missing if n in ("ffmpeg",)]
+            if critical_missing:
+                # Critical dep missing — ask whether to continue or quit
+                msg = QMessageBox(self)
+                msg.setWindowTitle(APP_NAME)
+                msg.setText(t("startup.install_failed_detail"))
+                msg.setIcon(QMessageBox.Warning)
+                continue_btn = msg.addButton(t("startup.continue_anyway"), QMessageBox.AcceptRole)
+                quit_btn = msg.addButton(t("startup.quit"), QMessageBox.RejectRole)
+                msg.setDefaultButton(quit_btn)
+                msg.exec()
+                if msg.clickedButton() is quit_btn:
+                    self.reject()
+                    return
+            else:
+                QMessageBox.warning(
+                    self,
+                    APP_NAME,
+                    t("startup.install_failed_detail"),
+                )
             self._check_updates()
         else:
             self._set_status(t("startup.checking_deps"))
@@ -244,17 +276,11 @@ class StartupDialog(QDialog):
         # Restore determinate progress bar
         self._progress.setRange(0, self._total_steps)
         self._progress.setValue(self._current_step)
-        if success:
-            self._set_status(t("startup.install_ok"))
-            self._run_checks()
-        else:
-            self._set_status(t("startup.install_failed"))
-            QMessageBox.warning(
-                self,
-                APP_NAME,
-                t("startup.install_failed_detail"),
-            )
-            self._check_updates()
+        # Always re-run checks: some optional packages (e.g. yt-dlp-ejs)
+        # may fail while critical ones (Pillow, mutagen) succeed.
+        self._set_status(t("startup.install_ok") if success else t("startup.checking_deps"))
+        self._recheck_after_install = True
+        self._run_checks()
 
     # ------------------------------------------------------------------
     # Git updates
@@ -344,3 +370,25 @@ class StartupDialog(QDialog):
 
     def _set_status(self, text: str):
         self._status_label.setText(text)
+
+    # ------------------------------------------------------------------
+
+    def _wait_workers(self):
+        """Wait for all background QThreads to finish before closing."""
+        for attr in ("_worker", "_install_worker", "_update_worker",
+                     "_apply_worker", "_ytdlp_worker"):
+            thread = getattr(self, attr, None)
+            if thread is not None and thread.isRunning():
+                thread.wait(5000)  # wait up to 5 s
+
+    def closeEvent(self, event):
+        self._wait_workers()
+        super().closeEvent(event)
+
+    def reject(self):
+        self._wait_workers()
+        super().reject()
+
+    def accept(self):
+        self._wait_workers()
+        super().accept()

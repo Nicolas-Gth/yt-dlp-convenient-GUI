@@ -127,6 +127,8 @@
   "startup.install_ok": "Installation réussie !",
   "startup.install_failed": "Certains composants n'ont pas pu être installés.",
   "startup.install_failed_detail": "Un ou plusieurs composants n'ont pas pu être installés automatiquement.\nVous devrez peut-être les installer manuellement.",
+  "startup.continue_anyway": "Continuer quand même",
+  "startup.quit": "Quitter",
   "startup.checking_updates": "Recherche de mises à jour…",
   "startup.update_title": "Mise à jour disponible",
   "startup.update_prompt": "{count} nouvelle(s) mise(s) à jour disponible(s). Mettre à jour maintenant ?",

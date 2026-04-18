@@ -15,6 +15,7 @@ Community contributions:
 import json
 import locale
 import os
+import sys
 from pathlib import Path
 from typing import Dict, Optional
 
@@ -45,15 +46,38 @@ _fallback: Dict[str, str] = {}
 def _detect_system_language() -> str:
     """Detect the system language and return a supported locale code.
 
-    Falls back to ``"en"`` when the system locale is not among the
+    On macOS, reads the ``AppleLanguages`` user default which reflects
+    the actual System Settings language (the POSIX locale often stays
+    ``en_US`` regardless of the UI language).  Falls back to
+    ``locale.getdefaultlocale()`` on other platforms.
+
+    Returns ``"en"`` when the detected language is not among the
     available translations.
     """
-    try:
-        lang_code = locale.getdefaultlocale()[0] or ""
-    except ValueError:
-        lang_code = ""
-    # lang_code is e.g. "fr_FR", "en_US", "de_DE" – take the prefix
-    short = lang_code.split("_")[0].lower()
+    lang_code = ""
+    if sys.platform == "darwin":
+        try:
+            import subprocess
+            r = subprocess.run(
+                ["defaults", "read", "-g", "AppleLanguages"],
+                capture_output=True, text=True, timeout=5,
+            )
+            if r.returncode == 0:
+                # Output looks like: (\n    "fr-BE",\n    "en-US"\n)
+                for line in r.stdout.splitlines():
+                    line = line.strip().strip('"').strip(",").strip('"')
+                    if line and line not in ("(", ")"):
+                        lang_code = line
+                        break
+        except Exception:
+            pass
+    if not lang_code:
+        try:
+            lang_code = locale.getdefaultlocale()[0] or ""
+        except ValueError:
+            lang_code = ""
+    # lang_code may be "fr-BE", "fr_FR", "en_US", "de" etc.
+    short = lang_code.replace("-", "_").split("_")[0].lower()
     if short in AVAILABLE_LANGUAGES:
         return short
     return "en"

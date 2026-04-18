@@ -127,6 +127,8 @@
   "startup.install_ok": "Installatie geslaagd!",
   "startup.install_failed": "Sommige componenten konden niet worden geïnstalleerd.",
   "startup.install_failed_detail": "Een of meer componenten konden niet automatisch worden geïnstalleerd.\nMogelijk moet u ze handmatig installeren.",
+  "startup.continue_anyway": "Toch doorgaan",
+  "startup.quit": "Afsluiten",
   "startup.checking_updates": "Controleren op updates…",
   "startup.update_title": "Update beschikbaar",
   "startup.update_prompt": "{count} nieuwe update(s) beschikbaar. Nu updaten?",

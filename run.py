@@ -14,6 +14,7 @@ On Linux, zenity is used. On macOS, osascript.
 import os
 import sys
 import subprocess
+import shutil
 import venv
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -63,10 +64,67 @@ def _win_no_window_kwargs() -> dict:
     }
 
 
+def _find_best_python() -> str | None:
+    """On macOS, find a Python 3.10+ interpreter (prefer Homebrew).
+    Returns the path if found, None otherwise.
+    """
+    if sys.platform != "darwin":
+        return None
+    for candidate in ["/opt/homebrew/bin/python3", "/usr/local/bin/python3"]:
+        if os.path.isfile(candidate):
+            try:
+                r = subprocess.run(
+                    [candidate, "-c",
+                     "import sys; print(sys.version_info >= (3,10))"],
+                    capture_output=True, text=True, timeout=5,
+                )
+                if r.stdout.strip() == "True":
+                    return candidate
+            except Exception:
+                continue
+    return None
+
+
+def _venv_python_version_ok() -> bool:
+    """Check if the venv Python is 3.10+."""
+    vpy = _venv_python()
+    if not os.path.isfile(vpy):
+        return True  # no venv yet — will be created fresh
+    try:
+        r = subprocess.run(
+            [vpy, "-c", "import sys; print(sys.version_info >= (3,10))"],
+            capture_output=True, text=True, timeout=5,
+        )
+        return r.stdout.strip() == "True"
+    except Exception:
+        return True
+
+
 def _ensure_venv():
-    """Create the virtual environment if it doesn't exist."""
+    """Create the virtual environment if it doesn't exist.
+    On macOS, recreate the venv with a 3.10+ Python if needed.
+    """
+    # If the venv exists but uses Python < 3.10, try to recreate with a newer one
+    if os.path.isfile(_venv_python()) and not _venv_python_version_ok():
+        best = _find_best_python()
+        if best:
+            shutil.rmtree(VENV_DIR, ignore_errors=True)
+            subprocess.run(
+                [best, "-m", "venv", VENV_DIR],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            )
+            return
+
     if not os.path.isfile(_venv_python()):
-        venv.create(VENV_DIR, with_pip=True)
+        # Try using a modern Python on macOS
+        best = _find_best_python()
+        if best:
+            subprocess.run(
+                [best, "-m", "venv", VENV_DIR],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            )
+        else:
+            venv.create(VENV_DIR, with_pip=True)
 
 
 def _pyside6_available() -> bool:

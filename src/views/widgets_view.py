@@ -391,7 +391,6 @@ class WidgetsMixin:
         self.convert_button = QPushButton(" " + t("button.download"))
         self.convert_button.setIcon(QIcon(DOWNLOAD_ICON_PATH))
         self.convert_button.setIconSize(QSize(18, 18))
-        self.convert_button.setFont(QFont("Bahnschrift", 12))
         self.convert_button.setCursor(Qt.PointingHandCursor)
         self.convert_button.setStyleSheet("""
             QPushButton {

@@ -127,6 +127,8 @@
   "startup.install_ok": "Installazione riuscita!",
   "startup.install_failed": "Alcuni componenti non sono stati installati.",
   "startup.install_failed_detail": "Uno o più componenti non sono stati installati automaticamente.\nPotrebbe essere necessario installarli manualmente.",
+  "startup.continue_anyway": "Continua comunque",
+  "startup.quit": "Esci",
   "startup.checking_updates": "Ricerca aggiornamenti…",
   "startup.update_title": "Aggiornamento disponibile",
   "startup.update_prompt": "{count} nuovo/i aggiornamento/i disponibile/i. Aggiornare ora?",

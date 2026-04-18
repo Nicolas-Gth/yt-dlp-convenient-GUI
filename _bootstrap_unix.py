@@ -6,6 +6,37 @@ Uses zenity (Linux) or osascript (macOS) to show feedback.
 import shutil
 import subprocess
 import sys
+import threading
+
+
+def _osascript_progress(msg, pip_install_fn):
+    """Show a native macOS progress dialog while *pip_install_fn* runs.
+
+    Uses a bare ``display dialog`` (owned by the osascript process itself)
+    so that terminating osascript reliably dismisses the dialog.
+    """
+    dialog = subprocess.Popen(
+        ["osascript", "-e",
+         f'display dialog "{msg}" with title "yt-dlp Convenient GUI" '
+         'buttons {"Fermer"} giving up after 3600'],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    )
+
+    install_done = threading.Event()
+
+    def do_install():
+        try:
+            pip_install_fn()
+        finally:
+            install_done.set()
+
+    t = threading.Thread(target=do_install, daemon=True)
+    t.start()
+    install_done.wait()
+
+    # Kill osascript → the dialog it owns disappears with it
+    dialog.kill()
+    dialog.wait()
 
 
 def install_pyside6_with_gui(pip_install_fn, msg):
@@ -26,12 +57,7 @@ def install_pyside6_with_gui(pip_install_fn, msg):
         dialog.wait()
 
     elif sys.platform == "darwin" and shutil.which("osascript"):
-        subprocess.Popen(
-            ["osascript", "-e",
-             f'display notification "{msg}" with title "yt-dlp Convenient GUI"'],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-        )
-        pip_install_fn()
+        _osascript_progress(msg, pip_install_fn)
 
     else:
         pip_install_fn()

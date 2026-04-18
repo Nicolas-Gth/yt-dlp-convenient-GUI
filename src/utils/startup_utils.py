@@ -13,6 +13,16 @@ from typing import List, Optional, Callable
 
 from utils.i18n_utils import t
 
+# ---------------------------------------------------------------------------
+# Ensure Homebrew paths are available on macOS
+# (.app bundles don't inherit the user's shell environment)
+# ---------------------------------------------------------------------------
+if sys.platform == "darwin":
+    for _brew_dir in ("/opt/homebrew/bin", "/usr/local/bin"):
+        if os.path.isdir(_brew_dir) and _brew_dir not in os.environ.get("PATH", ""):
+            os.environ["PATH"] = _brew_dir + os.pathsep + os.environ.get("PATH", "")
+
+
 
 # ---------------------------------------------------------------------------
 # Data structures
@@ -106,13 +116,23 @@ def check_deno() -> ComponentStatus:
 
 
 def check_ytdlp() -> ComponentStatus:
-    """Check whether yt-dlp Python package is importable."""
+    """Check whether yt-dlp and companion Python packages are importable."""
     try:
         import yt_dlp  # noqa: F401
         version = getattr(yt_dlp.version, "__version__", "") if hasattr(yt_dlp, "version") else ""
-        return ComponentStatus("yt-dlp", True, version=version)
     except ImportError:
         return ComponentStatus("yt-dlp", False, message="yt-dlp not importable")
+
+    # Also verify other critical requirements.txt packages so
+    # install_requirements is triggered when any of them is missing.
+    # yt_dlp_ejs is excluded: it requires Python>=3.10 and is optional.
+    for mod in ("PIL", "mutagen"):
+        try:
+            __import__(mod)
+        except ImportError:
+            return ComponentStatus("yt-dlp", False, message=f"{mod} not importable")
+
+    return ComponentStatus("yt-dlp", True, version=version)
 
 
 def run_all_checks() -> StartupReport:
@@ -140,7 +160,7 @@ def install_ffmpeg(
     if sys.platform == "win32":
         return _install_ffmpeg_windows(on_progress, on_percent, on_status)
     elif sys.platform == "darwin":
-        return _install_with_brew("ffmpeg", on_progress)
+        return _install_with_brew("ffmpeg", on_progress, on_percent)
     else:
         return _install_ffmpeg_linux(on_progress)
 
@@ -303,11 +323,147 @@ def _install_ffmpeg_linux(on_progress: Optional[Callable[[str], None]] = None) -
     return r.returncode == 0
 
 
-def _install_with_brew(formula: str, on_progress: Optional[Callable[[str], None]] = None) -> bool:
+def _install_with_brew(
+    formula: str,
+    on_progress: Optional[Callable[[str], None]] = None,
+    on_percent: Optional[Callable[[int], None]] = None,
+) -> bool:
+    """Install a Homebrew formula, parsing progress output.
+
+    Tries a pseudo-TTY first for real-time progress; falls back to a plain
+    subprocess.run() if the PTY approach fails (e.g. inside a QThread
+    launched from a .app bundle).
+    """
+    # Resolve brew to an absolute path — shutil.which may fail inside .app
+    brew = shutil.which("brew")
+    if not brew:
+        for candidate in ("/opt/homebrew/bin/brew", "/usr/local/bin/brew"):
+            if os.path.isfile(candidate):
+                brew = candidate
+                break
+    if not brew:
+        if on_progress:
+            on_progress("Homebrew not found — cannot install " + formula)
+        return False
+
     if on_progress:
         on_progress(t("startup.installing_formula", name=formula))
-    r = _run(["brew", "install", formula])
-    return r.returncode == 0
+
+    # Try the PTY approach for real-time progress
+    try:
+        result = _brew_install_pty(brew, formula, on_progress, on_percent)
+        if result:
+            return True
+    except Exception:
+        pass
+
+    # Fallback: plain subprocess (no real-time progress, but reliable)
+    if on_progress:
+        on_progress(t("startup.installing_formula", name=formula))
+    try:
+        r = subprocess.run(
+            [brew, "install", formula],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            stdin=subprocess.DEVNULL,
+            text=True,
+            timeout=300,
+        )
+        return r.returncode == 0
+    except Exception:
+        return False
+
+
+def _brew_install_pty(
+    brew: str,
+    formula: str,
+    on_progress: Optional[Callable[[str], None]] = None,
+    on_percent: Optional[Callable[[int], None]] = None,
+) -> bool:
+    """Run ``brew install`` with a pseudo-TTY for real-time output."""
+    import pty
+    import re
+    import errno
+
+    master_fd, slave_fd = pty.openpty()
+
+    proc = subprocess.Popen(
+        [brew, "install", formula],
+        stdout=slave_fd,
+        stderr=slave_fd,
+        stdin=subprocess.DEVNULL,
+    )
+    os.close(slave_fd)
+
+    # Modern brew (2024+) no longer prints "XX%" — it uses spinner + size.
+    # We track progress by counting "Pouring" lines (one per bottle).
+    # The total is parsed from "Installing dependencies for ..." which lists
+    # dependencies.
+    pct_re = re.compile(rb"(\d+(?:\.\d+)?)\s*%")
+    # Match "Pouring xxx--version.bottle.tar.gz"
+    pouring_re = re.compile(rb"Pouring\s+\S+")
+    # Match "Installing dependencies for ffmpeg: dep1, dep2, ..."
+    deps_re = re.compile(
+        rb"Installing dependencies for[^:]*:\s*(.+)", re.IGNORECASE
+    )
+    total_bottles = 0
+    poured_count = 0
+    buf = b""
+    while True:
+        try:
+            chunk = os.read(master_fd, 1024)
+        except OSError as e:
+            if e.errno == errno.EIO:
+                break  # child closed the PTY
+            raise
+        if not chunk:
+            break
+        buf += chunk
+        # Split on \r or \n to capture curl's carriage-return progress
+        while b"\r" in buf or b"\n" in buf:
+            idx_r = buf.find(b"\r")
+            idx_n = buf.find(b"\n")
+            if idx_r == -1:
+                idx = idx_n
+            elif idx_n == -1:
+                idx = idx_r
+            else:
+                idx = min(idx_r, idx_n)
+            seg = buf[:idx].strip()
+            buf = buf[idx + 1:]
+            if not seg:
+                continue
+            clean_seg = re.sub(rb"\x1b\[[0-9;]*[a-zA-Z]", b"", seg)
+            clean_text = clean_seg.decode("utf-8", errors="replace").strip()
+
+            # Try to detect total number of bottles from the deps line
+            if total_bottles == 0:
+                fm = deps_re.search(clean_seg)
+                if fm:
+                    # Count comma-separated dependency names + the formula itself
+                    deps_text = fm.group(1).decode("utf-8", errors="replace")
+                    total_bottles = len([
+                        d for d in deps_text.split(",") if d.strip()
+                    ]) + 1  # +1 for the formula itself
+
+            # Count "Pouring" lines as progress steps
+            if pouring_re.search(clean_seg):
+                poured_count += 1
+                if total_bottles > 0 and on_percent:
+                    pct = min(int(poured_count / total_bottles * 100), 100)
+                    on_percent(pct)
+
+            # Legacy: also check for percentage patterns (older brew / curl)
+            m = pct_re.search(seg)
+            if m and on_percent:
+                on_percent(min(int(float(m.group(1))), 100))
+            elif on_progress:
+                if clean_text:
+                    on_progress(clean_text)
+
+    os.close(master_fd)
+    proc.wait()
+    return proc.returncode == 0
 
 
 def install_deno(on_progress: Optional[Callable[[str], None]] = None) -> bool:
@@ -340,17 +496,35 @@ def update_ytdlp(on_progress: Optional[Callable[[str], None]] = None) -> bool:
 
 
 def install_requirements(on_progress: Optional[Callable[[str], None]] = None) -> bool:
-    """Install all requirements.txt dependencies."""
+    """Install all requirements.txt dependencies.
+
+    Installs each requirement individually so that a single incompatible
+    package (e.g. one requiring a newer Python) does not prevent the rest
+    from being installed.
+    """
     if on_progress:
         on_progress(t("startup.installing_deps"))
     req_file = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "requirements.txt"))
     if not os.path.isfile(req_file):
         return False
     try:
-        r = _run([sys.executable, "-m", "pip", "install", "-r", req_file])
-        return r.returncode == 0
-    except Exception:
+        with open(req_file) as f:
+            lines = f.readlines()
+    except OSError:
         return False
+
+    all_ok = True
+    for line in lines:
+        pkg = line.strip()
+        if not pkg or pkg.startswith("#"):
+            continue
+        try:
+            r = _run([sys.executable, "-m", "pip", "install", pkg])
+            if r.returncode != 0:
+                all_ok = False
+        except Exception:
+            all_ok = False
+    return all_ok
 
 
 # ---------------------------------------------------------------------------
@@ -376,7 +550,10 @@ def check_git_updates() -> tuple:
         return (-1, None)
 
     # Fetch
-    fetch = _run(["git", "fetch", "origin"], cwd=project_root)
+    try:
+        fetch = _run(["git", "fetch", "origin"], cwd=project_root, timeout=15)
+    except subprocess.TimeoutExpired:
+        return (-1, None)
     if fetch.returncode != 0:
         return (-1, None)
 
