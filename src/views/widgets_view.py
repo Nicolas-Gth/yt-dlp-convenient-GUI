@@ -327,7 +327,6 @@ class WidgetsMixin:
         visible = self._normalize_var
         self.normalize_target_label.setVisible(visible)
         self.normalize_target_entry.setVisible(visible)
-        self.normalize_info_btn.setVisible(visible)
 
         # Enrich metadata
         enrich_layout = QHBoxLayout()
@@ -374,13 +373,11 @@ class WidgetsMixin:
         """Show the normalize target LUFS input."""
         self.normalize_target_label.setVisible(True)
         self.normalize_target_entry.setVisible(True)
-        self.normalize_info_btn.setVisible(True)
 
     def hide_normalize_input(self):
         """Hide the normalize target LUFS input."""
         self.normalize_target_label.setVisible(False)
         self.normalize_target_entry.setVisible(False)
-        self.normalize_info_btn.setVisible(False)
 
     # ------------------------------------------------------------------
     # Convert button
