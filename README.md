@@ -20,7 +20,7 @@
 
 ### Download
 You have two options:
-- Download and extract the [.zip archive](https://github.com/Nicolas-Gth/yt-dlp-convenient-GUI/archive/refs/heads/main.zip)
+- Download and extract the latest [.zip archive](https://github.com/Nicolas-Gth/yt-dlp-convenient-GUI/releases/download/v3.1/yt-dlp-convenient-GUI.zip)
 - Clone the project with `git clone https://github.com/Nicolas-Gth/yt-dlp-convenient-GUI.git`
 
 Both should be done in the directory where you want the app to be installed. 
