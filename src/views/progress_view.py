@@ -169,8 +169,8 @@ class ProgressMixin:
         self.info_table.setFocusPolicy(Qt.NoFocus)
         self.info_table.setFrameShape(QFrame.NoFrame)
         self.info_table.setStyleSheet(
-            "QTableWidget { border: none; background: transparent; color: palette(text); padding: 0; margin: 0; }"
-            "QTableWidget::item { padding: 0px; margin: 0px; color: palette(text); }"
+            "QTableWidget { border: none; background: transparent; padding: 0; margin: 0; }"
+            "QTableWidget::item { padding: 0px; margin: 0px; }"
         )
         self.info_table.setContentsMargins(0, 0, 0, 0)
         self.info_table.setViewportMargins(0, 0, 0, 0)
@@ -335,6 +335,8 @@ class ProgressMixin:
             pass
         self.convert_button.clicked.connect(self._on_convert_click)
 
+        self._new_download_mode = False
+
     # ------------------------------------------------------------------
     # Download-again button
     # ------------------------------------------------------------------
@@ -358,6 +360,8 @@ class ProgressMixin:
             except RuntimeError:
                 pass
             self.convert_button.clicked.connect(self._on_download_again_click)
+
+        self._new_download_mode = True
 
     # ------------------------------------------------------------------
     # ETA management
@@ -485,7 +489,7 @@ class ProgressMixin:
     # Skipped entries panel
     # ------------------------------------------------------------------
 
-    def add_skipped_entry(self, entry: dict, reason: str):
+    def add_skipped_entry(self, entry: dict, reason: str, reason_key: str = ""):
         """Add one unavailable entry to the skipped entries table."""
         if not hasattr(self, 'progress_frame') or self.progress_frame is None:
             return
@@ -511,10 +515,10 @@ class ProgressMixin:
             self._skipped_table.verticalHeader().setVisible(False)
             self._skipped_table.setShowGrid(False)
             self._skipped_table.setStyleSheet(
-                "QTableWidget { border: none; background: transparent; color: palette(text); }"
+                "QTableWidget { border: none; background: transparent; }"
                 "QTableWidget QTableCornerButton::section { background: transparent; }"
-                "QHeaderView { background: transparent; color: palette(text); }"
-                "QHeaderView::section { border: none; border-bottom: 1px solid palette(mid); background: transparent; color: palette(text); }"
+                "QHeaderView { background: transparent; }"
+                "QHeaderView::section { border: none; border-bottom: 1px solid palette(mid); background: transparent; }"
             )
             header = self._skipped_table.horizontalHeader()
             header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
@@ -541,6 +545,8 @@ class ProgressMixin:
         self._skipped_table.setItem(row, 1, QTableWidgetItem(entry.get('channel', '') or ''))
         self._skipped_table.setItem(row, 2, QTableWidgetItem(entry.get('title', '') or ''))
         self._skipped_table.setItem(row, 3, QTableWidgetItem(reason))
+        if reason_key:
+            self._skipped_table.item(row, 3).setData(Qt.UserRole, reason_key)
 
         # Update group title
         key = "progress.skipped_header"
@@ -593,10 +599,10 @@ class ProgressMixin:
             self._normalize_table.verticalHeader().setVisible(False)
             self._normalize_table.setShowGrid(False)
             self._normalize_table.setStyleSheet(
-                "QTableWidget { border: none; background: transparent; color: palette(text); }"
+                "QTableWidget { border: none; background: transparent; }"
                 "QTableWidget QTableCornerButton::section { background: transparent; }"
-                "QHeaderView { background: transparent; color: palette(text); }"
-                "QHeaderView::section { border: none; border-bottom: 1px solid palette(mid); background: transparent; color: palette(text); }"
+                "QHeaderView { background: transparent; }"
+                "QHeaderView::section { border: none; border-bottom: 1px solid palette(mid); background: transparent; }"
             )
 
             header = self._normalize_table.horizontalHeader()
@@ -621,6 +627,13 @@ class ProgressMixin:
             item = QTableWidgetItem(text)
             item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
             self._normalize_table.setItem(row, col, item)
+        # Store translation keys for retranslation (col 3 = metadatas, col 4 = lyrics, col 5 = norm)
+        meta_key = "table.yes" if info.get('metadata_found') else "table.none"
+        self._normalize_table.item(row, 3).setData(Qt.UserRole, meta_key)
+        if info.get('lyrics_type', 'No') == 'No':
+            self._normalize_table.item(row, 4).setData(Qt.UserRole, "table.none")
+        if not info.get('volume'):
+            self._normalize_table.item(row, 5).setData(Qt.UserRole, "table.none")
         self._normalize_labels.append(num)
 
         count = len(self._normalize_labels)

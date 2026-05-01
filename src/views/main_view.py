@@ -19,9 +19,10 @@ from .window_view import WindowMixin
 from .widgets_view import WidgetsMixin
 from .progress_view import ProgressMixin
 from .event_handlers_view import EventHandlersMixin
+from .refresh_view import RefreshMixin
 
 
-class MainApplicationView(QMainWindow, WindowMixin, WidgetsMixin, ProgressMixin, EventHandlersMixin):
+class MainApplicationView(QMainWindow, WindowMixin, WidgetsMixin, ProgressMixin, EventHandlersMixin, RefreshMixin):
     """Main application window and GUI components."""
 
     def __init__(self):

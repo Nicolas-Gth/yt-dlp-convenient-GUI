@@ -95,10 +95,12 @@ class ApplicationController:
         """Callback when user changes theme from the menu."""
         apply_theme(self.app, name)
         settings_manager.set_setting('theme', name)
+        self.view.refresh_table_theme()
 
     def _on_language_change(self, code: str):
         """Callback when user changes language from the menu."""
         settings_manager.set_setting('language', code)
+        self.view.refresh_table_translation()
 
     def setup_callbacks(self):
         """Connect view callbacks to controller methods."""
@@ -509,15 +511,18 @@ class ApplicationController:
     
     def on_age_restricted_entry(self, entry: dict):
         """Handle a single age-restricted entry detected during download."""
-        self._invoker.invoke(lambda e=entry: self.view.add_skipped_entry(e, t("progress.age_restricted")))
+        self._invoker.invoke(lambda e=entry: self.view.add_skipped_entry(
+            e, t("progress.age_restricted"), "progress.age_restricted"))
 
     def on_format_unavailable_entry(self, entry: dict):
         """Handle a single format-unavailable entry detected during download."""
-        self._invoker.invoke(lambda e=entry: self.view.add_skipped_entry(e, t("progress.format_unavailable")))
+        self._invoker.invoke(lambda e=entry: self.view.add_skipped_entry(
+            e, t("progress.format_unavailable"), "progress.format_unavailable"))
 
     def on_video_unavailable_entry(self, entry: dict):
         """Handle a single video-unavailable entry detected during download."""
-        self._invoker.invoke(lambda e=entry: self.view.add_skipped_entry(e, t("progress.unavailable")))
+        self._invoker.invoke(lambda e=entry: self.view.add_skipped_entry(
+            e, t("progress.unavailable"), "progress.unavailable"))
     
     def on_download_complete(self):
         """Handle download completion (called from download thread)."""
