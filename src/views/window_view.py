@@ -7,7 +7,7 @@ menu bar, and dynamic window resizing.
 from PySide6.QtGui import QFont, QIcon, QAction, QActionGroup, QDesktopServices
 from PySide6.QtCore import Qt, QUrl
 from PySide6.QtWidgets import QMenuBar, QMenu, QMessageBox
-from config import APP_TITLE, APP_NAME, APP_VERSION, APP_AUTHOR, APP_AUTHOR_URL, ICON_PATH, PLATFORM_SCALE, COOKIES_DIR
+from config import APP_TITLE, APP_NAME, APP_VERSION, APP_AUTHOR, APP_AUTHOR_URL, ICON_PATH, COOKIES_DIR
 from utils.i18n_utils import t, AVAILABLE_LANGUAGES, MENU_LANGUAGES
 
 
@@ -17,7 +17,6 @@ class WindowMixin:
     def setup_window(self):
         """Initialize the main window."""
         self.setWindowTitle(APP_TITLE)
-        self.setMinimumWidth(PLATFORM_SCALE['width_base'])
 
         icon = QIcon(ICON_PATH)
         if not icon.isNull():
@@ -130,6 +129,8 @@ class WindowMixin:
             self.path_entry.setPlaceholderText(t("path.placeholder"))
 
         # GroupBox titles
+        if hasattr(self, 'settings_box'):
+            self.settings_box.setTitle(t("settings.group_title"))
         if hasattr(self, 'format_box'):
             self.format_box.setTitle(t("format.group_title"))
             self.mp3_radio.setText(t("format.mp3"))
@@ -150,7 +151,7 @@ class WindowMixin:
 
         # Options
         if hasattr(self, 'options_box'):
-            self.options_box.setTitle(t("options.group_title"))
+            self.options_box.setTitle(t("extras.group_title"))
             self.normalize_check.setText(t("options.normalize_volume"))
             self.normalize_target_label.setText(t("options.normalize_target"))
         if hasattr(self, 'enrich_check'):
@@ -203,6 +204,45 @@ class WindowMixin:
         self.title_font = self.font()
         self.title_font.setBold(True)
 
-    def adjust_window_size(self, extra_height: int = 0):
-        """Adjust window size to fit content automatically."""
-        self.adjustSize()
+    def adjust_window_size(self, extra_height: int = 0, margin: float = 1.2):
+        """Adjust window size to fit content.
+
+        Qt layouts do not update sizeHint() when a hidden child is shown
+        after the window is already visible.  Walk down to leaf widgets
+        (QLabel, QPushButton, …) whose sizeHints stay correct.
+        """
+        if self.isMaximized() or self.isFullScreen():
+            return
+        def _widest_leaf(lo):
+            w = 0
+            for i in range(lo.count()):
+                item = lo.itemAt(i)
+                child = item.widget()
+                if child is not None:
+                    if child.layout() is not None:
+                        w = max(w, _widest_leaf(child.layout()))
+                    w = max(w, child.sizeHint().width(), child.minimumWidth())
+                elif item.layout() is not None:
+                    w = max(w, _widest_leaf(item.layout()))
+            return w
+
+        cw = self.centralWidget()
+        if hasattr(self, '_top_layout'):
+            w = 0
+            for i in range(self._top_layout.count()):
+                child = self._top_layout.itemAt(i).widget()
+                if child and not child.isHidden():
+                    child.updateGeometry()
+                    w += max(child.sizeHint().width(),
+                            _widest_leaf(child.layout()) if child.layout() else 0)
+        else:
+            w = cw.layout().sizeHint().width()
+
+        w = int(w * margin)
+
+        cw.layout().activate()
+        h = cw.layout().sizeHint().height() + extra_height
+        diff_w = max(0, self.frameGeometry().width() - cw.width())
+        diff_h = max(0, self.frameGeometry().height() - cw.height())
+        if w > diff_w:
+            self.resize(w + diff_w, h + diff_h)

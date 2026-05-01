@@ -215,12 +215,12 @@ class ApplicationController:
                 song_name = t("download.playlist_element", index=current_index + 1, total=playlist_length, playlist_title=playlist_title)
             else:
                 song_name = t("download.playlist_element_no_total", index=current_index + 1)
-            self.view.update_progress_info(video, song_name, is_playlist=True)
+            self.view.update_progress_info(video, song_name, is_playlist=True, playlist_title=playlist_title)
         except Exception as e:
             print(f"Error updating playlist display: {e}")
             video = VideoInfo()
             song_name = t("download.playlist_processing")
-            self.view.update_progress_info(video, song_name, is_playlist=True)
+            self.view.update_progress_info(video, song_name, is_playlist=True, playlist_title="")
     
     def update_playlist_display_from_hook(self, video_info: Dict, info_dict: Dict, current_index: int):
         """Update display for playlist download using info_dict from progress hook."""
@@ -254,12 +254,12 @@ class ApplicationController:
                 song_name = t("download.playlist_element", index=current_index + 1, total=playlist_length, playlist_title=playlist_title)
             else:
                 song_name = t("download.playlist_element_no_total", index=current_index + 1)
-            self.view.update_progress_info(video, song_name, is_playlist=True)
+            self.view.update_progress_info(video, song_name, is_playlist=True, playlist_title=playlist_title)
         except Exception as e:
             print(f"Error updating playlist display: {e}")
             video = VideoInfo()
             song_name = t("download.playlist_processing")
-            self.view.update_progress_info(video, song_name, is_playlist=True)
+            self.view.update_progress_info(video, song_name, is_playlist=True, playlist_title="")
     
     def extract_video_info(self, video_data: Dict) -> VideoInfo:
         """Extract VideoInfo object from video data dictionary."""
@@ -467,7 +467,7 @@ class ApplicationController:
                 
             if playlist_length > 0:
                 total_percentage = ((video_index + 1) / playlist_length) * 100
-                self.view.update_total_progress(total_percentage)
+                self.view.update_total_progress(total_percentage, video_index + 1, playlist_length)
         else:
             song_name = t("download.processing_single", title=title)
         

@@ -27,7 +27,7 @@ DEFAULT_WINDOW_SIZE = {
 
 # Platform-specific size adjustments
 PLATFORM_SCALE = {
-    'width_base': 480,
+    'width_base': 520,
     'height_base': 218,
     'height_extended': 385,
     'height_single': 350
@@ -35,7 +35,7 @@ PLATFORM_SCALE = {
 
 # Adjust for Linux font differences
 if os.name != 'nt':
-    PLATFORM_SCALE['width_base'] = 432
+    PLATFORM_SCALE['width_base'] = 500
     PLATFORM_SCALE['height_base'] = 234
     # PLATFORM_SCALE['height_extended'] = 420
     # PLATFORM_SCALE['height_single'] = 380

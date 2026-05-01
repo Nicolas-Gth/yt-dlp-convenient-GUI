@@ -7,7 +7,7 @@ The heavy lifting is split across:
     - progress_view.py  : download progress UI (ProgressMixin)
     - event_handlers_view.py : callbacks & validation (EventHandlersMixin)
 """
-from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout
+from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout
 from PySide6.QtCore import Qt
 
 from config import DEFAULT_BITRATE, DEFAULT_QUALITY, DEFAULT_NORMALIZE_TARGET, FILE_FORMATS
@@ -31,8 +31,36 @@ class MainApplicationView(QMainWindow, WindowMixin, WidgetsMixin, ProgressMixin,
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         self.main_layout = QVBoxLayout(central_widget)
-        self.main_layout.setContentsMargins(5, 5, 5, 10)
+        self.main_layout.setContentsMargins(8, 8, 8, 8)
         self.main_layout.setSpacing(8)
+
+        # Left panel — download settings
+        self.input_container = QWidget()
+        self.input_layout = QVBoxLayout(self.input_container)
+        self.input_layout.setContentsMargins(0, 0, 0, 0)
+        self.input_layout.setSpacing(8)
+
+        # Right panel — progress / download status (hidden until a download starts)
+        self.progress_container = QWidget()
+        self.progress_container.hide()
+        self.progress_container_layout = QVBoxLayout(self.progress_container)
+        self.progress_container_layout.setContentsMargins(0, 0, 0, 0)
+        self.progress_container_layout.setSpacing(8)
+
+        # Horizontal layout: settings left | progress right
+        self._top_layout = QHBoxLayout()
+        self._top_layout.setSpacing(8)
+        self._top_layout.addWidget(self.input_container, 1)
+        self._top_layout.addWidget(self.progress_container, 1)
+        self.main_layout.addLayout(self._top_layout)
+
+        # Bottom panel — downloaded / skipped tables (initially hidden, stretches to fill)
+        self.tables_container = QWidget()
+        self.tables_layout = QVBoxLayout(self.tables_container)
+        self.tables_layout.setContentsMargins(0, 0, 0, 0)
+        self.tables_layout.setSpacing(0)
+        self.tables_container.hide()
+        self.main_layout.addWidget(self.tables_container, 1)
 
         self.setup_window()
         self.setup_fonts()

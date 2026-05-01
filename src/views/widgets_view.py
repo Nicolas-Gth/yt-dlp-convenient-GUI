@@ -23,47 +23,30 @@ class WidgetsMixin:
 
     def setup_widgets(self):
         """Create and layout all GUI widgets."""
+        self.settings_box = QGroupBox(t("settings.group_title"))
+        self.settings_layout = QVBoxLayout(self.settings_box)
+        self.settings_layout.setContentsMargins(5, 10, 5, 10)
+        self.settings_layout.setSpacing(8)
+
         self.create_url_input()
         self.create_path_input()
         self.create_format_selection()
         self.create_playlist_selection()
         self.create_options_selection()
-        self.main_layout.addStretch()
-        # Keep a handle to the spacer above the main action button.
-        # This lets the progress summary snap under the checkboxes when active.
-        spacer_item = self.main_layout.itemAt(self.main_layout.count() - 1)
-        self._pre_button_spacer = spacer_item.spacerItem() if spacer_item is not None else None
+        self.settings_layout.addStretch()
         self.create_convert_button()
-        self.main_layout.addStretch()
-        # Keep a handle to the spacer below the main action button.
-        spacer_item = self.main_layout.itemAt(self.main_layout.count() - 1)
-        self._post_button_spacer = spacer_item.spacerItem() if spacer_item is not None else None
+        self.settings_layout.addStretch()
         self.create_disclaimer()
-        self.adjust_window_size()
+
+        self.input_layout.addWidget(self.settings_box)
+        self.adjust_window_size(margin=1.0)
+        self.setMinimumWidth(self.width() + 20)
 
     def set_pre_button_spacer_collapsed(self, collapsed: bool):
-        """Collapse/restore the spacer above the convert button."""
-        if not hasattr(self, '_pre_button_spacer') or self._pre_button_spacer is None:
-            return
-
-        if collapsed:
-            self._pre_button_spacer.changeSize(0, 0, QSizePolicy.Minimum, QSizePolicy.Fixed)
-        else:
-            self._pre_button_spacer.changeSize(0, 0, QSizePolicy.Minimum, QSizePolicy.Expanding)
-
-        self.main_layout.invalidate()
+        """No-op — spacers are no longer manipulated in the side-by-side layout."""
 
     def set_post_button_spacer_collapsed(self, collapsed: bool):
-        """Collapse/restore the spacer below the convert button."""
-        if not hasattr(self, '_post_button_spacer') or self._post_button_spacer is None:
-            return
-
-        if collapsed:
-            self._post_button_spacer.changeSize(0, 0, QSizePolicy.Minimum, QSizePolicy.Fixed)
-        else:
-            self._post_button_spacer.changeSize(0, 0, QSizePolicy.Minimum, QSizePolicy.Expanding)
-
-        self.main_layout.invalidate()
+        """No-op — spacers are no longer manipulated in the side-by-side layout."""
 
     # ------------------------------------------------------------------
     # URL input
@@ -76,11 +59,10 @@ class WidgetsMixin:
 
         self.url_entry = QLineEdit()
         self.url_entry.setPlaceholderText(t("url.placeholder"))
-        self.url_entry.setMinimumWidth(400)
         self.url_entry.setClearButtonEnabled(True)
         url_layout.addWidget(self.url_entry, 1)
 
-        self.main_layout.addLayout(url_layout)
+        self.settings_layout.addLayout(url_layout)
 
     # ------------------------------------------------------------------
     # Path input
@@ -92,7 +74,6 @@ class WidgetsMixin:
         path_layout.setContentsMargins(5, 5, 5, 5)
 
         self.path_entry = QLineEdit()
-        self.path_entry.setMinimumWidth(350)
         self.path_entry.setReadOnly(True)
         self.path_entry.setCursor(Qt.PointingHandCursor)
 
@@ -106,7 +87,7 @@ class WidgetsMixin:
 
         path_layout.addWidget(self.path_entry, 1)
 
-        self.main_layout.addLayout(path_layout)
+        self.settings_layout.addLayout(path_layout)
 
     # ------------------------------------------------------------------
     # Format selection
@@ -136,7 +117,6 @@ class WidgetsMixin:
         # Quality label + combo box
         self.quality_label = QLabel(t("quality.label"))
         self.quality_menu = QComboBox()
-        self.quality_menu.setMinimumWidth(120)
         format_layout.addWidget(self.quality_label)
         format_layout.addWidget(self.quality_menu)
         format_layout.addStretch()
@@ -144,7 +124,7 @@ class WidgetsMixin:
         format_wrapper = QHBoxLayout()
         format_wrapper.setContentsMargins(5, 0, 5, 0)
         format_wrapper.addWidget(self.format_box)
-        self.main_layout.addLayout(format_wrapper)
+        self.settings_layout.addLayout(format_wrapper)
 
         # Set initial format from preferences
         fmt = self._format_var
@@ -247,7 +227,7 @@ class WidgetsMixin:
         playlist_wrapper = QHBoxLayout()
         playlist_wrapper.setContentsMargins(5, 0, 5, 0)
         playlist_wrapper.addWidget(self.playlist_box)
-        self.main_layout.addLayout(playlist_wrapper)
+        self.settings_layout.addLayout(playlist_wrapper)
 
         # Set initial state from preferences
         if self._playlist_var == 0:
@@ -288,7 +268,7 @@ class WidgetsMixin:
 
     def create_options_selection(self):
         """Create options fieldset with normalize, enrich and prevent-sleep checkboxes."""
-        self.options_box = QGroupBox(t("options.group_title"))
+        self.options_box = QGroupBox(t("extras.group_title"))
         options_layout = QVBoxLayout(self.options_box)
 
         # Normalize volume
@@ -367,7 +347,7 @@ class WidgetsMixin:
         options_wrapper.setContentsMargins(5, 0, 5, 0)
         options_wrapper.addWidget(self.options_box)
 
-        self.main_layout.addLayout(options_wrapper)
+        self.settings_layout.addLayout(options_wrapper)
 
     def show_normalize_input(self):
         """Show the normalize target LUFS input."""
@@ -401,7 +381,7 @@ class WidgetsMixin:
             QPushButton:disabled { background-color: palette(mid); color: palette(dark); }
         """)
         self.convert_button.clicked.connect(self._on_convert_click)
-        self.main_layout.addWidget(self.convert_button, alignment=Qt.AlignCenter)
+        self.settings_layout.addWidget(self.convert_button, alignment=Qt.AlignCenter)
 
     # ------------------------------------------------------------------
     # Disclaimer
