@@ -6,6 +6,7 @@ import os
 import re
 import subprocess
 import sys
+import unicodedata
 from typing import Optional, Dict, Callable
 
 import yt_dlp
@@ -493,6 +494,9 @@ class CustomPostProcessor(yt_dlp.postprocessor.PostProcessor):
         sanitized_title = re.sub(r'[!?:#%&{}<>|*/$@~]', '', title)
 
         new_file_path = f"{self.config.output_directory}/{sanitized_artist} - {sanitized_title}.{file_format}"
+
+        # Normalize Unicode combining characters to precomposed form (ñ, é, …)
+        new_file_path = unicodedata.normalize('NFC', new_file_path)
 
         try:
             os.rename(file_path, new_file_path)
