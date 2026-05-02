@@ -7,7 +7,7 @@ The heavy lifting is split across:
     - progress_view.py  : download progress UI (ProgressMixin)
     - event_handlers_view.py : callbacks & validation (EventHandlersMixin)
 """
-from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout
+from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QTabWidget
 from PySide6.QtCore import Qt
 
 from config import DEFAULT_BITRATE, DEFAULT_QUALITY, DEFAULT_NORMALIZE_TARGET, FILE_FORMATS
@@ -20,18 +20,22 @@ from .widgets_view import WidgetsMixin
 from .progress_view import ProgressMixin
 from .event_handlers_view import EventHandlersMixin
 from .refresh_view import RefreshMixin
+from .files_view import FilesMixin
 
 
-class MainApplicationView(QMainWindow, WindowMixin, WidgetsMixin, ProgressMixin, EventHandlersMixin, RefreshMixin):
+class MainApplicationView(QMainWindow, WindowMixin, WidgetsMixin, ProgressMixin, EventHandlersMixin, RefreshMixin, FilesMixin):
     """Main application window and GUI components."""
 
     def __init__(self):
         super().__init__()
 
-        # Central widget and layout
-        central_widget = QWidget()
-        self.setCentralWidget(central_widget)
-        self.main_layout = QVBoxLayout(central_widget)
+        # Tab widget
+        self.tabs = QTabWidget()
+        self.setCentralWidget(self.tabs)
+
+        # Tab 0: Download
+        self._download_tab = QWidget()
+        self.main_layout = QVBoxLayout(self._download_tab)
         self.main_layout.setContentsMargins(8, 8, 8, 8)
         self.main_layout.setSpacing(8)
 
@@ -68,6 +72,10 @@ class MainApplicationView(QMainWindow, WindowMixin, WidgetsMixin, ProgressMixin,
         self.setup_variables()
         self.setup_widgets()
         self.progress_widgets = {}
+
+        # Add tabs
+        self.tabs.addTab(self._download_tab, t("tabs.download"))
+        self.setup_files_tab()
 
         # Callbacks (set by controller)
         self.on_browse_callback = None

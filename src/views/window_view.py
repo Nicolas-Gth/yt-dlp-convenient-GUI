@@ -163,6 +163,13 @@ class WindowMixin:
         if hasattr(self, 'convert_button') and self.convert_button.isVisible():
             self.convert_button.setText(" " + t("button.download"))
 
+        # Tab titles
+        if hasattr(self, 'tabs'):
+            self.tabs.setTabText(0, t("tabs.download"))
+            idx = self.tabs.indexOf(getattr(self, '_files_tab', None))
+            if idx >= 0:
+                self.tabs.setTabText(idx, t("tabs.files"))
+
     def _open_install_folder(self):
         """Open the application installation folder in the system file browser."""
         QDesktopServices.openUrl(QUrl.fromLocalFile(COOKIES_DIR))
@@ -236,12 +243,13 @@ class WindowMixin:
                     w += max(child.sizeHint().width(),
                             _widest_leaf(child.layout()) if child.layout() else 0)
         else:
-            w = cw.layout().sizeHint().width()
+            self.main_layout.activate()
+            w = self.main_layout.sizeHint().width()
 
         w = int(w * margin)
 
-        cw.layout().activate()
-        h = cw.layout().sizeHint().height() + extra_height
+        self.main_layout.activate()
+        h = self.main_layout.sizeHint().height() + extra_height
         diff_w = max(0, self.frameGeometry().width() - cw.width())
         diff_h = max(0, self.frameGeometry().height() - cw.height())
         if w > diff_w:

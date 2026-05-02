@@ -11,7 +11,7 @@ class RefreshMixin:
 
     def refresh_table_theme(self):
         """Force table widgets to pick up the new palette colours."""
-        for attr in ('info_table', '_normalize_table', '_skipped_table'):
+        for attr in ('info_table', '_normalize_table', '_skipped_table', '_files_table'):
             widget = getattr(self, attr, None)
             if widget is not None:
                 sheet = widget.styleSheet()
@@ -85,3 +85,7 @@ class RefreshMixin:
                 self.convert_button.setText(" " + t("button.new_download"))
             elif not self.convert_button.isHidden():
                 self.convert_button.setText(" " + t("button.download"))
+
+        # Files tab
+        if hasattr(self, 'retranslate_files_tab'):
+            self.retranslate_files_tab()

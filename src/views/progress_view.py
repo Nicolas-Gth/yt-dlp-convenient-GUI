@@ -517,8 +517,8 @@ class ProgressMixin:
             self._skipped_table.setStyleSheet(
                 "QTableWidget { border: none; background: transparent; }"
                 "QTableWidget QTableCornerButton::section { background: transparent; }"
-                "QHeaderView { background: transparent; }"
-                "QHeaderView::section { border: none; border-bottom: 1px solid palette(mid); background: transparent; }"
+                "QHeaderView { background: transparent; font-weight: normal; }"
+                "QHeaderView::section { border: none; border-bottom: 1px solid palette(mid); background: transparent; font-weight: normal; }"
             )
             header = self._skipped_table.horizontalHeader()
             header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
@@ -601,8 +601,8 @@ class ProgressMixin:
             self._normalize_table.setStyleSheet(
                 "QTableWidget { border: none; background: transparent; }"
                 "QTableWidget QTableCornerButton::section { background: transparent; }"
-                "QHeaderView { background: transparent; }"
-                "QHeaderView::section { border: none; border-bottom: 1px solid palette(mid); background: transparent; }"
+                "QHeaderView { background: transparent; font-weight: normal; }"
+                "QHeaderView::section { border: none; border-bottom: 1px solid palette(mid); background: transparent; font-weight: normal; }"
             )
 
             header = self._normalize_table.horizontalHeader()
