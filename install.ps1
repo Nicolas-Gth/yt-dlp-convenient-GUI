@@ -25,7 +25,7 @@ function RawT([string]$key) {
     $cfg  = Join-Path $AppDir 'yt-dlp-gui-config.json'
     if (Test-Path $cfg) {
         try {
-            $j = Get-Content $cfg -Raw | ConvertFrom-Json
+            $j = Get-Content $cfg -Raw -Encoding UTF8 | ConvertFrom-Json
             if ($j.language -and $j.language -ne 'system') { $lang = $j.language }
             else { $lang = (Get-Culture).TwoLetterISOLanguageName }
         } catch { }
@@ -35,7 +35,7 @@ function RawT([string]$key) {
     $f = Join-Path $AppDir "locales\$lang.json"
     if (-not (Test-Path $f)) { $f = Join-Path $AppDir 'locales\en.json' }
     try {
-        $d = Get-Content $f -Raw | ConvertFrom-Json
+        $d = Get-Content $f -Raw -Encoding UTF8 | ConvertFrom-Json
         $v = $d.$key
         if ($v) { return $v }
     } catch { }
@@ -130,8 +130,8 @@ if ($Launch) {
 # Shortcut menu
 # -------------------------------------------------------------------
 $Target    = Join-Path $AppDir 'install.ps1'
-$Desktop   = Join-Path (Join-Path $env:USERPROFILE 'Desktop') "$AppName.lnk"
-$StartMenu = Join-Path (Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs') "$AppName.lnk"
+$Desktop   = Join-Path ([Environment]::GetFolderPath('Desktop')) "$AppName.lnk"
+$StartMenu = Join-Path ([Environment]::GetFolderPath('Programs')) "$AppName.lnk"
 $installed = (Test-Path $Desktop) -or (Test-Path $StartMenu)
 
 $form = New-Object System.Windows.Forms.Form
