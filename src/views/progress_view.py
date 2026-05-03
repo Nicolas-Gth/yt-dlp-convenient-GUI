@@ -144,7 +144,7 @@ class ProgressMixin:
         row_h = self.fontMetrics().height() + 6
 
         # Create progress frame inside the right panel (stretches to fill)
-        self.progress_frame = QGroupBox(t("playlist.group_title"))
+        self.progress_frame = QGroupBox(t("progress.group_title"))
         self.progress_frame.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
         self.progress_frame.setAlignment(Qt.AlignLeft)
         frame_layout = QVBoxLayout(self.progress_frame)

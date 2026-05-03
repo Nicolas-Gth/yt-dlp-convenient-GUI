@@ -39,6 +39,7 @@
   "playlist.yes": "Yes",
   "playlist.from_video": "From video ",
   "playlist.to": " to ",
+  "progress.group_title": "Download",
   "settings.group_title": "Settings",
   "extras.group_title": "Extras",
   "options.normalize_volume": "Normalize volume",
