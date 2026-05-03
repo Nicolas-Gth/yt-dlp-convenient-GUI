@@ -39,6 +39,7 @@
   "playlist.yes": "Ja",
   "playlist.from_video": "Vanaf video ",
   "playlist.to": " tot ",
+  "progress.group_title": "Downloaden",
   "settings.group_title": "Instellingen",
   "extras.group_title": "Extra's",
   "options.normalize_volume": "Volume normaliseren",
