@@ -81,23 +81,6 @@ If you encounter a permission issue, run the following line in the same powershe
 chmod +x install.sh
 ```
 
-The script automatically:
-- Detects your OS and distribution
-- Installs Python 3, pip, and FFmpeg using your system's package manager
-- Installs all Python dependencies
-- Prompts you to install Git if you don't have it already
-- Updates the application automatically if Git is installed
-- Creates a desktop shortcut so you can launch the app from your application menu
-- Launches the application
-
-## Usage
-1. Paste a video URL from YouTube, YT Music or Soundcloud in the input field
-2. Choose format MP3 or Opus for audio, MP4 for video
-3. Select the max quality/bitrate as needed
-4. Select if you want to download an individual video or a playlist
-5. Pick extra options like audio normalization or metadata fetching
-6. Click the download button and wait for completion
-
 ## Troubleshooting
 ### Windows
 - If you encounter a permission issue due to Windows policies, run the following line in a powershell. In the same powershell (if you close it you will have to redo the command so don't close it), run install.ps1 like mentionned in [this section](#windows-users). 
