@@ -5,13 +5,20 @@ import os
 import re
 from typing import Optional, List, Tuple
 
+# Suppress ffmpeg backend noise from QMediaPlayer
+if 'AV_LOG_LEVEL' not in os.environ:
+    os.environ['AV_LOG_LEVEL'] = 'quiet'
+if 'QT_LOGGING_RULES' not in os.environ:
+    os.environ['QT_LOGGING_RULES'] = 'qt.multimedia.ffmpeg.debug=false;qt.multimedia.ffmpeg.info=false'
+
 from PySide6.QtWidgets import (
-    QVBoxLayout, QWidget, QTableWidget, QTableWidgetItem,
+    QVBoxLayout, QHBoxLayout, QWidget, QTableWidget, QTableWidgetItem,
     QHeaderView, QAbstractItemView, QFrame, QSplitter, QLabel,
-    QSizePolicy, QGroupBox,
+    QSizePolicy, QGroupBox, QPushButton, QSlider, QStyle
 )
 from PySide6.QtGui import QPixmap, QImage, QResizeEvent, QPainter, QPainterPath
-from PySide6.QtCore import Qt, QSize
+from PySide6.QtCore import Qt, QSize, QUrl, QTimer
+from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
 
 from utils.i18n_utils import t
 
@@ -93,7 +100,7 @@ class _ArtworkLabel(QLabel):
         super().__init__()
         self._pix = None
         self.setAlignment(Qt.AlignCenter)
-        self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
+        self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
 
     def setArtwork(self, pix: Optional[QPixmap]):
         self._pix = pix
@@ -122,10 +129,14 @@ class _ArtworkLabel(QLabel):
             self.clear()
 
     def minimumSizeHint(self):
-        return QSize(20, 80) if self._pix else QSize(0, 0)
+        return QSize(20, 20)
 
     def sizeHint(self):
-        return self._pix.size() if self._pix else QSize(20, 80)
+        if not self._pix or self._pix.isNull():
+            return QSize(20, 20)
+        w = max(self.width(), 20)
+        ratio = self._pix.height() / max(self._pix.width(), 1)
+        return QSize(w, int(w * ratio))
 
 
 def _load_audio(filepath):
@@ -303,6 +314,26 @@ def _extract_lyrics_text(audio) -> Optional[str]:
     return None
 
 
+class _SeekSlider(QSlider):
+    """Slider that jumps to click position (not just page-step)."""
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self.setValue(QStyle.sliderValueFromPosition(
+                self.minimum(), self.maximum(), event.pos().x(), self.width()))
+        super().mousePressEvent(event)
+
+
+class _ArtworkWrapper(QWidget):
+    """Wrapper that caps its height at 50% of parent."""
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        p = self.parentWidget()
+        if p:
+            self.setMaximumHeight(max(int(p.height() * 0.5), 80))
+
+
 class FilesMixin:
     """Mixin that provides the 'Download folder' tab."""
 
@@ -370,17 +401,55 @@ class FilesMixin:
         detail_group = QGroupBox(t("metadata.group_title"))
         self._detail_group = detail_group
         detail_layout = QVBoxLayout(detail_group)
-        detail_layout.setContentsMargins(5, 10, 5, 8)
-
-        v_splitter = QSplitter(Qt.Vertical)
-        v_splitter.setChildrenCollapsible(False)
+        detail_layout.setContentsMargins(0, 5, 0, 0)
 
         self._files_artwork = _ArtworkLabel()
-        artwork_wrapper = QWidget()
+        self._current_detail_filepath = None
+        self._saved_stderr = None
+
+        # Audio player
+        self._audio_output = QAudioOutput()
+        self._media_player = QMediaPlayer()
+        self._media_player.setAudioOutput(self._audio_output)
+        self._media_player.playbackStateChanged.connect(self._on_playback_state_changed)
+        self._media_player.positionChanged.connect(self._on_position_changed)
+        self._media_player.durationChanged.connect(self._on_duration_changed)
+        self._seeking = False
+
+        self._play_btn = QPushButton("⏵")
+        self._play_btn.setFixedSize(28, 24)
+        self._play_btn.setCursor(Qt.PointingHandCursor)
+        self._play_btn.setEnabled(False)
+        self._play_btn.clicked.connect(self._on_play_clicked)
+        self._play_btn.setStyleSheet("QPushButton { padding: 0; text-align: center; }")
+
+        self._seek_slider = _SeekSlider(Qt.Horizontal)
+        self._seek_slider.setEnabled(False)
+        self._seek_slider.setRange(0, 0)
+        self._seek_slider.sliderPressed.connect(self._on_slider_pressed)
+        self._seek_slider.sliderReleased.connect(self._on_slider_released)
+
+        self._elapsed_label = QLabel("0:00")
+        self._elapsed_label.setStyleSheet("QLabel { color: palette(dark); font-size: 11px; padding: 0; margin: 0; }")
+        self._total_label = QLabel("0:00")
+        self._total_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self._total_label.setStyleSheet("QLabel { color: palette(dark); font-size: 11px; padding: 0; margin: 0; }")
+
+        player_bar = QHBoxLayout()
+        player_bar.setContentsMargins(0, 0, 0, 0)
+        player_bar.setSpacing(3)
+        player_bar.addWidget(self._play_btn)
+        player_bar.addWidget(self._elapsed_label)
+        player_bar.addWidget(self._seek_slider, 1)
+        player_bar.addWidget(self._total_label)
+
+        artwork_wrapper = _ArtworkWrapper()
+        self._artwork_wrapper = artwork_wrapper
         aw = QVBoxLayout(artwork_wrapper)
-        aw.setContentsMargins(0, 0, 0, 8)
+        aw.setContentsMargins(5, 5, 5, 8)
+        aw.setSpacing(6)
         aw.addWidget(self._files_artwork)
-        v_splitter.addWidget(artwork_wrapper)
+        aw.addLayout(player_bar)
 
         self._files_meta = QTableWidget(0, 2)
         self._files_meta.setEditTriggers(QAbstractItemView.NoEditTriggers)
@@ -396,10 +465,9 @@ class FilesMixin:
         mhdr = self._files_meta.horizontalHeader()
         mhdr.setSectionResizeMode(0, QHeaderView.ResizeToContents)
         mhdr.setSectionResizeMode(1, QHeaderView.Stretch)
-        v_splitter.addWidget(self._files_meta)
 
-        v_splitter.setSizes([150, 300])
-        detail_layout.addWidget(v_splitter, 1)
+        detail_layout.addWidget(artwork_wrapper)
+        detail_layout.addWidget(self._files_meta, 1)
         right_layout.addWidget(detail_group, 1)
         splitter.addWidget(right)
 
@@ -409,7 +477,68 @@ class FilesMixin:
         self.tabs.addTab(self._files_tab, t("tabs.files"))
         self.tabs.currentChanged.connect(self._on_tab_changed)
 
+    def _on_play_clicked(self):
+        if not self._current_detail_filepath:
+            return
+        if self._media_player.playbackState() == QMediaPlayer.PlayingState:
+            self._media_player.pause()
+        elif self._media_player.playbackState() == QMediaPlayer.PausedState:
+            self._media_player.play()
+        else:
+            self._mute_stderr()
+            self._media_player.setSource(QUrl.fromLocalFile(self._current_detail_filepath))
+            self._media_player.play()
+
+    def _mute_stderr(self):
+        if self._saved_stderr is not None:
+            return
+        fd = os.open(os.devnull, os.O_WRONLY)
+        self._saved_stderr = os.dup(2)
+        os.dup2(fd, 2)
+        os.close(fd)
+
+    def _restore_stderr(self):
+        if self._saved_stderr is None:
+            return
+        os.dup2(self._saved_stderr, 2)
+        os.close(self._saved_stderr)
+        self._saved_stderr = None
+
+    def _on_playback_state_changed(self, state):
+        self._play_btn.setText("⏸" if state == QMediaPlayer.PlayingState else "⏵")
+        if state == QMediaPlayer.StoppedState:
+            self._restore_stderr()
+
+    def _on_position_changed(self, pos_ms):
+        if not self._seeking:
+            self._seek_slider.setValue(pos_ms)
+        pos = pos_ms // 1000
+        self._elapsed_label.setText(f"{pos//60}:{pos%60:02d}")
+
+    def _on_duration_changed(self, dur_ms):
+        self._seek_slider.setRange(0, dur_ms)
+        self._seek_slider.setEnabled(dur_ms > 0)
+        dur = dur_ms // 1000
+        self._total_label.setText(f"{dur//60}:{dur%60:02d}")
+
+    def _on_slider_pressed(self):
+        self._seeking = True
+
+    def _on_slider_released(self):
+        self._seeking = False
+        self._media_player.setPosition(self._seek_slider.value())
+
+    def _clear_meta_panel(self):
+        """Remove all rows and cell widgets from the metadata table."""
+        for r in range(self._files_meta.rowCount()):
+            if self._files_meta.cellWidget(r, 1):
+                self._files_meta.removeCellWidget(r, 1)
+        self._files_meta.setRowCount(0)
+
     def _on_tab_changed(self, index):
+        """Refresh file list when the files tab is selected."""
+        if self.tabs.widget(index) is self._files_tab:
+            self.refresh_files_list()
         """Refresh file list when the files tab is selected."""
         if self.tabs.widget(index) is self._files_tab:
             self.refresh_files_list()
@@ -480,24 +609,52 @@ class FilesMixin:
             return
         self._show_file_detail(filepath)
 
+    def _show_empty_detail(self):
+        self._files_meta.setRowCount(1)
+        self._files_meta.setRowHeight(0, max(self._files_meta.viewport().height(), 60))
+        item = QTableWidgetItem(t("files.no_selection"))
+        item.setFlags(Qt.ItemIsEnabled)
+        item.setTextAlignment(Qt.AlignCenter)
+        self._files_meta.setItem(0, 0, item)
+        self._files_meta.setSpan(0, 0, 1, 2)
+
     def _show_file_detail(self, filepath):
         """Populate the right panel with artwork and metadata."""
         if filepath is None or not os.path.isfile(filepath):
+            self._clear_meta_panel()
             self._files_artwork.setArtwork(None)
-            self._files_meta.setRowCount(0)
+            self._artwork_wrapper.hide()
+            self._current_detail_filepath = None
+            self._play_btn.setEnabled(False)
+            self._seek_slider.setEnabled(False)
+            self._seek_slider.setValue(0)
+            self._elapsed_label.setText("0:00")
+            self._total_label.setText("0:00")
+            self._media_player.stop()
+            QTimer.singleShot(0, self._show_empty_detail)
             return
+
+        self._artwork_wrapper.show()
+
+        if self._current_detail_filepath != filepath:
+            self._media_player.stop()
+            self._restore_stderr()
+            self._seek_slider.setValue(0)
+        self._current_detail_filepath = filepath
+        self._play_btn.setEnabled(True)
 
         audio = _load_audio(filepath)
         if audio is None:
+            self._clear_meta_panel()
             self._files_artwork.setArtwork(None)
-            self._files_meta.setRowCount(0)
             return
 
         # Artwork
         pix = _extract_artwork(audio)
         self._files_artwork.setArtwork(pix if pix and not pix.isNull() else None)
 
-        # Metadata table
+        # Metadata table — clear old cell widgets first
+        self._clear_meta_panel()
         meta = _extract_all_metadata(audio)
         lyrics_text = _extract_lyrics_text(audio)
         num_rows = len(meta) + 1 + (1 if lyrics_text else 0)

@@ -95,6 +95,7 @@
   "tabs.download": "Downloader",
   "tabs.files": "Downloadmap",
   "files.number": "#",
+  "files.no_selection": "Geen bestand geselecteerd",
   "files.filename": "Bestandsnaam",
   "files.path": "Pad",
   "files.title": "Titel",

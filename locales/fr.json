@@ -95,6 +95,7 @@
   "tabs.download": "Outil de téléchargement",
   "tabs.files": "Dossier de téléchargement",
   "files.number": "#",
+  "files.no_selection": "Aucun fichier sélectionné",
   "files.filename": "Nom du fichier",
   "files.path": "Chemin",
   "files.title": "Titre",

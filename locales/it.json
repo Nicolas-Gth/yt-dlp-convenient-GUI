@@ -95,6 +95,7 @@
   "tabs.download": "Scaricatore",
   "tabs.files": "Cartella download",
   "files.number": "#",
+  "files.no_selection": "Nessun file selezionato",
   "files.filename": "Nome file",
   "files.path": "Percorso",
   "files.title": "Titolo",

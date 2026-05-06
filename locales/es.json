@@ -95,6 +95,7 @@
   "tabs.download": "Descargador",
   "tabs.files": "Carpeta de descargas",
   "files.number": "#",
+  "files.no_selection": "Ningún archivo seleccionado",
   "files.filename": "Nombre del archivo",
   "files.path": "Ruta",
   "files.title": "Título",

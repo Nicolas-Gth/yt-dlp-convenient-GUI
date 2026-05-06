@@ -95,6 +95,7 @@
   "tabs.download": "Downloader",
   "tabs.files": "Download folder",
   "files.number": "#",
+  "files.no_selection": "No file selected",
   "files.filename": "Filename",
   "files.path": "Path",
   "files.title": "Title",
