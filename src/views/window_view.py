@@ -142,6 +142,19 @@ class WindowMixin:
                 self._populate_quality_menu()
             else:
                 self._populate_bitrate_menu()
+        if hasattr(self, 'template_entry'):
+            self.template_entry.setPlaceholderText(t("format.template_placeholder"))
+        if hasattr(self, 'template_presets'):
+            # Repopulate preset dropdown with translated labels, preserving selection
+            current_data = self.template_presets.currentData()
+            self.template_presets.blockSignals(True)
+            self.template_presets.clear()
+            for template_val, label_key in self._TEMPLATE_PRESETS:
+                self.template_presets.addItem(t(label_key), template_val)
+            self.template_presets.addItem(t("format.template_preset_custom"), None)
+            idx = self.template_presets.findData(current_data)
+            self.template_presets.setCurrentIndex(idx if idx >= 0 else self.template_presets.count() - 1)
+            self.template_presets.blockSignals(False)
         if hasattr(self, 'playlist_box'):
             self.playlist_box.setTitle(t("playlist.group_title"))
             self.no_playlist_radio.setText(t("playlist.no"))

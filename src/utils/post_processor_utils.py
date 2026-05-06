@@ -482,21 +482,114 @@ class CustomPostProcessor(yt_dlp.postprocessor.PostProcessor):
             print(f"Warning: Could not analyze loudness: {e}")
         return None
 
+    _TEMPLATE_VAR_RE = re.compile(r'\{(\w+)\}')
+
+    _DATE_TOKENS = ('Y', 'y', 'm', 'd', 'H', 'M', 'S', 'B', 'b')
+
+    @classmethod
+    def _resolve_template(cls, template: str, video_infos: dict, file_format: str) -> str:
+        """Resolve a filename template using video metadata.
+
+        Content variables:   {title}  {artist}  {album}  {tracknumber}  {format}
+        Date/time tokens:    {Y} {y} {m} {d} {B} {b} {H} {M} {S}
+        """
+        import datetime
+
+        # Precompute date/time token values from epoch
+        epoch = video_infos.get('epoch')
+        dt = None
+        if epoch:
+            try:
+                dt = datetime.datetime.fromtimestamp(epoch)
+            except (OSError, ValueError):
+                dt = None
+
+        tokens = {t: '' for t in cls._DATE_TOKENS}
+        if dt:
+            for t in cls._DATE_TOKENS:
+                try:
+                    tokens[t] = dt.strftime(f'%{t}')
+                except (ValueError, OSError):
+                    tokens[t] = ''
+        else:
+            # Fallback: extract from upload_date (YYYYMMDD)
+            upload_date = video_infos.get('upload_date', '')
+            if len(upload_date) == 8:
+                tokens['Y'] = upload_date[:4]
+                tokens['y'] = upload_date[2:4]
+                tokens['m'] = upload_date[4:6]
+                tokens['d'] = upload_date[6:8]
+
+        # Content variables
+        clean_title = video_infos.get('track') or cls._clean_title(
+            video_infos.get('title', ''))
+        artist = video_infos.get('artists', [video_infos.get('uploader', '')])[0] if video_infos.get('artists') else video_infos.get('uploader', '')
+        artist = artist.replace(" - Topic", "")
+        album = video_infos.get('album', '')
+        tracknumber = str(video_infos.get('playlist_index', ''))
+
+        def replace_var(m):
+            name = m.group(1)
+            if name in tokens:
+                return tokens[name]
+            if name == 'format':
+                return file_format
+            if name == 'title':
+                return clean_title
+            if name == 'artist':
+                return artist
+            if name == 'album':
+                return album
+            if name == 'tracknumber':
+                return tracknumber
+            return m.group(0)
+
+        return cls._TEMPLATE_VAR_RE.sub(replace_var, template)
+
     # ------------------------------------------------------------------
     # File renaming
     # ------------------------------------------------------------------
 
+    _FILENAME_ILLEGAL_RE = re.compile(r'[!?:#%&{}<>|*$@~]')
+
+    @staticmethod
+    def _sanitize_path_component(component: str) -> str:
+        """Strip characters that are illegal in file/directory names."""
+        sanitized = CustomPostProcessor._FILENAME_ILLEGAL_RE.sub('', component)
+        s = sanitized.strip()
+        # Prevent empty components or directory traversal
+        if not s or s in ('.', '..'):
+            return '_'
+        return s
+
     def _sanitize_and_rename_file(self, file_path: str, video_infos: Dict, artist_name: str, file_format: str) -> str:
         """Sanitize filename and rename the file."""
-        # Prefer clean track name from YT Music, otherwise clean the video title
-        title = video_infos.get('track') or self._clean_title(video_infos.get('title', ''))
-        sanitized_artist = re.sub(r'[!?:#%&{}<>|*/$@~]', '', artist_name)
-        sanitized_title = re.sub(r'[!?:#%&{}<>|*/$@~]', '', title)
+        if self.config.output_template:
+            raw_name = self._resolve_template(self.config.output_template, video_infos, file_format)
+        else:
+            title = video_infos.get('track') or self._clean_title(video_infos.get('title', ''))
+            raw_name = f"{artist_name} - {title}.{file_format}"
 
-        new_file_path = f"{self.config.output_directory}/{sanitized_artist} - {sanitized_title}.{file_format}"
+        # Split on '/' to handle subdirectories, sanitize each component
+        parts = raw_name.split('/')
+        sanitized_parts = [self._sanitize_path_component(p) for p in parts]
+        # Filter out any empty string resulting from trailing slash
+        sanitized_parts = [p for p in sanitized_parts if p]
+        if not sanitized_parts:
+            # Fallback if everything got sanitized away
+            sanitized_parts = [f"{artist_name} - {title}.{file_format}"]
 
-        # Normalize Unicode combining characters to precomposed form (ñ, é, …)
+        relative_path = '/'.join(sanitized_parts)
+        new_file_path = os.path.join(self.config.output_directory, relative_path)
         new_file_path = unicodedata.normalize('NFC', new_file_path)
+
+        # Create intermediate directories if needed
+        new_dir = os.path.dirname(new_file_path)
+        if new_dir:
+            try:
+                os.makedirs(new_dir, exist_ok=True)
+            except OSError as e:
+                print(f"Warning: Could not create directory {new_dir}: {e}")
 
         try:
             os.rename(file_path, new_file_path)

@@ -2,6 +2,7 @@
 File browser tab mixin — lists downloaded media files in the output directory.
 """
 import os
+import re
 from typing import Optional, List, Tuple
 
 from PySide6.QtWidgets import (
@@ -171,13 +172,41 @@ def _extract_title_artist(filepath):
 
 
 def _check_lyrics(filepath):
-    """Check for .lrc / .txt lyrics files next to *filepath*."""
+    """Check for lyrics: sidecar .lrc/.txt files or embedded metadata.
+    Returns (display_text, type_key) where type_key is 'lrc'|'txt'|''.
+    """
     base = os.path.splitext(filepath)[0]
     if os.path.exists(base + '.lrc'):
-        return 'Lrc'
+        return 'LRC', 'lrc'
     if os.path.exists(base + '.txt'):
-        return 'Txt'
-    return t("table.none")
+        return 'Txt', 'txt'
+
+    audio = _load_audio(filepath)
+    if audio is None or audio.tags is None:
+        return t("table.none"), ''
+    try:
+        from mutagen.mp4 import MP4
+        from mutagen.oggopus import OggOpus
+        text = None
+        if isinstance(audio, OggOpus):
+            val = audio.tags.get('lyrics')
+            text = val[0] if val else None
+        elif isinstance(audio, MP4):
+            val = audio.tags.get('\xa9lyr')
+            text = val[0] if val else None
+        else:
+            for tag in audio.tags.values():
+                if tag.FrameID == 'USLT':
+                    text = str(tag)
+                    break
+        if text:
+            # Detect LRC: lines starting with [mm:ss.xx]
+            if re.search(r'^\[\d{2}:\d{2}[.:]\d{2}\]', text, re.MULTILINE):
+                return 'LRC', 'lrc'
+            return 'Txt', 'txt'
+    except Exception:
+        pass
+    return t("table.none"), ''
 
 
 def _extract_artwork(audio) -> Optional[QPixmap]:
@@ -233,23 +262,45 @@ def _extract_all_metadata(audio) -> List[Tuple[str, str]]:
 
         if isinstance(audio, OggOpus):
             for key, values in (audio.tags or {}).items():
-                if key.startswith('metadata_block_picture') or key in ('cover',):
+                if key.startswith('metadata_block_picture') or key in ('cover', 'lyrics'):
                     continue
                 rows.append((key, "; ".join(values)))
             rows.sort(key=lambda r: r[0])
         elif isinstance(audio, MP4):
             for key in sorted(audio.tags.keys()):
-                if key == 'covr':
+                if key in ('covr', '\xa9lyr'):
                     continue
                 rows.append((key, "; ".join(str(v) for v in (audio.tags[key] or []))))
         else:  # MP3 ID3
             for tag in sorted(audio.tags.values(), key=lambda t: t.FrameID):
-                if tag.FrameID == 'APIC':
+                if tag.FrameID in ('APIC', 'USLT'):
                     continue
                 rows.append((tag.FrameID, "; ".join(str(v) for v in tag.text) if hasattr(tag, 'text') else str(tag)))
     except Exception:
         pass
     return rows
+
+
+def _extract_lyrics_text(audio) -> Optional[str]:
+    """Return the full embedded lyrics text, or None."""
+    if audio is None or audio.tags is None:
+        return None
+    try:
+        from mutagen.mp4 import MP4
+        from mutagen.oggopus import OggOpus
+        if isinstance(audio, OggOpus):
+            val = audio.tags.get('lyrics')
+            return val[0] if val else None
+        elif isinstance(audio, MP4):
+            val = audio.tags.get('\xa9lyr')
+            return val[0] if val else None
+        else:
+            for tag in audio.tags.values():
+                if tag.FrameID == 'USLT':
+                    return str(tag)
+    except Exception:
+        pass
+    return None
 
 
 class FilesMixin:
@@ -325,7 +376,11 @@ class FilesMixin:
         v_splitter.setChildrenCollapsible(False)
 
         self._files_artwork = _ArtworkLabel()
-        v_splitter.addWidget(self._files_artwork)
+        artwork_wrapper = QWidget()
+        aw = QVBoxLayout(artwork_wrapper)
+        aw.setContentsMargins(0, 0, 0, 8)
+        aw.addWidget(self._files_artwork)
+        v_splitter.addWidget(artwork_wrapper)
 
         self._files_meta = QTableWidget(0, 2)
         self._files_meta.setEditTriggers(QAbstractItemView.NoEditTriggers)
@@ -360,7 +415,7 @@ class FilesMixin:
             self.refresh_files_list()
 
     def refresh_files_list(self):
-        """Scan the output directory and populate the file table."""
+        """Scan the output directory recursively and populate the file table."""
         directory = self.path_entry.text().strip()
         if not directory or not os.path.isdir(directory):
             self._files_table.setRowCount(0)
@@ -368,24 +423,27 @@ class FilesMixin:
             return
 
         extensions = ('.mp3', '.mp4', '.opus')
-        files = [
-            f for f in os.listdir(directory)
-            if os.path.splitext(f)[1].lower() in extensions
-            and os.path.isfile(os.path.join(directory, f))
-        ]
-        files.sort()
+        files = []
+        for root, _dirs, filenames in os.walk(directory):
+            for fname in filenames:
+                if os.path.splitext(fname)[1].lower() in extensions:
+                    full = os.path.join(root, fname)
+                    rel = os.path.relpath(full, directory)
+                    files.append((full, rel))
+
+        files.sort(key=lambda x: x[1].lower())
 
         self._files_table.setSortingEnabled(False)
         self._files_table.setRowCount(0)
         self._files_table.setRowCount(len(files))
         ROW_HEIGHT = 24
 
-        for idx, filename in enumerate(files):
+        for idx, (filepath, relpath) in enumerate(files):
             self._files_table.setRowHeight(idx, ROW_HEIGHT)
-            filepath = os.path.join(directory, filename)
 
-            name_item = QTableWidgetItem(filename)
+            name_item = QTableWidgetItem(relpath)
             name_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
+            name_item.setData(Qt.UserRole, filepath)
             self._files_table.setItem(idx, 0, name_item)
 
             artist, title = _extract_title_artist(filepath)
@@ -398,9 +456,10 @@ class FilesMixin:
             artist_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
             self._files_table.setItem(idx, 2, artist_item)
 
-            lyrics = _check_lyrics(filepath)
+            lyrics, lyr_type = _check_lyrics(filepath)
             lyrics_item = QTableWidgetItem(lyrics)
             lyrics_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
+            lyrics_item.setData(Qt.UserRole, lyr_type)
             self._files_table.setItem(idx, 3, lyrics_item)
 
         self._files_table.horizontalHeader().resizeSections(QHeaderView.ResizeToContents)
@@ -414,9 +473,11 @@ class FilesMixin:
             self._show_file_detail(None)
             return
         row = min(rows)
-        filename = self._files_table.item(row, 0).text()
-        directory = self.path_entry.text().strip()
-        filepath = os.path.join(directory, filename)
+        name_item = self._files_table.item(row, 0)
+        filepath = name_item.data(Qt.UserRole)
+        if not filepath or not os.path.isfile(filepath):
+            self._show_file_detail(None)
+            return
         self._show_file_detail(filepath)
 
     def _show_file_detail(self, filepath):
@@ -438,7 +499,9 @@ class FilesMixin:
 
         # Metadata table
         meta = _extract_all_metadata(audio)
-        self._files_meta.setRowCount(len(meta) + 1)
+        lyrics_text = _extract_lyrics_text(audio)
+        num_rows = len(meta) + 1 + (1 if lyrics_text else 0)
+        self._files_meta.setRowCount(num_rows)
         # Filename row
         self._files_meta.setRowHeight(0, 22)
         key_item = QTableWidgetItem(t("tag.filename"))
@@ -459,6 +522,20 @@ class FilesMixin:
             val_item = QTableWidgetItem(val)
             val_item.setFlags(Qt.ItemIsEnabled)
             self._files_meta.setItem(row, 1, val_item)
+        if lyrics_text:
+            row = len(meta) + 1
+            key_item = QTableWidgetItem(t("files.lyrics"))
+            key_item.setFlags(Qt.ItemIsEnabled)
+            key_item.setData(Qt.UserRole, '_lyrics_')
+            f = key_item.font(); f.setBold(True); key_item.setFont(f)
+            key_item.setTextAlignment(Qt.AlignLeft | Qt.AlignTop)
+            self._files_meta.setItem(row, 0, key_item)
+            lbl = QLabel(lyrics_text)
+            lbl.setWordWrap(True)
+            lbl.setTextFormat(Qt.PlainText)
+            lbl.setContentsMargins(4, 2, 4, 2)
+            self._files_meta.setCellWidget(row, 1, lbl)
+            self._files_meta.resizeRowToContents(row)
 
     def retranslate_files_tab(self):
         """Update tab and table header labels after a language change."""
@@ -474,7 +551,14 @@ class FilesMixin:
             ])
             for r in range(self._files_table.rowCount()):
                 item = self._files_table.item(r, 3)
-                if item and item.text() not in ('Lrc', 'Txt'):
+                if item:
+                    lyr_type = item.data(Qt.UserRole)
+                    if lyr_type == 'lrc':
+                        item.setText('LRC')
+                    elif lyr_type == 'txt':
+                        item.setText('Txt')
+                    else:
+                        item.setText(t("table.none"))
                     item.setText(t("table.none"))
         if hasattr(self, '_files_group') and self._files_group is not None:
             self._files_group.setTitle(t("files.group_title"))
@@ -488,5 +572,7 @@ class FilesMixin:
                 item = self._files_meta.item(r, 0)
                 if item:
                     raw_key = item.data(Qt.UserRole)
-                    if raw_key:
+                    if raw_key == '_lyrics_':
+                        item.setText(t("files.lyrics"))
+                    elif raw_key:
                         item.setText(_tag_label(raw_key))

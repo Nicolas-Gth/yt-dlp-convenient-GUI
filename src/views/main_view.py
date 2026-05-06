@@ -7,7 +7,7 @@ The heavy lifting is split across:
     - progress_view.py  : download progress UI (ProgressMixin)
     - event_handlers_view.py : callbacks & validation (EventHandlersMixin)
 """
-from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QTabWidget
+from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QTabWidget, QMessageBox
 from PySide6.QtCore import Qt
 
 from config import DEFAULT_BITRATE, DEFAULT_QUALITY, DEFAULT_NORMALIZE_TARGET, FILE_FORMATS
@@ -105,6 +105,7 @@ class MainApplicationView(QMainWindow, WindowMixin, WidgetsMixin, ProgressMixin,
         self._normalize_target_var = preferences.get("normalize_target", DEFAULT_NORMALIZE_TARGET)
         self._enrich_var = preferences.get("enrich_metadata", False)
         self._prevent_sleep_var = preferences.get("prevent_sleep", False)
+        self._output_template_var = preferences.get("output_template", "")
         self._widgets_locked = False
 
     # ------------------------------------------------------------------
@@ -130,6 +131,18 @@ class MainApplicationView(QMainWindow, WindowMixin, WidgetsMixin, ProgressMixin,
         config.normalize_volume = self.normalize_check.isChecked()
         config.normalize_target = self._get_normalize_target()
         config.enrich_metadata = self.enrich_check.isChecked()
+        config.output_template = self.template_entry.text().strip() if hasattr(self, 'template_entry') else ""
+
+        # Validate template before proceeding
+        if config.output_template:
+            invalid_vars = self._get_invalid_template_vars(config.output_template)
+            if invalid_vars:
+                QMessageBox.warning(
+                    self,
+                    t("validation.invalid_template_title"),
+                    t("format.template_invalid_vars", vars=', '.join(invalid_vars))
+                )
+                return None
 
         # Save the output directory
         if config.output_directory and config.output_directory != 'Choose a path for your file':
@@ -147,7 +160,8 @@ class MainApplicationView(QMainWindow, WindowMixin, WidgetsMixin, ProgressMixin,
             normalize_volume=config.normalize_volume,
             normalize_target=config.normalize_target,
             enrich_metadata=config.enrich_metadata,
-            prevent_sleep=self.prevent_sleep_check.isChecked()
+            prevent_sleep=self.prevent_sleep_check.isChecked(),
+            output_template=config.output_template
         )
 
         if config.file_format in ("mp3", "opus"):
@@ -162,7 +176,6 @@ class MainApplicationView(QMainWindow, WindowMixin, WidgetsMixin, ProgressMixin,
                 config.playlist_start = self.playlist_start_entry.value()
                 config.playlist_end = self.playlist_end_entry.value()
                 if config.playlist_end < config.playlist_start:
-                    from PySide6.QtWidgets import QMessageBox
                     QMessageBox.warning(
                         self,
                         t("validation.invalid_range_title"),

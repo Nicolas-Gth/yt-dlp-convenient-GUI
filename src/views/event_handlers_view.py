@@ -35,6 +35,10 @@ class EventHandlersMixin:
             self.playlist_end_entry.setEnabled(False)
         if hasattr(self, 'normalize_target_entry') and self.normalize_target_entry.isVisible():
             self.normalize_target_entry.setEnabled(False)
+        if hasattr(self, 'template_entry'):
+            self.template_entry.setEnabled(False)
+        if hasattr(self, 'template_presets'):
+            self.template_presets.setEnabled(False)
 
     def enable_interactive_widgets(self):
         """Re-enable all interactive widgets after download."""
@@ -50,6 +54,10 @@ class EventHandlersMixin:
             self.playlist_end_entry.setEnabled(True)
         if hasattr(self, 'normalize_target_entry') and self.normalize_target_entry.isVisible():
             self.normalize_target_entry.setEnabled(True)
+        if hasattr(self, 'template_entry'):
+            self.template_entry.setEnabled(True)
+        if hasattr(self, 'template_presets'):
+            self.template_presets.setEnabled(True)
 
     # ------------------------------------------------------------------
     # Stop / download-again
@@ -158,7 +166,8 @@ class EventHandlersMixin:
             normalize_volume=self.normalize_check.isChecked(),
             normalize_target=self._get_normalize_target(),
             enrich_metadata=self.enrich_check.isChecked(),
-            prevent_sleep=self.prevent_sleep_check.isChecked()
+            prevent_sleep=self.prevent_sleep_check.isChecked(),
+            output_template=self.template_entry.text().strip() if hasattr(self, 'template_entry') else ""
         )
 
     def _get_current_bitrate(self) -> str:
@@ -243,4 +252,35 @@ class EventHandlersMixin:
 
     def _on_playlist_range_changed(self):
         """Handle playlist start/end spinbox change."""
+        self._save_preferences()
+
+    def _on_template_text_changed(self, text):
+        """Handle template text changes: validate, sync dropdown, and save."""
+        self._validate_template_visual(text)
+
+        # Sync dropdown selection to typed text
+        if hasattr(self, 'template_presets'):
+            self.template_presets.blockSignals(True)
+            idx = self.template_presets.findData(text)
+            if idx >= 0:
+                self.template_presets.setCurrentIndex(idx)
+            elif text.strip():
+                # Custom text: select "Custom" (last item)
+                self.template_presets.setCurrentIndex(self.template_presets.count() - 1)
+            else:
+                self.template_presets.setCurrentIndex(0)
+            self.template_presets.blockSignals(False)
+
+        self._save_preferences()
+
+    def _on_template_preset_changed(self, index):
+        """Handle template preset dropdown change."""
+        if index < 0:
+            return
+        template_val = self.template_presets.itemData(index)
+        if template_val:
+            self.template_entry.blockSignals(True)
+            self.template_entry.setText(template_val)
+            self.template_entry.blockSignals(False)
+            self._validate_template_visual(template_val)
         self._save_preferences()
