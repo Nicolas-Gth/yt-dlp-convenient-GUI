@@ -3,6 +3,7 @@ File browser tab mixin — lists downloaded media files in the output directory.
 """
 import os
 import re
+import warnings
 from typing import Optional, List, Tuple
 
 # Suppress ffmpeg backend noise from QMediaPlayer
@@ -14,7 +15,7 @@ if 'QT_LOGGING_RULES' not in os.environ:
 from PySide6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QWidget, QTableWidget, QTableWidgetItem,
     QHeaderView, QAbstractItemView, QFrame, QSplitter, QLabel,
-    QSizePolicy, QGroupBox, QPushButton, QSlider, QStyle
+    QSizePolicy, QGroupBox, QPushButton, QSlider, QStyle, QTextEdit
 )
 from PySide6.QtGui import QPixmap, QImage, QResizeEvent, QPainter, QPainterPath
 from PySide6.QtCore import Qt, QSize, QUrl, QTimer
@@ -337,6 +338,23 @@ class _ArtworkWrapper(QWidget):
 class FilesMixin:
     """Mixin that provides the 'Download folder' tab."""
 
+    _FIELD_KEYS = {
+        'title':      ['TIT2', '\xa9nam', 'title'],
+        'artist':     ['TPE1', '\xa9ART', 'artist'],
+        'album':      ['TALB', '\xa9alb', 'album'],
+        'year':       ['TDRC', '\xa9day', 'date', 'year'],
+        'tracknumber':['TRCK', 'trkn', 'tracknumber'],
+        'genre':      ['TCON', '\xa9gen', 'genre'],
+    }
+    _FIELD_LABELS = {
+        'title':      'files.title',
+        'artist':     'files.artist',
+        'album':      'tag.album',
+        'year':       'tag.year',
+        'tracknumber':'tag.track',
+        'genre':      'tag.genre',
+    }
+
     def setup_files_tab(self):
         """Create the file browser tab and add it to the QTabWidget."""
         self._files_tab = QWidget()
@@ -443,6 +461,21 @@ class FilesMixin:
         player_bar.addWidget(self._seek_slider, 1)
         player_bar.addWidget(self._total_label)
 
+        self._edit_btn_bar = QWidget()
+        self._edit_btn_bar.hide()
+        ebl = QHBoxLayout(self._edit_btn_bar)
+        ebl.setContentsMargins(0, 0, 0, 0)
+        ebl.setSpacing(6)
+        ebl.addStretch()
+        self._edit_reset_btn = QPushButton(t("button.reset"))
+        self._edit_reset_btn.setCursor(Qt.PointingHandCursor)
+        self._edit_reset_btn.clicked.connect(self._on_reset_metadata)
+        ebl.addWidget(self._edit_reset_btn)
+        self._edit_save_btn = QPushButton(t("button.save"))
+        self._edit_save_btn.setCursor(Qt.PointingHandCursor)
+        self._edit_save_btn.clicked.connect(self._on_save_metadata)
+        ebl.addWidget(self._edit_save_btn)
+
         artwork_wrapper = _ArtworkWrapper()
         self._artwork_wrapper = artwork_wrapper
         aw = QVBoxLayout(artwork_wrapper)
@@ -450,9 +483,13 @@ class FilesMixin:
         aw.setSpacing(6)
         aw.addWidget(self._files_artwork)
         aw.addLayout(player_bar)
+        aw.addWidget(self._edit_btn_bar)
+
+        self._modified_rows = set()
 
         self._files_meta = QTableWidget(0, 2)
         self._files_meta.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self._files_meta.setEditTriggers(QAbstractItemView.AllEditTriggers)
         self._files_meta.setSelectionMode(QAbstractItemView.NoSelection)
         self._files_meta.verticalHeader().setVisible(False)
         self._files_meta.horizontalHeader().setVisible(False)
@@ -462,12 +499,39 @@ class FilesMixin:
             "QTableWidget { border: none; background: transparent; }"
             "QTableWidget::item { padding: 2px 4px; }"
         )
+        self._edited = False
         mhdr = self._files_meta.horizontalHeader()
         mhdr.setSectionResizeMode(0, QHeaderView.ResizeToContents)
         mhdr.setSectionResizeMode(1, QHeaderView.Stretch)
 
         detail_layout.addWidget(artwork_wrapper)
-        detail_layout.addWidget(self._files_meta, 1)
+
+        # Splitter between meta table and lyrics
+        self._meta_splitter = QSplitter(Qt.Vertical)
+        self._meta_splitter.setChildrenCollapsible(False)
+        self._meta_splitter.addWidget(self._files_meta)
+
+        # Lyrics label + edit
+        lyrics_bottom = QWidget()
+        lbl = QVBoxLayout(lyrics_bottom)
+        lbl.setContentsMargins(0, 4, 0, 0)
+        lbl.setSpacing(2)
+        self._lyrics_label = QLabel(t("files.lyrics"))
+        f = self._lyrics_label.font(); f.setBold(True); self._lyrics_label.setFont(f)
+        self._lyrics_label.hide()
+        lbl.addWidget(self._lyrics_label)
+        self._lyrics_edit = QTextEdit()
+        self._lyrics_edit.setAcceptRichText(False)
+        self._lyrics_edit.setPlaceholderText(t("files.no_lyrics"))
+        self._lyrics_edit.textChanged.connect(self._on_lyrics_changed)
+        self._lyrics_edit.setStyleSheet("QTextEdit { border: none; background: transparent; }")
+        self._lyrics_edit.hide()
+        lbl.addWidget(self._lyrics_edit)
+        self._meta_splitter.addWidget(lyrics_bottom)
+        self._meta_splitter.setSizes([300, 80])
+
+        detail_layout.addWidget(self._meta_splitter, 1)
+
         right_layout.addWidget(detail_group, 1)
         splitter.addWidget(right)
 
@@ -535,13 +599,34 @@ class FilesMixin:
                 self._files_meta.removeCellWidget(r, 1)
         self._files_meta.setRowCount(0)
 
+    def _on_lyrics_changed(self, row):
+        self._modified_rows.add(row)
+        self._edited = True
+
+    def _on_meta_cell_clicked(self, row, col):
+        if col == 1:
+            item = self._files_meta.item(row, col)
+            if item and item.flags() & Qt.ItemIsEditable:
+                self._edit_btn_bar.show()
+
+    def _select_file_in_table(self, filepath):
+        """Select the row matching *filepath* in the files table."""
+        for r in range(self._files_table.rowCount()):
+            item = self._files_table.item(r, 0)
+            if item and item.data(Qt.UserRole) == filepath:
+                self._files_table.selectRow(r)
+                self._files_table.scrollToItem(item)
+                return
+
     def _on_tab_changed(self, index):
         """Refresh file list when the files tab is selected."""
         if self.tabs.widget(index) is self._files_tab:
+            saved = self._current_detail_filepath
             self.refresh_files_list()
-        """Refresh file list when the files tab is selected."""
-        if self.tabs.widget(index) is self._files_tab:
-            self.refresh_files_list()
+            if saved and os.path.isfile(saved):
+                self._current_detail_filepath = saved
+                self._show_file_detail(saved)
+                self._select_file_in_table(saved)
 
     def refresh_files_list(self):
         """Scan the output directory recursively and populate the file table."""
@@ -610,6 +695,8 @@ class FilesMixin:
         self._show_file_detail(filepath)
 
     def _show_empty_detail(self):
+        if self._current_detail_filepath:
+            return  # file has been selected since the timer was set
         self._files_meta.setRowCount(1)
         self._files_meta.setRowHeight(0, max(self._files_meta.viewport().height(), 60))
         item = QTableWidgetItem(t("files.no_selection"))
@@ -630,7 +717,9 @@ class FilesMixin:
             self._seek_slider.setValue(0)
             self._elapsed_label.setText("0:00")
             self._total_label.setText("0:00")
-            self._media_player.stop()
+            self._edit_btn_bar.hide()
+            self._lyrics_label.hide()
+            self._lyrics_edit.hide()
             QTimer.singleShot(0, self._show_empty_detail)
             return
 
@@ -642,6 +731,7 @@ class FilesMixin:
             self._seek_slider.setValue(0)
         self._current_detail_filepath = filepath
         self._play_btn.setEnabled(True)
+        self._seek_slider.setEnabled(True)
 
         audio = _load_audio(filepath)
         if audio is None:
@@ -655,44 +745,181 @@ class FilesMixin:
 
         # Metadata table — clear old cell widgets first
         self._clear_meta_panel()
-        meta = _extract_all_metadata(audio)
-        lyrics_text = _extract_lyrics_text(audio)
-        num_rows = len(meta) + 1 + (1 if lyrics_text else 0)
+        self._modified_rows.clear()
+        self._edited = False
+        self._edit_btn_bar.hide()
+        self._files_meta.blockSignals(True)
+
+        # Extract values for always-shown fields
+        meta_dict = {}
+        for k, v in _extract_all_metadata(audio):
+            meta_dict[k] = v
+
+        fixed = []
+        for field_name in ('title', 'artist', 'album', 'year', 'tracknumber', 'genre'):
+            val = ''
+            raw_key = ''
+            for candidate in self._FIELD_KEYS[field_name]:
+                if candidate in meta_dict and meta_dict[candidate]:
+                    val = meta_dict[candidate]
+                    raw_key = candidate
+                    break
+            fixed.append((field_name, raw_key, val))
+            # Remove from meta_dict so they don't appear twice
+            for candidate in self._FIELD_KEYS[field_name]:
+                meta_dict.pop(candidate, None)
+
+        # Remaining tags (sorted alphabetically)
+        remaining = sorted(meta_dict.items(), key=lambda r: r[0].lower())
+
+        num_rows = 1 + len(fixed) + len(remaining)  # filename + fixed + remaining
         self._files_meta.setRowCount(num_rows)
-        # Filename row
-        self._files_meta.setRowHeight(0, 22)
-        key_item = QTableWidgetItem(t("tag.filename"))
-        key_item.setFlags(Qt.ItemIsEnabled)
-        f = key_item.font(); f.setBold(True); key_item.setFont(f)
-        self._files_meta.setItem(0, 0, key_item)
-        val_item = QTableWidgetItem(os.path.basename(filepath))
-        val_item.setFlags(Qt.ItemIsEnabled)
-        self._files_meta.setItem(0, 1, val_item)
-        for i, (key, val) in enumerate(meta):
-            row = i + 1
+
+        row = 0
+        # Filename
+        self._files_meta.setRowHeight(row, 22)
+        ki = QTableWidgetItem(t("tag.filename"))
+        ki.setFlags(Qt.NoItemFlags); f = ki.font(); f.setBold(True); ki.setFont(f)
+        self._files_meta.setItem(row, 0, ki)
+        vi = QTableWidgetItem(os.path.basename(filepath))
+        vi.setFlags(Qt.ItemIsEnabled | Qt.ItemIsEditable)
+        vi.setData(Qt.UserRole, '_filename_')
+        self._files_meta.setItem(row, 1, vi)
+        row += 1
+
+        # Fixed fields
+        for field_name, raw_key, val in fixed:
             self._files_meta.setRowHeight(row, 22)
-            key_item = QTableWidgetItem(_tag_label(key))
-            key_item.setFlags(Qt.ItemIsEnabled)
-            key_item.setData(Qt.UserRole, key)
-            f = key_item.font(); f.setBold(True); key_item.setFont(f)
-            self._files_meta.setItem(row, 0, key_item)
-            val_item = QTableWidgetItem(val)
-            val_item.setFlags(Qt.ItemIsEnabled)
-            self._files_meta.setItem(row, 1, val_item)
-        if lyrics_text:
-            row = len(meta) + 1
-            key_item = QTableWidgetItem(t("files.lyrics"))
-            key_item.setFlags(Qt.ItemIsEnabled)
-            key_item.setData(Qt.UserRole, '_lyrics_')
-            f = key_item.font(); f.setBold(True); key_item.setFont(f)
-            key_item.setTextAlignment(Qt.AlignLeft | Qt.AlignTop)
-            self._files_meta.setItem(row, 0, key_item)
-            lbl = QLabel(lyrics_text)
-            lbl.setWordWrap(True)
-            lbl.setTextFormat(Qt.PlainText)
-            lbl.setContentsMargins(4, 2, 4, 2)
-            self._files_meta.setCellWidget(row, 1, lbl)
-            self._files_meta.resizeRowToContents(row)
+            ki = QTableWidgetItem(t(self._FIELD_LABELS[field_name]))
+            ki.setFlags(Qt.NoItemFlags); f = ki.font(); f.setBold(True); ki.setFont(f)
+            self._files_meta.setItem(row, 0, ki)
+            vi = QTableWidgetItem(val)
+            vi.setFlags(Qt.ItemIsEnabled | Qt.ItemIsEditable)
+            vi.setData(Qt.UserRole, field_name)  # store field name, not tag key
+            self._files_meta.setItem(row, 1, vi)
+            row += 1
+
+        # Remaining tags
+        for key, val in remaining:
+            self._files_meta.setRowHeight(row, 22)
+            ki = QTableWidgetItem(_tag_label(key))
+            ki.setFlags(Qt.NoItemFlags); f = ki.font(); f.setBold(True); ki.setFont(f)
+            ki.setData(Qt.UserRole, key)
+            self._files_meta.setItem(row, 0, ki)
+            vi = QTableWidgetItem(val)
+            vi.setFlags(Qt.ItemIsEnabled | Qt.ItemIsEditable)
+            vi.setData(Qt.UserRole, key)
+            self._files_meta.setItem(row, 1, vi)
+            row += 1
+
+        # Lyrics — separate widget below the table
+        lyrics_text = _extract_lyrics_text(audio)
+        self._lyrics_edit.blockSignals(True)
+        self._lyrics_edit.setPlainText(lyrics_text or '')
+        self._lyrics_edit.blockSignals(False)
+        self._lyrics_edit.setVisible(True)
+        self._lyrics_label.setVisible(True)
+
+        self._files_meta.blockSignals(False)
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', RuntimeWarning)
+            try:
+                self._files_meta.itemChanged.disconnect(self._on_meta_item_changed)
+            except (TypeError, RuntimeError):
+                pass
+        self._files_meta.itemChanged.connect(self._on_meta_item_changed)
+
+    def _on_meta_item_changed(self, item):
+        if item.column() == 1 and item.flags() & Qt.ItemIsEditable:
+            self._modified_rows.add(item.row())
+            self._edited = True
+            self._edit_btn_bar.show()
+
+    def _on_lyrics_changed(self):
+        self._edited = True
+        self._edit_btn_bar.show()
+
+    def _on_reset_metadata(self):
+        if self._current_detail_filepath:
+            self._files_meta.itemChanged.disconnect(self._on_meta_item_changed)
+            self._show_file_detail(self._current_detail_filepath)
+
+    def _on_save_metadata(self):
+        if not self._current_detail_filepath:
+            return
+        self._files_meta.setCurrentCell(-1, -1)
+        audio = _load_audio(self._current_detail_filepath)
+        if audio is None or audio.tags is None:
+            return
+        try:
+            from mutagen.mp4 import MP4
+            from mutagen.oggopus import OggOpus
+            tags = audio.tags
+            new_filepath = self._current_detail_filepath
+            # Handle lyrics (separate widget)
+            lyrics_val = self._lyrics_edit.toPlainText()
+            if lyrics_val.strip():
+                if isinstance(audio, OggOpus):
+                    tags['lyrics'] = [lyrics_val]
+                elif isinstance(audio, MP4):
+                    tags['\xa9lyr'] = [lyrics_val]
+                else:
+                    from mutagen.id3 import USLT
+                    uslt = USLT(encoding=3, lang='eng', desc='', text=lyrics_val)
+                    tags.delall('USLT')
+                    tags.add(uslt)
+            for row in range(self._files_meta.rowCount()):
+                val_item = self._files_meta.item(row, 1)
+                if not val_item:
+                    continue
+                key = val_item.data(Qt.UserRole)
+                if key == '_filename_':
+                    new_name = val_item.text().strip()
+                    if new_name:
+                        base, ext = os.path.splitext(new_name)
+                        orig_ext = os.path.splitext(self._current_detail_filepath)[1]
+                        if not ext:
+                            ext = orig_ext
+                        elif ext.lower() != orig_ext.lower():
+                            ext = orig_ext
+                        new_filepath = os.path.join(os.path.dirname(self._current_detail_filepath), base + ext)
+                    continue
+                if key in self._FIELD_KEYS:
+                    tag_key = self._FIELD_KEYS[key][0]
+                    if isinstance(audio, OggOpus):
+                        tag_key = self._FIELD_KEYS[key][2]  # 'album', 'title', etc.
+                    elif isinstance(audio, MP4):
+                        tag_key = self._FIELD_KEYS[key][1]  # '\xa9alb', '\xa9nam', etc.
+                    key = tag_key
+                val = val_item.text()
+                if isinstance(audio, OggOpus):
+                    tags[key] = [val]
+                elif isinstance(audio, MP4):
+                    tags[key] = [val]
+                else:
+                    frame = tags.get(key)
+                    if frame and hasattr(frame, 'text'):
+                        frame.text = [val]
+                    elif val:
+                        try:
+                            cls = type(tags).__module__
+                            frame_cls = getattr(tags, '_ID3Tags__module', {}).get(key)
+                            if frame_cls:
+                                tags.add(frame_cls(encoding=3, text=[val]))
+                        except (KeyError, AttributeError):
+                            pass
+            audio.save()
+            if new_filepath != self._current_detail_filepath and os.path.exists(self._current_detail_filepath):
+                os.rename(self._current_detail_filepath, new_filepath)
+                self._current_detail_filepath = new_filepath
+            self._modified_rows.clear()
+            self._edited = False
+            self._edit_btn_bar.hide()
+            self.refresh_files_list()
+            self._show_file_detail(new_filepath)
+            self._select_file_in_table(new_filepath)
+        except Exception as e:
+            print(f"Save metadata error: {e}")
 
     def retranslate_files_tab(self):
         """Update tab and table header labels after a language change."""
@@ -721,6 +948,12 @@ class FilesMixin:
             self._files_group.setTitle(t("files.group_title"))
         if hasattr(self, '_detail_group') and self._detail_group is not None:
             self._detail_group.setTitle(t("metadata.group_title"))
+        if hasattr(self, '_edit_reset_btn') and self._edit_reset_btn is not None:
+            self._edit_reset_btn.setText(t("button.reset"))
+            self._edit_save_btn.setText(t("button.save"))
+        if hasattr(self, '_lyrics_label') and self._lyrics_label is not None:
+            self._lyrics_label.setText(t("files.lyrics"))
+            self._lyrics_edit.setPlaceholderText(t("files.no_lyrics"))
         # Retranslate metadata keys (skip row 0 = filename)
         if hasattr(self, '_files_meta') and self._files_meta is not None:
             if self._files_meta.rowCount() > 0:
@@ -729,7 +962,5 @@ class FilesMixin:
                 item = self._files_meta.item(r, 0)
                 if item:
                     raw_key = item.data(Qt.UserRole)
-                    if raw_key == '_lyrics_':
-                        item.setText(t("files.lyrics"))
-                    elif raw_key:
+                    if raw_key:
                         item.setText(_tag_label(raw_key))

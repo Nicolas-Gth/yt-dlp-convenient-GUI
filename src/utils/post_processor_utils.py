@@ -490,7 +490,7 @@ class CustomPostProcessor(yt_dlp.postprocessor.PostProcessor):
     def _resolve_template(cls, template: str, video_infos: dict, file_format: str) -> str:
         """Resolve a filename template using video metadata.
 
-        Content variables:   {title}  {artist}  {album}  {tracknumber}  {format}
+        Content variables:   {title}  {artist}  {album}  {tracknumber}
         Date/time tokens:    {Y} {y} {m} {d} {B} {b} {H} {M} {S}
         """
         import datetime
@@ -525,15 +525,13 @@ class CustomPostProcessor(yt_dlp.postprocessor.PostProcessor):
             video_infos.get('title', ''))
         artist = video_infos.get('artists', [video_infos.get('uploader', '')])[0] if video_infos.get('artists') else video_infos.get('uploader', '')
         artist = artist.replace(" - Topic", "")
-        album = video_infos.get('album', '')
-        tracknumber = str(video_infos.get('playlist_index', ''))
+        album = video_infos.get('album') or 'Unknown Album'
+        tracknumber = str(video_infos.get('playlist_index') or '1')
 
         def replace_var(m):
             name = m.group(1)
             if name in tokens:
                 return tokens[name]
-            if name == 'format':
-                return file_format
             if name == 'title':
                 return clean_title
             if name == 'artist':
@@ -568,19 +566,17 @@ class CustomPostProcessor(yt_dlp.postprocessor.PostProcessor):
             raw_name = self._resolve_template(self.config.output_template, video_infos, file_format)
         else:
             title = video_infos.get('track') or self._clean_title(video_infos.get('title', ''))
-            raw_name = f"{artist_name} - {title}.{file_format}"
+            raw_name = f"{artist_name} - {title}"
 
         # Split on '/' to handle subdirectories, sanitize each component
         parts = raw_name.split('/')
         sanitized_parts = [self._sanitize_path_component(p) for p in parts]
-        # Filter out any empty string resulting from trailing slash
         sanitized_parts = [p for p in sanitized_parts if p]
         if not sanitized_parts:
-            # Fallback if everything got sanitized away
-            sanitized_parts = [f"{artist_name} - {title}.{file_format}"]
+            sanitized_parts = [f"{artist_name} - {title}"]
 
         relative_path = '/'.join(sanitized_parts)
-        new_file_path = os.path.join(self.config.output_directory, relative_path)
+        new_file_path = os.path.join(self.config.output_directory, f"{relative_path}.{file_format}")
         new_file_path = unicodedata.normalize('NFC', new_file_path)
 
         # Create intermediate directories if needed

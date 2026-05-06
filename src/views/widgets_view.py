@@ -96,18 +96,18 @@ class WidgetsMixin:
     # ------------------------------------------------------------------
 
     # Allowed template variables for validation
-    _TEMPLATE_VARIABLES = {"title", "tracknumber", "artist", "album", "format",
+    _TEMPLATE_VARIABLES = {"title", "tracknumber", "artist", "album",
                            "Y", "y", "m", "d", "H", "M", "S", "B", "b"}
     _TEMPLATE_VAR_RE = re.compile(r'\{(\w+)\}')
 
     _TEMPLATE_PRESETS = [
-        ("{artist} - {title}.{format}",          "format.template_preset_default"),
-        ("{Y}-{m}-{d} - {artist} - {title}.{format}", "format.template_preset_date_artist"),
-        ("{Y}{m}{d}_{H}{M}{S}_{title}.{format}", "format.template_preset_date_time"),
-        ("{tracknumber} - {artist} - {title}.{format}", "format.template_preset_track_artist"),
-        ("{artist}/{album}/{artist} - {title}.{format}", "format.template_preset_artist_album"),
-        ("{artist}/{album}/{tracknumber} - {title}.{format}", "format.template_preset_album_track"),
-        ("{title}.{format}",                      "format.template_preset_simple"),
+        ("{artist} - {title}",          "format.template_preset_default"),
+        ("{Y}-{m}-{d} - {artist} - {title}", "format.template_preset_date_artist"),
+        ("{Y}{m}{d}_{H}{M}{S}_{title}", "format.template_preset_date_time"),
+        ("{tracknumber} - {artist} - {title}", "format.template_preset_track_artist"),
+        ("{artist}/{album}/{artist} - {title}", "format.template_preset_artist_album"),
+        ("{artist}/{album}/{tracknumber} - {title}", "format.template_preset_album_track"),
+        ("{title}",                      "format.template_preset_simple"),
     ]
 
     def create_format_selection(self):

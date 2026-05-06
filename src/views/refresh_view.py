@@ -11,7 +11,7 @@ class RefreshMixin:
 
     def refresh_table_theme(self):
         """Force table widgets to pick up the new palette colours."""
-        for attr in ('info_table', '_normalize_table', '_skipped_table', '_files_table'):
+        for attr in ('info_table', '_normalize_table', '_skipped_table', '_files_table', '_files_meta', '_play_btn', '_edit_reset_btn', '_edit_save_btn', '_edit_btn_bar'):
             widget = getattr(self, attr, None)
             if widget is not None:
                 sheet = widget.styleSheet()
