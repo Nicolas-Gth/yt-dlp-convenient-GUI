@@ -58,6 +58,54 @@ def _extract_title_artist(filepath):
     return artist.strip(), title.strip()
 
 
+def _extract_template_info(filepath):
+    """Extract metadata needed for folder-structure templates.
+
+    Returns a dict with keys: artist, title, album, tracknumber.
+    Missing values fallback to sensible defaults (same as download tab).
+    """
+    from mutagen.mp4 import MP4
+    from mutagen.oggopus import OggOpus
+    info = {"artist": "", "title": "", "album": "", "tracknumber": ""}
+    audio = _load_audio(filepath)
+    if audio is None or audio.tags is None:
+        pass
+    else:
+        tags = audio.tags
+        try:
+            if isinstance(audio, OggOpus):
+                info["artist"] = "; ".join(tags.get('artist', []) or []).strip()
+                info["title"] = "; ".join(tags.get('title', []) or []).strip()
+                info["album"] = "; ".join(tags.get('album', []) or []).strip()
+                info["tracknumber"] = "; ".join(tags.get('tracknumber', []) or []).strip()
+            elif isinstance(audio, MP4):
+                info["artist"] = (tags.get('\xa9ART', [None])[0] or "").strip()
+                info["title"] = (tags.get('\xa9nam', [None])[0] or "").strip()
+                info["album"] = (tags.get('\xa9alb', [None])[0] or "").strip()
+                trkn = tags.get('trkn')
+                if trkn and trkn[0]:
+                    info["tracknumber"] = str(trkn[0][0])
+            else:  # MP3
+                info["artist"] = "; ".join(tags.get('TPE1') or []).strip()
+                info["title"] = "; ".join(tags.get('TIT2') or []).strip()
+                info["album"] = "; ".join(tags.get('TALB') or []).strip()
+                trck = tags.get('TRCK')
+                if trck:
+                    info["tracknumber"] = str(trck).split('/')[0].strip()
+        except Exception:
+            pass
+    # Fallbacks matching the download tab logic
+    if not info["artist"]:
+        info["artist"] = "Unknown Artist"
+    if not info["album"]:
+        info["album"] = "Unknown Album"
+    if not info["title"]:
+        info["title"] = os.path.splitext(os.path.basename(filepath))[0]
+    if not info["tracknumber"]:
+        info["tracknumber"] = "0"
+    return info
+
+
 def _check_lyrics(filepath):
     """Check for lyrics: sidecar .lrc/.txt files or embedded metadata.
     Returns (display_text, type_key) where type_key is 'lrc'|'txt'|''.

@@ -27,7 +27,10 @@ class FileScanner(QThread):
                     rel = os.path.relpath(full, directory)
                     artist, title = _extract_title_artist(full)
                     lyrics, lyr_type = _check_lyrics(full)
-                    mtime = datetime.fromtimestamp(os.path.getmtime(full)).strftime("%d/%m/%Y %H:%M")
+                    try:
+                        mtime = datetime.fromtimestamp(os.path.getmtime(full)).strftime("%d/%m/%Y %H:%M")
+                    except (OSError, FileNotFoundError):
+                        continue
                     results.append((full, rel, artist, title, lyrics, lyr_type, mtime))
 
         results.sort(key=lambda x: x[1].lower())

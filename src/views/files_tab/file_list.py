@@ -1,11 +1,16 @@
 import os
+import re
+import shutil
+from datetime import datetime
 
-from PySide6.QtWidgets import QTableWidgetItem, QHeaderView, QAbstractItemView, QFrame, QGroupBox
+from PySide6.QtWidgets import (
+    QTableWidgetItem, QHeaderView, QAbstractItemView, QFrame, QGroupBox, QMessageBox
+)
 from PySide6.QtCore import Qt
 
 from utils.i18n_utils import t
 
-from .metadata import _extract_title_artist, _check_lyrics
+from .metadata import _extract_title_artist, _check_lyrics, _extract_template_info
 from .scanner import FileScanner
 
 
@@ -142,8 +147,10 @@ class FilesListMixin:
         self._show_file_detail(filepath)
 
     def _on_watcher_changed(self, path):
-        """Mark file list as stale so it refreshes on next visit."""
+        """Refresh immediately if already on the Files tab, otherwise mark as stale."""
         self._files_pending_refresh = True
+        if self.tabs.currentWidget() is self._files_tab:
+            self.refresh_files_list()
 
     def _on_download_path_changed(self, text):
         """Invalidate cache when download path changes."""
@@ -160,3 +167,114 @@ class FilesListMixin:
                 self._files_table.selectRow(r)
                 self._files_table.scrollToItem(item)
                 return
+
+    # ------------------------------------------------------------------
+    # Folder structure (template apply)
+    # ------------------------------------------------------------------
+
+    _TEMPLATE_VAR_RE = re.compile(r'\{(\w+)\}')
+    _FILENAME_ILLEGAL_RE = re.compile(r'[!?:#%&{}<>|*$@~]')
+    _DATE_TOKENS = ('Y', 'y', 'm', 'd', 'H', 'M', 'S', 'B', 'b')
+
+    def _on_files_template_preset_changed(self, index):
+        """Handle template preset dropdown change."""
+        if index < 0:
+            return
+        template_val = self._files_template_presets.itemData(index)
+        if template_val:
+            self._files_template_entry.blockSignals(True)
+            self._files_template_entry.setText(template_val)
+            self._files_template_entry.blockSignals(False)
+
+    def _on_apply_format_clicked(self):
+        """Show confirmation and reorganize files according to the template."""
+        template = self._files_template_entry.text().strip()
+        if not template:
+            return
+        reply = QMessageBox.question(
+            self,
+            t("files.confirm_reorganize_title"),
+            t("files.confirm_reorganize_text"),
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        if reply != QMessageBox.Yes:
+            return
+        self._reorganize_files(template)
+
+    def _reorganize_files(self, template: str):
+        """Move/rename all files in the table according to *template*."""
+        directory = self.path_entry.text().strip()
+        if not directory or not os.path.isdir(directory):
+            return
+        for r in range(self._files_table.rowCount()):
+            item = self._files_table.item(r, 0)
+            if not item:
+                continue
+            filepath = item.data(Qt.UserRole)
+            if not filepath or not os.path.isfile(filepath):
+                continue
+            new_relpath = self._resolve_file_template(filepath, template)
+            if not new_relpath:
+                continue
+            new_path = os.path.join(directory, new_relpath)
+            # ensure extension is preserved
+            orig_ext = os.path.splitext(filepath)[1]
+            new_ext = os.path.splitext(new_path)[1]
+            if new_ext.lower() != orig_ext.lower():
+                new_path += orig_ext
+            if os.path.normpath(filepath) == os.path.normpath(new_path):
+                continue
+            # create target directories
+            target_dir = os.path.dirname(new_path)
+            if target_dir and not os.path.exists(target_dir):
+                os.makedirs(target_dir, exist_ok=True)
+            # avoid overwriting existing files
+            if os.path.exists(new_path):
+                base, ext = os.path.splitext(new_path)
+                counter = 1
+                while os.path.exists(new_path):
+                    new_path = f"{base} ({counter}){ext}"
+                    counter += 1
+            try:
+                shutil.move(filepath, new_path)
+            except Exception as e:
+                print(f"[reorganize] Error moving {filepath} -> {new_path}: {e}")
+        self._files_pending_refresh = True
+        self.refresh_files_list()
+
+    def _resolve_file_template(self, filepath: str, template: str) -> str:
+        """Resolve a filename template using existing file metadata."""
+        info = _extract_template_info(filepath)
+        mtime = os.path.getmtime(filepath)
+        dt = datetime.fromtimestamp(mtime)
+        tokens = {t: '' for t in self._DATE_TOKENS}
+        for t in self._DATE_TOKENS:
+            try:
+                tokens[t] = dt.strftime(f'%{t}')
+            except (ValueError, OSError):
+                tokens[t] = ''
+
+        def replace_var(m):
+            name = m.group(1)
+            if name in tokens:
+                return tokens[name]
+            if name in info:
+                return info[name]
+            return m.group(0)
+
+        raw_name = self._TEMPLATE_VAR_RE.sub(replace_var, template)
+        # sanitize each path component
+        sanitized = '/'.join(
+            self._sanitize_path_component(part) for part in raw_name.split('/')
+        )
+        return sanitized
+
+    @staticmethod
+    def _sanitize_path_component(component: str) -> str:
+        """Strip characters that are illegal in file/directory names."""
+        sanitized = FilesListMixin._FILENAME_ILLEGAL_RE.sub('', component)
+        s = sanitized.strip()
+        if not s or s in ('.', '..'):
+            return '_'
+        return s

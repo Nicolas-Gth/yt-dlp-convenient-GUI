@@ -1,11 +1,14 @@
 from PySide6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QWidget, QTableWidget, QTableWidgetItem,
     QHeaderView, QAbstractItemView, QFrame, QSplitter, QLabel,
-    QSizePolicy, QGroupBox, QPushButton, QSlider, QTextEdit
+    QSizePolicy, QGroupBox, QPushButton, QSlider, QTextEdit,
+    QLineEdit, QComboBox, QMessageBox
 )
-from PySide6.QtCore import Qt, QTimer, QFileSystemWatcher
+from PySide6.QtGui import QIcon
+from PySide6.QtCore import Qt, QTimer, QFileSystemWatcher, QSize
 from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
 
+from config import INFO_ICON_PATH
 from utils.i18n_utils import t
 
 from .widgets import _ArtworkLabel, _SeekSlider, _ArtworkWrapper
@@ -29,6 +32,56 @@ class FilesSetupMixin:
         left_layout = QVBoxLayout(left)
         left_layout.setContentsMargins(8, 8, 4, 8)
         left_layout.setSpacing(0)
+
+        # ── Structure group (above files) ──
+        structure_group = QGroupBox(t("files.structure_title"))
+        self._files_structure_group = structure_group
+        structure_layout = QVBoxLayout(structure_group)
+        structure_layout.setContentsMargins(5, 10, 5, 8)
+        structure_layout.setSpacing(6)
+
+        structure_row = QHBoxLayout()
+        structure_row.setSpacing(6)
+
+        self._files_template_entry = QLineEdit("{artist} - {title}")
+        self._files_template_entry.setPlaceholderText(t("format.template_placeholder"))
+
+        self._files_template_presets = QComboBox()
+        self._files_template_presets.setCursor(Qt.PointingHandCursor)
+        _TEMPLATE_PRESETS = [
+            ("{artist} - {title}",          "format.template_preset_default"),
+            ("{Y}-{m}-{d} - {artist} - {title}", "format.template_preset_date_artist"),
+            ("{Y}{m}{d}_{H}{M}{S}_{title}", "format.template_preset_date_time"),
+            ("{tracknumber} - {artist} - {title}", "format.template_preset_track_artist"),
+            ("{artist}/{album}/{artist} - {title}", "format.template_preset_artist_album"),
+            ("{artist}/{album}/{tracknumber} - {title}", "format.template_preset_album_track"),
+            ("{title}",                      "format.template_preset_simple"),
+        ]
+        for template_val, label_key in _TEMPLATE_PRESETS:
+            self._files_template_presets.addItem(t(label_key), template_val)
+        self._files_template_presets.addItem(t("format.template_preset_custom"), None)
+        self._files_template_presets.currentIndexChanged.connect(self._on_files_template_preset_changed)
+
+        self._files_template_info_btn = QPushButton()
+        self._files_template_info_btn.setIcon(QIcon(INFO_ICON_PATH))
+        self._files_template_info_btn.setIconSize(QSize(14, 14))
+        self._files_template_info_btn.setFlat(True)
+        self._files_template_info_btn.setCursor(Qt.PointingHandCursor)
+        self._files_template_info_btn.setFixedSize(20, 20)
+        self._files_template_info_btn.clicked.connect(
+            lambda: QMessageBox.information(self, t("format.template_info_title"), t("format.template_info_text"))
+        )
+
+        self._files_apply_format_btn = QPushButton(t("files.apply_format"))
+        self._files_apply_format_btn.setCursor(Qt.PointingHandCursor)
+        self._files_apply_format_btn.clicked.connect(self._on_apply_format_clicked)
+
+        structure_row.addWidget(self._files_template_entry, 1)
+        structure_row.addWidget(self._files_template_presets)
+        structure_row.addWidget(self._files_template_info_btn)
+        structure_row.addWidget(self._files_apply_format_btn)
+        structure_layout.addLayout(structure_row)
+        left_layout.addWidget(structure_group)
 
         files_group = QGroupBox(t("files.group_title"))
         self._files_group = files_group

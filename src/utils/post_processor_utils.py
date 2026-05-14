@@ -132,6 +132,8 @@ class CustomPostProcessor(yt_dlp.postprocessor.PostProcessor):
             self._add_mp3_metadata(file_path, video_infos, artist_name)
         elif file_format == "opus":
             self._add_opus_metadata(file_path, video_infos, artist_name)
+        elif file_format == "mp4":
+            self._add_mp4_metadata(file_path, video_infos, artist_name)
 
         # Rename and sanitize the file name
         new_file_path = self._sanitize_and_rename_file(file_path, video_infos, artist_name, file_format)
@@ -346,6 +348,37 @@ class CustomPostProcessor(yt_dlp.postprocessor.PostProcessor):
             pass
 
         return None
+
+    # ------------------------------------------------------------------
+    # MP4 metadata
+    # ------------------------------------------------------------------
+
+    def _add_mp4_metadata(self, file_path: str, video_infos: Dict, artist_name: str):
+        """Add metadata to MP4 file using mutagen."""
+        try:
+            from mutagen.mp4 import MP4
+            audio = MP4(file_path)
+
+            audio.tags['\xa9ART'] = [artist_name]
+
+            track_name = video_infos.get('track')
+            if not track_name:
+                track_name = self._clean_title(video_infos.get('title', ''))
+            audio.tags['\xa9nam'] = [track_name]
+
+            album_name = video_infos.get('album')
+            if album_name:
+                audio.tags['\xa9alb'] = [album_name]
+
+            release_year = video_infos.get('release_year')
+            if release_year:
+                audio.tags['\xa9day'] = [str(release_year)]
+            elif video_infos.get('upload_date'):
+                audio.tags['\xa9day'] = [video_infos['upload_date'][:4]]
+
+            audio.save()
+        except Exception as e:
+            print(f"Warning: Could not add metadata to MP4 file: {e}")
 
     # ------------------------------------------------------------------
     # MP3 metadata

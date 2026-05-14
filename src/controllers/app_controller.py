@@ -562,6 +562,14 @@ class ApplicationController:
         self.download_controller.progress.reset()
         self._playlist_total = 0
         
+        # Invalidate files-tab cache and refresh immediately if on the Files tab
+        if hasattr(self.view, '_files_pending_refresh'):
+            self.view._files_pending_refresh = True
+        if hasattr(self.view, 'tabs') and hasattr(self.view, '_files_tab'):
+            if self.view.tabs.currentWidget() is self.view._files_tab:
+                if hasattr(self.view, 'refresh_files_list'):
+                    self.view.refresh_files_list()
+        
         self.view.show_new_download_button()
         
         age_restricted = self.download_controller._age_restricted_entries
