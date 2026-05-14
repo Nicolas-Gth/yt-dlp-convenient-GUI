@@ -16,14 +16,14 @@ from utils.i18n_utils import t
 from models import DownloadConfig
 
 from .window_view import WindowMixin
-from .widgets_view import WidgetsMixin
-from .progress_view import ProgressMixin
+from .download_tab import DownloadTabMixin
+from .progress_tab import ProgressMixin
 from .event_handlers_view import EventHandlersMixin
 from .refresh_view import RefreshMixin
-from .files_view import FilesMixin
+from .files_tab import FilesMixin
 
 
-class MainApplicationView(QMainWindow, WindowMixin, WidgetsMixin, ProgressMixin, EventHandlersMixin, RefreshMixin, FilesMixin):
+class MainApplicationView(QMainWindow, WindowMixin, DownloadTabMixin, ProgressMixin, EventHandlersMixin, RefreshMixin, FilesMixin):
     """Main application window and GUI components."""
 
     def __init__(self):
