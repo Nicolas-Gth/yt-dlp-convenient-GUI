@@ -26,12 +26,12 @@ class FilesListMixin:
                 self._files_list_loaded = False
 
             if not self._files_list_loaded or self._files_pending_refresh:
+                # Preserve the file currently shown in the detail panel
+                # so that music keeps playing and the panel is not cleared.
                 saved = self._current_detail_filepath
-                self.refresh_files_list()
                 if saved and os.path.isfile(saved):
-                    self._current_detail_filepath = saved
-                    self._show_file_detail(saved)
-                    self._select_file_in_table(saved)
+                    self._files_saved_selection = saved
+                self.refresh_files_list()
 
     def refresh_files_list(self):
         """Scan the output directory recursively in a background thread."""
@@ -39,6 +39,15 @@ class FilesListMixin:
         self._files_last_directory = directory
         self._files_pending_refresh = False
         self._files_list_loaded = True
+
+        # If nobody pre-set the file to restore (editor, tab switch…),
+        # fall back to the table's current selection.
+        if not getattr(self, '_files_saved_selection', None):
+            rows = set(idx.row() for idx in self._files_table.selectedIndexes())
+            if rows:
+                item = self._files_table.item(min(rows), 0)
+                if item:
+                    self._files_saved_selection = item.data(Qt.UserRole)
 
         # Reset watcher
         if hasattr(self, '_file_watcher'):
@@ -67,17 +76,20 @@ class FilesListMixin:
         self._scanner = FileScanner(directory, self)
         self._scanner.results_ready.connect(self._on_scanner_finished)
 
-        # Show loading state
+        # Only show loading state on first visit (empty table).
+        # On subsequent refreshes keep the existing rows visible to avoid
+        # flicker, selection loss and music interruption.
         self._files_table.setSortingEnabled(False)
-        self._files_table.setRowCount(1)
-        loading = QTableWidgetItem(t("files.loading"))
-        loading.setFlags(Qt.ItemIsEnabled)
-        self._files_table.setItem(0, 0, loading)
-        self._files_table.setItem(0, 1, QTableWidgetItem(""))
-        self._files_table.setItem(0, 2, QTableWidgetItem(""))
-        self._files_table.setItem(0, 3, QTableWidgetItem(""))
-        self._files_table.setItem(0, 4, QTableWidgetItem(""))
-        self._files_table.setEnabled(False)
+        if self._files_table.rowCount() == 0:
+            self._files_table.setRowCount(1)
+            loading = QTableWidgetItem(t("files.loading"))
+            loading.setFlags(Qt.ItemIsEnabled)
+            self._files_table.setItem(0, 0, loading)
+            self._files_table.setItem(0, 1, QTableWidgetItem(""))
+            self._files_table.setItem(0, 2, QTableWidgetItem(""))
+            self._files_table.setItem(0, 3, QTableWidgetItem(""))
+            self._files_table.setItem(0, 4, QTableWidgetItem(""))
+            self._files_table.setEnabled(False)
 
         self._scanner.start()
 
@@ -88,42 +100,95 @@ class FilesListMixin:
         if scanned_directory != current_dir:
             return
 
-        self._files_table.setSortingEnabled(False)
-        self._files_table.setRowCount(0)
-        self._files_table.setRowCount(len(results))
-        ROW_HEIGHT = 24
+        selected_filepath = getattr(self, '_files_saved_selection', None)
+        current_detail = getattr(self, '_current_detail_filepath', None)
         watched_dirs = set()
 
-        for idx, (filepath, relpath, artist, title, lyrics, lyr_type, mtime) in enumerate(results):
-            self._files_table.setRowHeight(idx, ROW_HEIGHT)
-            watched_dirs.add(os.path.dirname(filepath))
+        # Build map of existing rows by filepath
+        existing_rows = {}
+        for r in range(self._files_table.rowCount()):
+            item = self._files_table.item(r, 0)
+            if item:
+                existing_rows[item.data(Qt.UserRole)] = r
 
-            name_item = QTableWidgetItem(relpath)
-            name_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
-            name_item.setData(Qt.UserRole, filepath)
-            self._files_table.setItem(idx, 0, name_item)
+        new_files = [r[0] for r in results]
+        same_set = set(existing_rows.keys()) == set(new_files)
 
-            title_item = QTableWidgetItem(title)
-            title_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
-            self._files_table.setItem(idx, 1, title_item)
+        # In-place update: same files, only metadata may have changed.
+        # No row clearing → no flicker, no selection loss, no music stop.
+        if same_set and len(existing_rows) == len(results):
+            self._files_table.blockSignals(True)
+            self._files_table.setSortingEnabled(False)
+            for idx, (filepath, relpath, artist, title, lyrics, lyr_type, mtime) in enumerate(results):
+                watched_dirs.add(os.path.dirname(filepath))
+                row = existing_rows[filepath]
+                self._files_table.item(row, 0).setText(relpath)
+                self._files_table.item(row, 1).setText(title)
+                self._files_table.item(row, 2).setText(artist)
+                l_item = self._files_table.item(row, 3)
+                l_item.setText(lyrics)
+                l_item.setData(Qt.UserRole, lyr_type)
+                self._files_table.item(row, 4).setText(mtime)
+            self._files_table.horizontalHeader().resizeSections(QHeaderView.ResizeToContents)
+            self._files_table.setSortingEnabled(True)
+            self._files_table.blockSignals(False)
+        else:
+            # Full rebuild (files added/removed/reordered)
+            self._files_table.blockSignals(True)
+            self._files_table.setSortingEnabled(False)
+            self._files_table.setRowCount(0)
+            self._files_table.setRowCount(len(results))
+            ROW_HEIGHT = 24
+            selected_row = -1
 
-            artist_item = QTableWidgetItem(artist)
-            artist_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
-            self._files_table.setItem(idx, 2, artist_item)
+            for idx, (filepath, relpath, artist, title, lyrics, lyr_type, mtime) in enumerate(results):
+                self._files_table.setRowHeight(idx, ROW_HEIGHT)
+                watched_dirs.add(os.path.dirname(filepath))
 
-            lyrics_item = QTableWidgetItem(lyrics)
-            lyrics_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
-            lyrics_item.setData(Qt.UserRole, lyr_type)
-            self._files_table.setItem(idx, 3, lyrics_item)
+                if selected_filepath and filepath == selected_filepath:
+                    selected_row = idx
 
-            mtime_item = QTableWidgetItem(mtime)
-            mtime_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
-            self._files_table.setItem(idx, 4, mtime_item)
+                name_item = QTableWidgetItem(relpath)
+                name_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
+                name_item.setData(Qt.UserRole, filepath)
+                self._files_table.setItem(idx, 0, name_item)
 
-        self._files_table.horizontalHeader().resizeSections(QHeaderView.ResizeToContents)
-        self._files_table.setSortingEnabled(True)
-        self._files_table.setEnabled(True)
-        self._show_file_detail(None)
+                title_item = QTableWidgetItem(title)
+                title_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
+                self._files_table.setItem(idx, 1, title_item)
+
+                artist_item = QTableWidgetItem(artist)
+                artist_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
+                self._files_table.setItem(idx, 2, artist_item)
+
+                lyrics_item = QTableWidgetItem(lyrics)
+                lyrics_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
+                lyrics_item.setData(Qt.UserRole, lyr_type)
+                self._files_table.setItem(idx, 3, lyrics_item)
+
+                mtime_item = QTableWidgetItem(mtime)
+                mtime_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
+                self._files_table.setItem(idx, 4, mtime_item)
+
+            self._files_table.horizontalHeader().resizeSections(QHeaderView.ResizeToContents)
+            self._files_table.setSortingEnabled(True)
+            self._files_table.setEnabled(True)
+            self._files_table.blockSignals(False)
+
+            # Restore selection by filepath — row index may have changed due to sorting.
+            if selected_filepath:
+                self._select_file_in_table(selected_filepath)
+
+            # Only update the detail panel if the selected file changed or was deleted.
+            if selected_filepath:
+                file_still_exists = any(r[0] == selected_filepath for r in results)
+                if file_still_exists:
+                    if current_detail != selected_filepath:
+                        self._show_file_detail(selected_filepath)
+                else:
+                    if current_detail == selected_filepath:
+                        self._show_file_detail(None)
+            # else: no saved selection → keep as-is
 
         # Watch directories so we know when to refresh without scanning every time
         if watched_dirs and hasattr(self, '_file_watcher'):
@@ -131,6 +196,9 @@ class FilesListMixin:
                 self._file_watcher.addPaths(list(watched_dirs))
             except Exception:
                 pass
+
+        # Clear the saved selection so the next refresh reads from the table again.
+        self._files_saved_selection = None
 
     def _on_file_selected(self):
         """Show detail for the first selected file."""
@@ -147,10 +215,8 @@ class FilesListMixin:
         self._show_file_detail(filepath)
 
     def _on_watcher_changed(self, path):
-        """Refresh immediately if already on the Files tab, otherwise mark as stale."""
+        """Mark file list as stale — refresh will happen on next explicit request."""
         self._files_pending_refresh = True
-        if self.tabs.currentWidget() is self._files_tab:
-            self.refresh_files_list()
 
     def _on_download_path_changed(self, text):
         """Invalidate cache when download path changes."""

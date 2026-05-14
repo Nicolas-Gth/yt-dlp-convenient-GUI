@@ -138,11 +138,13 @@ class CustomPostProcessor(yt_dlp.postprocessor.PostProcessor):
         # Rename and sanitize the file name
         new_file_path = self._sanitize_and_rename_file(file_path, video_infos, artist_name, file_format)
 
-        # Add album cover for audio files
+        # Add album cover for audio/video files
         if file_format == "mp3" and os.path.exists(new_file_path):
             self._add_album_cover(new_file_path, video_infos, track_info)
         elif file_format == "opus" and os.path.exists(new_file_path):
             self._add_opus_album_cover(new_file_path, video_infos, track_info)
+        elif file_format == "mp4" and os.path.exists(new_file_path):
+            self._add_mp4_album_cover(new_file_path, video_infos, track_info)
 
         # Send combined summary line to UI
         if self.normalize_callback:
@@ -739,3 +741,65 @@ class CustomPostProcessor(yt_dlp.postprocessor.PostProcessor):
                     audio.save()
             except Exception as e:
                 print(f"Warning: Could not add album cover to Opus: {e}")
+
+    def _add_mp4_album_cover(self, file_path: str, video_infos: Dict, track_info: dict = None):
+        """Add album cover to MP4 file using mutagen.
+
+        Uses the YouTube thumbnail as fallback.  HD cover from enrichment
+        is also supported when the user enables metadata enrichment.
+        """
+        thumbnail_url = video_infos.get('thumbnail', '')
+
+        # For MP4 (video), keep the original 16:9 thumbnail ratio
+        fallback_cover = None
+        if thumbnail_url:
+            try:
+                fallback_cover = crop_album_cover(thumbnail_url, force_square=False)
+            except Exception as e:
+                print(f"Warning: Could not crop YouTube thumbnail: {e}")
+
+        if self.config.enrich_metadata:
+            enriched = enrich_metadata(video_infos)
+
+            if enriched:
+                if enriched.cover_data:
+                    print(f"[metadata] HD album cover")
+                if enriched.synced_lyrics:
+                    print(f"[metadata] Synced lyrics (LRC) embedded")
+                elif enriched.lyrics:
+                    print(f"[metadata] Lyrics embedded")
+
+                if not enriched.cover_data and fallback_cover:
+                    print(f"[metadata] No HD cover found, using YouTube thumbnail")
+
+                if track_info is not None:
+                    track_info['cover_found'] = bool(enriched.cover_data)
+                    track_info['lyrics_found'] = bool(enriched.synced_lyrics or enriched.lyrics)
+                    if enriched.synced_lyrics:
+                        track_info['lyrics_type'] = 'LRC'
+                    elif enriched.lyrics:
+                        track_info['lyrics_type'] = 'Txt'
+                    track_info['metadata_found'] = bool(
+                        enriched.cover_data or enriched.lyrics or enriched.synced_lyrics or enriched.album
+                    )
+
+                cover_to_use = enriched.cover_data or fallback_cover
+                if cover_to_use:
+                    try:
+                        from mutagen.mp4 import MP4
+                        audio = MP4(file_path)
+                        audio.tags['covr'] = [cover_to_use]
+                        audio.save()
+                    except Exception as e:
+                        print(f"Warning: Could not add album cover to MP4: {e}")
+                return
+
+        # Fallback: embed the YouTube thumbnail
+        if fallback_cover:
+            try:
+                from mutagen.mp4 import MP4
+                audio = MP4(file_path)
+                audio.tags['covr'] = [fallback_cover]
+                audio.save()
+            except Exception as e:
+                print(f"Warning: Could not add album cover to MP4: {e}")

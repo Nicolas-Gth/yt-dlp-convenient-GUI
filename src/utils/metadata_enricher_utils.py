@@ -379,16 +379,16 @@ def fetch_cover_art(release_id: str, release_group_id: str = "",
     Returns JPEG/PNG bytes or None.
     """
     urls_to_try = []
-    
-    # Priority 1: release-group (aggregates all editions of the album)
+
+    # Priority 1: the specific release matched (most accurate cover)
+    urls_to_try.append(f"{_CA_BASE}/release/{release_id}/front-1200")
+    urls_to_try.append(f"{_CA_BASE}/release/{release_id}/front")
+
+    # Priority 2: release-group (aggregates all editions of the album)
     if release_group_id:
         urls_to_try.append(f"{_CA_BASE}/release-group/{release_group_id}/front-1200")
         urls_to_try.append(f"{_CA_BASE}/release-group/{release_group_id}/front")
-    
-    # Priority 2: the specific release matched
-    urls_to_try.append(f"{_CA_BASE}/release/{release_id}/front-1200")
-    urls_to_try.append(f"{_CA_BASE}/release/{release_id}/front")
-    
+
     # Priority 3: other releases of the same album
     for rid in (fallback_release_ids or []):
         if rid != release_id:

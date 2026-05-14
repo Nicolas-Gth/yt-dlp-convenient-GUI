@@ -98,8 +98,7 @@ class FilesEditorMixin:
             self._modified_rows.clear()
             self._edited = False
             self._edit_btn_bar.hide()
+            self._files_saved_selection = new_filepath
             self.refresh_files_list()
-            self._show_file_detail(new_filepath)
-            self._select_file_in_table(new_filepath)
         except Exception as e:
             print(f"Save metadata error: {e}")
