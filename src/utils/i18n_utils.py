@@ -19,6 +19,8 @@ import sys
 from pathlib import Path
 from typing import Dict, Optional
 
+from PySide6.QtCore import QTranslator, QCoreApplication
+
 # Map of language codes to display labels (shown in the Language menu).
 # To add a new language, add an entry here and create the matching JSON file.
 AVAILABLE_LANGUAGES = {
@@ -41,6 +43,46 @@ _LOCALES_DIR = Path(__file__).resolve().parent.parent.parent / "locales"
 _current_language: str = "system"
 _translations: Dict[str, str] = {}
 _fallback: Dict[str, str] = {}
+_qt_translators: list = []
+
+
+def _find_qt_translation_files(code: str) -> list[Path]:
+    """Find PySide6 Qt translation files for the given language code.
+
+    Returns ``qt_{code}.qm`` (full Qt widgets) and ``qtbase_{code}.qm``
+    (core strings), whichever exist.
+    """
+    try:
+        import PySide6
+    except ImportError:
+        return []
+    qt_translations_dir = Path(PySide6.__file__).parent / "Qt" / "translations"
+    files = []
+    for name in (f"qt_{code}.qm", f"qtbase_{code}.qm"):
+        path = qt_translations_dir / name
+        if path.exists():
+            files.append(path)
+    return files
+
+
+def _install_qt_translator(code: str):
+    """Install (or remove) Qt translators matching the active language."""
+    global _qt_translators
+    app = QCoreApplication.instance()
+    for translator in _qt_translators:
+        if app:
+            app.removeTranslator(translator)
+    _qt_translators = []
+
+    if code == "en":
+        return  # English is built-in; nothing to load.
+
+    for qm_path in _find_qt_translation_files(code):
+        translator = QTranslator()
+        if translator.load(str(qm_path)):
+            if app:
+                app.installTranslator(translator)
+            _qt_translators.append(translator)
 
 
 def _detect_system_language() -> str:
@@ -106,6 +148,7 @@ def init(language: str = "system"):
         _translations = _fallback
     else:
         _translations = _load_locale(resolved)
+    _install_qt_translator(resolved)
 
 
 def set_language(code: str):
@@ -117,6 +160,7 @@ def set_language(code: str):
         _translations = _fallback
     else:
         _translations = _load_locale(resolved)
+    _install_qt_translator(resolved)
 
 
 def get_language() -> str:

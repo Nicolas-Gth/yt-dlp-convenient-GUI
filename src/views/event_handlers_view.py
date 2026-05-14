@@ -85,14 +85,20 @@ class EventHandlersMixin:
     # ------------------------------------------------------------------
 
     def _on_browse_click(self):
-        """Handle browse button click using native file dialog."""
-        directory = QFileDialog.getExistingDirectory(
-            self, t("path.dialog_title"),
-            self.path_entry.text() or ""
-        )
-        if directory:
-            self.path_entry.setText(directory)
-            settings_manager.set_last_download_directory(directory)
+        """Handle browse button click using Qt file dialog (translated)."""
+        dlg = QFileDialog(self, t("path.dialog_title"), self.path_entry.text() or "")
+        dlg.setFileMode(QFileDialog.FileMode.Directory)
+        dlg.setOption(QFileDialog.Option.DontUseNativeDialog)
+        dlg.setOption(QFileDialog.Option.ShowDirsOnly)
+        # Override labels that Qt's built-in translations miss
+        dlg.setLabelText(QFileDialog.DialogLabel.LookIn, t("dialog.look_in"))
+        dlg.setLabelText(QFileDialog.DialogLabel.FileType, t("dialog.files_of_type"))
+        if dlg.exec() == QFileDialog.DialogCode.Accepted:
+            files = dlg.selectedFiles()
+            if files:
+                directory = files[0]
+                self.path_entry.setText(directory)
+                settings_manager.set_last_download_directory(directory)
 
         if self.on_browse_callback:
             self.on_browse_callback()

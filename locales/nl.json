@@ -27,6 +27,8 @@
   "url.placeholder": "Voer een video-URL in",
   "path.placeholder": "Klik om een map te kiezen",
   "path.dialog_title": "Downloadmap selecteren",
+  "dialog.look_in": "Zoeken in:",
+  "dialog.files_of_type": "Bestanden van type:",
   "format.group_title": "Uitvoerbestandsformaat",
   "format.mp3": "Mp3",
   "format.mp4": "Mp4",

@@ -27,6 +27,8 @@
   "url.placeholder": "Inserisci l'URL del video",
   "path.placeholder": "Clicca per selezionare una cartella",
   "path.dialog_title": "Seleziona cartella di download",
+  "dialog.look_in": "Cerca in:",
+  "dialog.files_of_type": "File di tipo:",
   "format.group_title": "Formato file di uscita",
   "format.mp3": "Mp3",
   "format.mp4": "Mp4",

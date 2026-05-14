@@ -27,6 +27,8 @@
   "url.placeholder": "Entrez l'URL d'une vidéo",
   "path.placeholder": "Cliquez pour choisir un dossier",
   "path.dialog_title": "Sélectionner le dossier de téléchargement",
+  "dialog.look_in": "Rechercher dans :",
+  "dialog.files_of_type": "Fichiers de type :",
   "format.group_title": "Format du fichier de sortie",
   "format.mp3": "Mp3",
   "format.mp4": "Mp4",
