@@ -105,6 +105,8 @@
   "files.title": "Titolo",
   "files.artist": "Artista",
   "files.lyrics": "Testi",
+  "files.modified": "Ultima modifica",
+  "files.loading": "Caricamento…",
   "fetching.info": "Recupero informazioni...",
   "fetching.playlist": "Recupero informazioni playlist...",
   "fetching.playlist_progress": "Recupero informazioni playlist... ({current}/{total})",

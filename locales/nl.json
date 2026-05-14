@@ -105,6 +105,8 @@
   "files.title": "Titel",
   "files.artist": "Artiest",
   "files.lyrics": "Songtekst",
+  "files.modified": "Laatst gewijzigd",
+  "files.loading": "Laden…",
   "fetching.info": "Informatie ophalen...",
   "fetching.playlist": "Afspeellijstinformatie ophalen...",
   "fetching.playlist_progress": "Afspeellijstinformatie ophalen... ({current}/{total})",

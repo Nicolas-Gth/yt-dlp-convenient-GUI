@@ -105,6 +105,8 @@
   "files.title": "Titel",
   "files.artist": "Künstler",
   "files.lyrics": "Liedtext",
+  "files.modified": "Zuletzt geändert",
+  "files.loading": "Laden…",
   "fetching.info": "Informationen werden abgerufen...",
   "fetching.playlist": "Playlist-Informationen werden abgerufen...",
   "fetching.playlist_progress": "Playlist-Informationen werden abgerufen... ({current}/{total})",

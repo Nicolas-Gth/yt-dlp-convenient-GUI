@@ -3,7 +3,7 @@ from PySide6.QtWidgets import (
     QHeaderView, QAbstractItemView, QFrame, QSplitter, QLabel,
     QSizePolicy, QGroupBox, QPushButton, QSlider, QTextEdit
 )
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer, QFileSystemWatcher
 from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
 
 from utils.i18n_utils import t
@@ -35,12 +35,13 @@ class FilesSetupMixin:
         files_layout = QVBoxLayout(files_group)
         files_layout.setContentsMargins(5, 10, 5, 8)
 
-        self._files_table = QTableWidget(0, 4)
+        self._files_table = QTableWidget(0, 5)
         self._files_table.setHorizontalHeaderLabels([
             t("files.filename"),
             t("files.title"),
             t("files.artist"),
             t("files.lyrics"),
+            t("files.modified"),
         ])
         self._files_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self._files_table.setSelectionMode(QAbstractItemView.ExtendedSelection)
@@ -63,6 +64,7 @@ class FilesSetupMixin:
         hdr.setSectionResizeMode(1, QHeaderView.Interactive)
         hdr.setSectionResizeMode(2, QHeaderView.Interactive)
         hdr.setSectionResizeMode(3, QHeaderView.Interactive)
+        hdr.setSectionResizeMode(4, QHeaderView.Interactive)
         hdr.setDefaultAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         self._files_table.itemSelectionChanged.connect(self._on_file_selected)
         files_layout.addWidget(self._files_table, 1)
@@ -198,3 +200,12 @@ class FilesSetupMixin:
 
         self.tabs.addTab(self._files_tab, t("tabs.files"))
         self.tabs.currentChanged.connect(self._on_tab_changed)
+
+        # ── Watcher to avoid full rescans on every tab switch ──
+        self._files_last_directory = None
+        self._files_pending_refresh = True
+        self._files_list_loaded = False
+        self._file_watcher = QFileSystemWatcher(self)
+        self._file_watcher.directoryChanged.connect(self._on_watcher_changed)
+        self._file_watcher.fileChanged.connect(self._on_watcher_changed)
+        self.path_entry.textChanged.connect(self._on_download_path_changed)
