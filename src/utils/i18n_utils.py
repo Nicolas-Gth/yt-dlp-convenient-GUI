@@ -19,8 +19,6 @@ import sys
 from pathlib import Path
 from typing import Dict, Optional
 
-from PySide6.QtCore import QTranslator, QCoreApplication
-
 # Map of language codes to display labels (shown in the Language menu).
 # To add a new language, add an entry here and create the matching JSON file.
 AVAILABLE_LANGUAGES = {
@@ -68,6 +66,10 @@ def _find_qt_translation_files(code: str) -> list[Path]:
 def _install_qt_translator(code: str):
     """Install (or remove) Qt translators matching the active language."""
     global _qt_translators
+    try:
+        from PySide6.QtCore import QTranslator, QCoreApplication
+    except ImportError:
+        return
     app = QCoreApplication.instance()
     for translator in _qt_translators:
         if app:
