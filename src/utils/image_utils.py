@@ -103,10 +103,15 @@ def load_icon(icon_path: str, root_window=None) -> bool:
     """
     return True
 
-def crop_album_cover(thumbnail_url: str) -> Optional[bytes]:
+def crop_album_cover(thumbnail_url: str, force_square: bool = True) -> Optional[bytes]:
     """
     Download and crop thumbnail for use as album cover.
-    
+
+    Args:
+        thumbnail_url: URL of the thumbnail image
+        force_square: If True (default), crop to a square. If False, keep
+                      the original aspect ratio (useful for video covers).
+
     Returns:
         JPEG image data as bytes, or None if processing fails
     """
@@ -116,15 +121,18 @@ def crop_album_cover(thumbnail_url: str) -> Optional[bytes]:
         u.close()
         im = Image.open(BytesIO(raw_data))
 
-        album_im = _crop_to_square_removing_bars(im)
-        
+        if force_square:
+            album_im = _crop_to_square_removing_bars(im)
+        else:
+            album_im = im
+
         if album_im.mode in ('RGBA', 'P', 'LA'):
             album_im = album_im.convert('RGB')
-        
+
         with BytesIO() as output:
             album_im.save(output, format="JPEG")
             return output.getvalue()
-            
+
     except Exception as e:
         print(f"Warning: Could not process album cover: {e}")
         return None

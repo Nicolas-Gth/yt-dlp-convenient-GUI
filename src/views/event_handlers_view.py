@@ -28,13 +28,17 @@ class EventHandlersMixin:
             w.setEnabled(False)
         for w in (self.mp3_radio, self.mp4_radio, self.opus_radio,
                   self.no_playlist_radio, self.yes_playlist_radio,
-                  self.normalize_check, self.enrich_check, self.prevent_sleep_check):
+                  self.normalize_check, self.enrich_check):
             w.setEnabled(False)
         if hasattr(self, 'playlist_start_entry') and self.playlist_start_entry.isVisible():
             self.playlist_start_entry.setEnabled(False)
             self.playlist_end_entry.setEnabled(False)
         if hasattr(self, 'normalize_target_entry') and self.normalize_target_entry.isVisible():
             self.normalize_target_entry.setEnabled(False)
+        if hasattr(self, 'template_entry'):
+            self.template_entry.setEnabled(False)
+        if hasattr(self, 'template_presets'):
+            self.template_presets.setEnabled(False)
 
     def enable_interactive_widgets(self):
         """Re-enable all interactive widgets after download."""
@@ -43,13 +47,17 @@ class EventHandlersMixin:
             w.setEnabled(True)
         for w in (self.mp3_radio, self.mp4_radio, self.opus_radio,
                   self.no_playlist_radio, self.yes_playlist_radio,
-                  self.normalize_check, self.enrich_check, self.prevent_sleep_check):
+                  self.normalize_check, self.enrich_check):
             w.setEnabled(True)
         if hasattr(self, 'playlist_start_entry') and self.playlist_start_entry.isVisible():
             self.playlist_start_entry.setEnabled(True)
             self.playlist_end_entry.setEnabled(True)
         if hasattr(self, 'normalize_target_entry') and self.normalize_target_entry.isVisible():
             self.normalize_target_entry.setEnabled(True)
+        if hasattr(self, 'template_entry'):
+            self.template_entry.setEnabled(True)
+        if hasattr(self, 'template_presets'):
+            self.template_presets.setEnabled(True)
 
     # ------------------------------------------------------------------
     # Stop / download-again
@@ -77,14 +85,20 @@ class EventHandlersMixin:
     # ------------------------------------------------------------------
 
     def _on_browse_click(self):
-        """Handle browse button click using native file dialog."""
-        directory = QFileDialog.getExistingDirectory(
-            self, t("path.dialog_title"),
-            self.path_entry.text() or ""
-        )
-        if directory:
-            self.path_entry.setText(directory)
-            settings_manager.set_last_download_directory(directory)
+        """Handle browse button click using Qt file dialog (translated)."""
+        dlg = QFileDialog(self, t("path.dialog_title"), self.path_entry.text() or "")
+        dlg.setFileMode(QFileDialog.FileMode.Directory)
+        dlg.setOption(QFileDialog.Option.DontUseNativeDialog)
+        dlg.setOption(QFileDialog.Option.ShowDirsOnly)
+        # Override labels that Qt's built-in translations miss
+        dlg.setLabelText(QFileDialog.DialogLabel.LookIn, t("dialog.look_in"))
+        dlg.setLabelText(QFileDialog.DialogLabel.FileType, t("dialog.files_of_type"))
+        if dlg.exec() == QFileDialog.DialogCode.Accepted:
+            files = dlg.selectedFiles()
+            if files:
+                directory = files[0]
+                self.path_entry.setText(directory)
+                settings_manager.set_last_download_directory(directory)
 
         if self.on_browse_callback:
             self.on_browse_callback()
@@ -158,7 +172,7 @@ class EventHandlersMixin:
             normalize_volume=self.normalize_check.isChecked(),
             normalize_target=self._get_normalize_target(),
             enrich_metadata=self.enrich_check.isChecked(),
-            prevent_sleep=self.prevent_sleep_check.isChecked()
+            output_template=self.template_entry.text().strip() if hasattr(self, 'template_entry') else ""
         )
 
     def _get_current_bitrate(self) -> str:
@@ -225,8 +239,26 @@ class EventHandlersMixin:
         self._save_preferences()
 
     def _on_prevent_sleep_toggled(self, checked):
-        """Handle prevent sleep checkbox toggle."""
-        self._save_preferences()
+        """Handle prevent sleep menu action toggle."""
+        from utils import settings_manager
+        settings_manager.set_setting("prevent_sleep", checked)
+
+    def _on_experimental_toggled(self, checked):
+        """Handle experimental version menu action toggle."""
+        from utils import settings_manager
+        settings_manager.set_setting("use_experimental_branch", checked)
+        if checked:
+            QMessageBox.information(
+                self,
+                t("menu.settings.experimental_restart_title"),
+                t("menu.settings.experimental_restart_msg_on")
+            )
+        else:
+            QMessageBox.information(
+                self,
+                t("menu.settings.experimental_restart_title"),
+                t("menu.settings.experimental_restart_msg_off")
+            )
 
     def _on_quality_or_bitrate_changed(self, index):
         """Handle quality/bitrate combo box change."""
@@ -243,4 +275,35 @@ class EventHandlersMixin:
 
     def _on_playlist_range_changed(self):
         """Handle playlist start/end spinbox change."""
+        self._save_preferences()
+
+    def _on_template_text_changed(self, text):
+        """Handle template text changes: validate, sync dropdown, and save."""
+        self._validate_template_visual(text)
+
+        # Sync dropdown selection to typed text
+        if hasattr(self, 'template_presets'):
+            self.template_presets.blockSignals(True)
+            idx = self.template_presets.findData(text)
+            if idx >= 0:
+                self.template_presets.setCurrentIndex(idx)
+            elif text.strip():
+                # Custom text: select "Custom" (last item)
+                self.template_presets.setCurrentIndex(self.template_presets.count() - 1)
+            else:
+                self.template_presets.setCurrentIndex(0)
+            self.template_presets.blockSignals(False)
+
+        self._save_preferences()
+
+    def _on_template_preset_changed(self, index):
+        """Handle template preset dropdown change."""
+        if index < 0:
+            return
+        template_val = self.template_presets.itemData(index)
+        if template_val:
+            self.template_entry.blockSignals(True)
+            self.template_entry.setText(template_val)
+            self.template_entry.blockSignals(False)
+            self._validate_template_visual(template_val)
         self._save_preferences()

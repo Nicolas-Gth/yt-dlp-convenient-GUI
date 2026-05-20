@@ -261,16 +261,14 @@ def _pick_best_release(recording: Dict, album_from_yt: str) -> Optional[Dict]:
             priority += 7
         elif primary_type == "single":
             priority += 5
-        
+
         if "compilation" in secondary_types:
             priority -= 5
-        
-        # Prefer releases with a date and country (more complete data)
+
+        # Prefer releases with a date (more complete data)
         if release.get("date"):
             priority += 2
-        if release.get("country"):
-            priority += 1
-        
+
         # When priorities are equal, prefer the oldest release (original)
         # over reissues/remasters which have later dates
         release_date = release.get("date", "9999")
@@ -379,16 +377,17 @@ def fetch_cover_art(release_id: str, release_group_id: str = "",
     Returns JPEG/PNG bytes or None.
     """
     urls_to_try = []
-    
-    # Priority 1: release-group (aggregates all editions of the album)
+
+    # Priority 1: release-group (usually gives the canonical/global cover
+    # independent of regional editions, avoiding Japanese obi strips etc.)
     if release_group_id:
         urls_to_try.append(f"{_CA_BASE}/release-group/{release_group_id}/front-1200")
         urls_to_try.append(f"{_CA_BASE}/release-group/{release_group_id}/front")
-    
+
     # Priority 2: the specific release matched
     urls_to_try.append(f"{_CA_BASE}/release/{release_id}/front-1200")
     urls_to_try.append(f"{_CA_BASE}/release/{release_id}/front")
-    
+
     # Priority 3: other releases of the same album
     for rid in (fallback_release_ids or []):
         if rid != release_id:
@@ -737,15 +736,26 @@ def enrich_metadata(video_infos: Dict) -> Optional[EnrichedMetadata]:
     enriched = EnrichedMetadata()
     
     # --- Step 1: HD album cover (ONLY if YouTube provides album info) ---
+    # Strategy: iTunes first (clean, curated digital covers), then MusicBrainz/CAA.
     if yt_album:
-        print(f"[metadata] Album from YouTube: \"{yt_album}\" — searching MusicBrainz for HD cover")
+        print(f"[metadata] Album from YouTube: \"{yt_album}\" — trying iTunes cover first")
+        itunes_cover = fetch_cover_art_itunes(artist, yt_album, title)
+        if itunes_cover:
+            enriched.cover_data = itunes_cover
+            enriched.cover_mime = "image/jpeg"
+            print(f"[metadata] HD cover from iTunes")
+        if _itunes_last_genre:
+            enriched.genre = _itunes_last_genre
+
+        # Always query MusicBrainz for textual metadata (date, track number, etc.)
+        print(f"[metadata] Searching MusicBrainz for textual metadata...")
         recording = search_musicbrainz(artist, title, yt_album)
-        
+
         if recording:
             enriched.confidence = recording.get("_match_score", 0)
             enriched.mb_recording_id = recording.get("id", "")
             release = _pick_best_release(recording, yt_album)
-            
+
             if release:
                 enriched.mb_release_id = release.get("id")
                 enriched.album = release.get("title")
@@ -757,12 +767,12 @@ def enrich_metadata(video_infos: Dict) -> Optional[EnrichedMetadata]:
                         enriched.full_date = raw_date
                 else:
                     enriched.date = raw_date
-                
+
                 # Get release-group ID for cover art fallback
                 release_group = release.get("release-group", {})
                 release_group_id = release_group.get("id", "")
                 enriched.mb_release_group_id = release_group_id
-                
+
                 # Collect other release IDs as fallback for cover art
                 # ONLY include releases from the same release-group
                 # (= same album, different editions) to avoid getting
@@ -772,7 +782,7 @@ def enrich_metadata(video_infos: Dict) -> Optional[EnrichedMetadata]:
                     if r.get("id") and r.get("id") != enriched.mb_release_id
                     and r.get("release-group", {}).get("id") == release_group_id
                 ]
-                
+
                 # Get track number from the release media
                 for medium in release.get("media", []):
                     track_offset = medium.get("track-offset", 0)
@@ -780,19 +790,16 @@ def enrich_metadata(video_infos: Dict) -> Optional[EnrichedMetadata]:
                     if track_count > 0:
                         enriched.track_number = str(track_offset + 1)
                         enriched.total_tracks = str(track_count)
-                
+
                 # Get album artist
                 if release_group:
                     for credit in release_group.get("artist-credit", []):
                         enriched.album_artist = credit.get("name", "") or credit.get("artist", {}).get("name", "")
                         break
-                
-                # Fetch genre: iTunes first (curated), MusicBrainz as fallback
-                # (iTunes genre is fetched later, after cover art)
-                
-                # Fetch HD cover art (release-group → release → fallback releases)
-                if enriched.mb_release_id:
-                    print(f"[metadata] Fetching HD cover from Cover Art Archive...")
+
+                # Fallback to CAA if iTunes didn't return a cover
+                if not enriched.cover_data and enriched.mb_release_id:
+                    print(f"[metadata] No iTunes cover, trying Cover Art Archive...")
                     cover_data = fetch_cover_art(
                         enriched.mb_release_id,
                         release_group_id=release_group_id,
@@ -804,33 +811,14 @@ def enrich_metadata(video_infos: Dict) -> Optional[EnrichedMetadata]:
                             enriched.cover_mime = "image/png"
                         else:
                             enriched.cover_mime = "image/jpeg"
-                    else:
-                        # Fallback: try iTunes Search API
-                        print(f"[metadata] Trying iTunes as fallback...")
-                        itunes_cover = fetch_cover_art_itunes(artist, yt_album, title)
-                        if itunes_cover:
-                            enriched.cover_data = itunes_cover
-                            enriched.cover_mime = "image/jpeg"
-
             else:
                 print(f"[metadata] No matching release for album \"{yt_album}\"")
-                # Fallback: try iTunes even without a MusicBrainz release match
-                print(f"[metadata] Trying iTunes as fallback...")
-                itunes_cover = fetch_cover_art_itunes(artist, yt_album, title)
-                if itunes_cover:
-                    enriched.cover_data = itunes_cover
-                    enriched.cover_mime = "image/jpeg"
-                    enriched.album = yt_album
-
         else:
             print(f"[metadata] MusicBrainz search returned no match for album \"{yt_album}\"")
-            # Fallback: try iTunes directly (doesn't need MusicBrainz)
-            print(f"[metadata] Trying iTunes as fallback...")
-            itunes_cover = fetch_cover_art_itunes(artist, yt_album, title)
-            if itunes_cover:
-                enriched.cover_data = itunes_cover
-                enriched.cover_mime = "image/jpeg"
-                enriched.album = yt_album
+
+        # If we still have no album name but iTunes found a cover, at least set album
+        if not enriched.album and enriched.cover_data:
+            enriched.album = yt_album
 
     else:
         print(f"[metadata] No album info from YouTube — skipping cover art lookup")
@@ -851,14 +839,9 @@ def enrich_metadata(video_infos: Dict) -> Optional[EnrichedMetadata]:
     enriched.synced_lyrics = synced_lyrics
     
     # --- Step 3: Genre ---
-    # Priority 1: iTunes per-song genre (curated, standardized classification)
-    # Always call iTunes for this specific track — don't reuse _itunes_last_genre
-    # from an earlier track in the same playlist session (it would be wrong).
-    if not enriched.genre:
-        fetch_cover_art_itunes(artist, yt_album or "", title)
-        if _itunes_last_genre:
-            enriched.genre = _itunes_last_genre
-            print(f"[metadata] \u2713 Genre (iTunes): {enriched.genre}")
+    # Priority 1: iTunes per-song genre (already fetched alongside cover art above).
+    if enriched.genre:
+        print(f"[metadata] \u2713 Genre (iTunes): {enriched.genre}")
     
     # Priority 2: MusicBrainz recording + release-group tags (more detailed)
     if not enriched.genre:

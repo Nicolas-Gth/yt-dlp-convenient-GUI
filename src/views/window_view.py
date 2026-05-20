@@ -6,7 +6,7 @@ menu bar, and dynamic window resizing.
 """
 from PySide6.QtGui import QFont, QIcon, QAction, QActionGroup, QDesktopServices
 from PySide6.QtCore import Qt, QUrl
-from PySide6.QtWidgets import QMenuBar, QMenu, QMessageBox
+from PySide6.QtWidgets import QMenuBar, QMenu, QMessageBox, QWidgetAction, QCheckBox
 from config import APP_TITLE, APP_NAME, APP_VERSION, APP_AUTHOR, APP_AUTHOR_URL, ICON_PATH, COOKIES_DIR
 from utils.i18n_utils import t, AVAILABLE_LANGUAGES, MENU_LANGUAGES
 
@@ -23,6 +23,13 @@ class WindowMixin:
             self.setWindowIcon(icon)
 
         self._setup_menu_bar()
+
+    def _update_window_title(self, experimental: bool = False):
+        """Update the window title to show an experimental indicator."""
+        if experimental:
+            self.setWindowTitle(f"{APP_TITLE}  [Experimental]")
+        else:
+            self.setWindowTitle(APP_TITLE)
 
     def _setup_menu_bar(self):
         """Create the application menu bar."""
@@ -53,6 +60,27 @@ class WindowMixin:
             self._theme_group.addAction(action)
             self._theme_menu.addAction(action)
         self._theme_group.actions()[0].setChecked(True)
+
+        # --- Settings menu ---
+        self._settings_menu = menu_bar.addMenu(t("menu.settings"))
+
+        # Prevent sleep — use QWidgetAction so the menu stays open on click
+        self._prevent_sleep_action = QWidgetAction(self)
+        self._prevent_sleep_check = QCheckBox(t("menu.settings.prevent_sleep"))
+        self._prevent_sleep_check.setCursor(Qt.PointingHandCursor)
+        self._prevent_sleep_check.setStyleSheet("QCheckBox { padding-left: 8px; padding-right: 8px; padding-top: 4px; padding-bottom: 4px; }")
+        self._prevent_sleep_check.toggled.connect(self._on_prevent_sleep_toggled)
+        self._prevent_sleep_action.setDefaultWidget(self._prevent_sleep_check)
+        self._settings_menu.addAction(self._prevent_sleep_action)
+
+        # Experimental version
+        self._experimental_action = QWidgetAction(self)
+        self._experimental_check = QCheckBox(t("menu.settings.experimental_version"))
+        self._experimental_check.setCursor(Qt.PointingHandCursor)
+        self._experimental_check.setStyleSheet("QCheckBox { padding-left: 8px; padding-right: 8px; padding-top: 4px; padding-bottom: 4px; }")
+        self._experimental_check.toggled.connect(self._on_experimental_toggled)
+        self._experimental_action.setDefaultWidget(self._experimental_check)
+        self._settings_menu.addAction(self._experimental_action)
 
         # --- Help menu ---
         self._help_menu = menu_bar.addMenu(t("menu.help"))
@@ -104,6 +132,9 @@ class WindowMixin:
         # Menu titles
         self._lang_menu.setTitle(t("menu.language"))
         self._theme_menu.setTitle(t("menu.theme"))
+        self._settings_menu.setTitle(t("menu.settings"))
+        self._prevent_sleep_check.setText(t("menu.settings.prevent_sleep"))
+        self._experimental_check.setText(t("menu.settings.experimental_version"))
         self._help_menu.setTitle(t("menu.help"))
         self._cookies_help_action.setText(t("menu.help.youtube_cookies"))
         self._infos_menu.setTitle(t("menu.infos"))
@@ -142,6 +173,19 @@ class WindowMixin:
                 self._populate_quality_menu()
             else:
                 self._populate_bitrate_menu()
+        if hasattr(self, 'template_entry'):
+            self.template_entry.setPlaceholderText(t("format.template_placeholder"))
+        if hasattr(self, 'template_presets'):
+            # Repopulate preset dropdown with translated labels, preserving selection
+            current_data = self.template_presets.currentData()
+            self.template_presets.blockSignals(True)
+            self.template_presets.clear()
+            for template_val, label_key in self._TEMPLATE_PRESETS:
+                self.template_presets.addItem(t(label_key), template_val)
+            self.template_presets.addItem(t("format.template_preset_custom"), None)
+            idx = self.template_presets.findData(current_data)
+            self.template_presets.setCurrentIndex(idx if idx >= 0 else self.template_presets.count() - 1)
+            self.template_presets.blockSignals(False)
         if hasattr(self, 'playlist_box'):
             self.playlist_box.setTitle(t("playlist.group_title"))
             self.no_playlist_radio.setText(t("playlist.no"))
@@ -156,12 +200,17 @@ class WindowMixin:
             self.normalize_target_label.setText(t("options.normalize_target"))
         if hasattr(self, 'enrich_check'):
             self.enrich_check.setText(t("options.enrich_metadata"))
-        if hasattr(self, 'prevent_sleep_check'):
-            self.prevent_sleep_check.setText(t("options.prevent_sleep"))
 
         # Convert button (only if not mid-download)
         if hasattr(self, 'convert_button') and self.convert_button.isVisible():
             self.convert_button.setText(" " + t("button.download"))
+
+        # Tab titles
+        if hasattr(self, 'tabs'):
+            self.tabs.setTabText(0, t("tabs.download"))
+            idx = self.tabs.indexOf(getattr(self, '_files_tab', None))
+            if idx >= 0:
+                self.tabs.setTabText(idx, t("tabs.files"))
 
     def _open_install_folder(self):
         """Open the application installation folder in the system file browser."""
@@ -236,12 +285,13 @@ class WindowMixin:
                     w += max(child.sizeHint().width(),
                             _widest_leaf(child.layout()) if child.layout() else 0)
         else:
-            w = cw.layout().sizeHint().width()
+            self.main_layout.activate()
+            w = self.main_layout.sizeHint().width()
 
         w = int(w * margin)
 
-        cw.layout().activate()
-        h = cw.layout().sizeHint().height() + extra_height
+        self.main_layout.activate()
+        h = self.main_layout.sizeHint().height() + extra_height
         diff_w = max(0, self.frameGeometry().width() - cw.width())
         diff_h = max(0, self.frameGeometry().height() - cw.height())
         if w > diff_w:
