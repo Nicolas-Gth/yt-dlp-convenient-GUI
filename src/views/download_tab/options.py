@@ -74,18 +74,6 @@ class DownloadOptionsMixin:
 
         options_layout.addLayout(enrich_layout)
 
-        # Prevent sleep
-        sleep_layout = QHBoxLayout()
-
-        self.prevent_sleep_check = QCheckBox(t("options.prevent_sleep"))
-        self.prevent_sleep_check.setCursor(Qt.PointingHandCursor)
-        self.prevent_sleep_check.setChecked(self._prevent_sleep_var)
-        self.prevent_sleep_check.toggled.connect(self._on_prevent_sleep_toggled)
-        sleep_layout.addWidget(self.prevent_sleep_check)
-        sleep_layout.addStretch()
-
-        options_layout.addLayout(sleep_layout)
-
         options_wrapper = QHBoxLayout()
         options_wrapper.setContentsMargins(5, 0, 5, 0)
         options_wrapper.addWidget(self.options_box)

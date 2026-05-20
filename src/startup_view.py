@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
 from config import APP_NAME, ICON_PATH
 from utils.i18n_utils import t
 from utils import startup_utils
+from utils.settings_utils import settings_manager
 
 
 class _CheckWorker(QThread):
@@ -80,10 +81,11 @@ class _UpdateWorker(QThread):
     update_info = Signal(int, str)
     finished_signal = Signal(bool)
 
-    def __init__(self, apply: bool = False, remote_branch: str = "", parent=None):
+    def __init__(self, apply: bool = False, remote_branch: str = "", branch: str = "", parent=None):
         super().__init__(parent)
         self._apply = apply
         self._remote_branch = remote_branch
+        self._branch = branch
 
     def run(self):
         if self._apply and self._remote_branch:
@@ -92,8 +94,8 @@ class _UpdateWorker(QThread):
             self.finished_signal.emit(ok)
         else:
             self.progress.emit(t("startup.checking_updates"))
-            behind, branch = startup_utils.check_git_updates()
-            self.update_info.emit(behind, branch or "")
+            behind, remote_branch = startup_utils.check_git_updates(branch=self._branch)
+            self.update_info.emit(behind, remote_branch or "")
             self.finished_signal.emit(False)
 
 
@@ -288,7 +290,9 @@ class StartupDialog(QDialog):
 
     def _check_updates(self):
         self._set_status(t("startup.checking_updates"))
-        self._update_worker = _UpdateWorker(parent=self)
+        experimental = settings_manager.get_setting("use_experimental_branch", False)
+        branch = "dev" if experimental else ""
+        self._update_worker = _UpdateWorker(parent=self, branch=branch)
         self._update_worker.progress.connect(self._set_status)
         self._update_worker.update_info.connect(self._on_update_info)
         self._update_worker.finished_signal.connect(self._on_update_check_done)

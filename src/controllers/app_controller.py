@@ -174,7 +174,7 @@ class ApplicationController:
         self.update_initial_progress_display(video_info, config)
         self.download_controller.start_download(config)
 
-        if self.view.prevent_sleep_check.isChecked():
+        if self.view._prevent_sleep_check.isChecked():
             sleep_inhibitor.inhibit()
     
     def update_initial_progress_display(self, video_info: Dict, config):

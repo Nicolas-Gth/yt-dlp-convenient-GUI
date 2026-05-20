@@ -28,7 +28,7 @@ class EventHandlersMixin:
             w.setEnabled(False)
         for w in (self.mp3_radio, self.mp4_radio, self.opus_radio,
                   self.no_playlist_radio, self.yes_playlist_radio,
-                  self.normalize_check, self.enrich_check, self.prevent_sleep_check):
+                  self.normalize_check, self.enrich_check):
             w.setEnabled(False)
         if hasattr(self, 'playlist_start_entry') and self.playlist_start_entry.isVisible():
             self.playlist_start_entry.setEnabled(False)
@@ -47,7 +47,7 @@ class EventHandlersMixin:
             w.setEnabled(True)
         for w in (self.mp3_radio, self.mp4_radio, self.opus_radio,
                   self.no_playlist_radio, self.yes_playlist_radio,
-                  self.normalize_check, self.enrich_check, self.prevent_sleep_check):
+                  self.normalize_check, self.enrich_check):
             w.setEnabled(True)
         if hasattr(self, 'playlist_start_entry') and self.playlist_start_entry.isVisible():
             self.playlist_start_entry.setEnabled(True)
@@ -172,7 +172,6 @@ class EventHandlersMixin:
             normalize_volume=self.normalize_check.isChecked(),
             normalize_target=self._get_normalize_target(),
             enrich_metadata=self.enrich_check.isChecked(),
-            prevent_sleep=self.prevent_sleep_check.isChecked(),
             output_template=self.template_entry.text().strip() if hasattr(self, 'template_entry') else ""
         )
 
@@ -240,8 +239,26 @@ class EventHandlersMixin:
         self._save_preferences()
 
     def _on_prevent_sleep_toggled(self, checked):
-        """Handle prevent sleep checkbox toggle."""
-        self._save_preferences()
+        """Handle prevent sleep menu action toggle."""
+        from utils import settings_manager
+        settings_manager.set_setting("prevent_sleep", checked)
+
+    def _on_experimental_toggled(self, checked):
+        """Handle experimental version menu action toggle."""
+        from utils import settings_manager
+        settings_manager.set_setting("use_experimental_branch", checked)
+        if checked:
+            QMessageBox.information(
+                self,
+                t("menu.settings.experimental_restart_title"),
+                t("menu.settings.experimental_restart_msg_on")
+            )
+        else:
+            QMessageBox.information(
+                self,
+                t("menu.settings.experimental_restart_title"),
+                t("menu.settings.experimental_restart_msg_off")
+            )
 
     def _on_quality_or_bitrate_changed(self, index):
         """Handle quality/bitrate combo box change."""

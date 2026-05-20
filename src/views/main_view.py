@@ -104,9 +104,21 @@ class MainApplicationView(QMainWindow, WindowMixin, DownloadTabMixin, ProgressMi
         self._normalize_var = preferences.get("normalize_volume", False)
         self._normalize_target_var = preferences.get("normalize_target", DEFAULT_NORMALIZE_TARGET)
         self._enrich_var = preferences.get("enrich_metadata", False)
-        self._prevent_sleep_var = preferences.get("prevent_sleep", False)
         self._output_template_var = preferences.get("output_template", "")
         self._widgets_locked = False
+
+        # Menu settings state
+        settings = settings_manager.load_settings()
+        if hasattr(self, '_prevent_sleep_check'):
+            self._prevent_sleep_check.blockSignals(True)
+            self._prevent_sleep_check.setChecked(settings.get("prevent_sleep", False))
+            self._prevent_sleep_check.blockSignals(False)
+        if hasattr(self, '_experimental_check'):
+            self._experimental_check.blockSignals(True)
+            self._experimental_check.setChecked(settings.get("use_experimental_branch", False))
+            self._experimental_check.blockSignals(False)
+        if hasattr(self, '_update_window_title'):
+            self._update_window_title(experimental=settings.get("use_experimental_branch", False))
 
     # ------------------------------------------------------------------
     # Download config builder
@@ -160,7 +172,6 @@ class MainApplicationView(QMainWindow, WindowMixin, DownloadTabMixin, ProgressMi
             normalize_volume=config.normalize_volume,
             normalize_target=config.normalize_target,
             enrich_metadata=config.enrich_metadata,
-            prevent_sleep=self.prevent_sleep_check.isChecked(),
             output_template=config.output_template
         )
 

@@ -30,6 +30,7 @@ class SettingsManager:
             "last_normalize_target": -14.0,
             "last_enrich_metadata": False,
             "last_prevent_sleep": False,
+            "use_experimental_branch": False,
             "last_output_template": ""
         }
         
@@ -119,7 +120,6 @@ class SettingsManager:
             "normalize_volume": settings.get("last_normalize_volume", False),
             "normalize_target": settings.get("last_normalize_target", -14.0),
             "enrich_metadata": settings.get("last_enrich_metadata", False),
-            "prevent_sleep": settings.get("last_prevent_sleep", False),
             "output_template": settings.get("last_output_template", "")
         }
     
@@ -127,7 +127,7 @@ class SettingsManager:
                                 opus_bitrate: str = "Best",
                                 playlist_start: int = 1, playlist_end: int = 999,
                                 normalize_volume: bool = False, normalize_target: float = -14.0,
-                                enrich_metadata: bool = False, prevent_sleep: bool = False,
+                                enrich_metadata: bool = False,
                                 output_template: str = ""):
         """Save format preferences."""
         settings = self.load_settings()
@@ -141,7 +141,6 @@ class SettingsManager:
         settings["last_normalize_volume"] = normalize_volume
         settings["last_normalize_target"] = normalize_target
         settings["last_enrich_metadata"] = enrich_metadata
-        settings["last_prevent_sleep"] = prevent_sleep
         settings["last_output_template"] = output_template
         self.save_settings(settings)
 
