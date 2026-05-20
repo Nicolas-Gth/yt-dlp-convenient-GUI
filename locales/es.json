@@ -115,6 +115,7 @@
   "files.lyrics": "Letras",
   "files.modified": "Última modificación",
   "files.loading": "Cargando…",
+  "files.search_placeholder": "Buscar…",
   "files.structure_title": "Estructura de carpetas",
   "files.apply_format": "Aplicar formato",
   "files.confirm_reorganize_title": "Confirmar reorganización",

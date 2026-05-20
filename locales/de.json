@@ -115,6 +115,7 @@
   "files.lyrics": "Liedtext",
   "files.modified": "Zuletzt geändert",
   "files.loading": "Laden…",
+  "files.search_placeholder": "Suchen…",
   "files.structure_title": "Ordnerstruktur",
   "files.apply_format": "Format anwenden",
   "files.confirm_reorganize_title": "Neuorganisation bestätigen",

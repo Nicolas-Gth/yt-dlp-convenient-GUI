@@ -88,6 +88,13 @@ class FilesSetupMixin:
         files_layout = QVBoxLayout(files_group)
         files_layout.setContentsMargins(5, 10, 5, 8)
 
+        # Search bar above the file table
+        self._files_search = QLineEdit()
+        self._files_search.setPlaceholderText(t("files.search_placeholder"))
+        self._files_search.setClearButtonEnabled(True)
+        self._files_search.textChanged.connect(self._on_files_search_changed)
+        files_layout.addWidget(self._files_search)
+
         self._files_table = QTableWidget(0, 5)
         self._files_table.setHorizontalHeaderLabels([
             t("files.filename"),

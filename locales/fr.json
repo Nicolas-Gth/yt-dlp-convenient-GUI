@@ -116,6 +116,7 @@
   "files.lyrics": "Paroles",
   "files.modified": "Dernière modification",
   "files.loading": "Chargement…",
+  "files.search_placeholder": "Rechercher…",
   "files.group_title": "Fichiers",
   "files.structure_title": "Structure du dossier",
   "files.apply_format": "Appliquer le format",

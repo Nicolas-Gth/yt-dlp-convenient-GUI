@@ -116,6 +116,7 @@
   "files.lyrics": "Lyrics",
   "files.modified": "Last modified",
   "files.loading": "Loading…",
+  "files.search_placeholder": "Search…",
   "files.group_title": "Files",
   "files.structure_title": "Folder structure",
   "files.apply_format": "Apply format",

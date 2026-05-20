@@ -216,6 +216,21 @@ class FilesListMixin:
             return
         self._show_file_detail(filepath)
 
+    def _on_files_search_changed(self, text):
+        """Filter the file table rows based on the search text."""
+        query = text.lower().strip()
+        for row in range(self._files_table.rowCount()):
+            if not query:
+                self._files_table.setRowHidden(row, False)
+                continue
+            match = False
+            for col in (0, 1, 2):
+                item = self._files_table.item(row, col)
+                if item and query in item.text().lower():
+                    match = True
+                    break
+            self._files_table.setRowHidden(row, not match)
+
     def _on_watcher_changed(self, path):
         """Mark file list as stale — refresh will happen on next explicit request."""
         self._files_pending_refresh = True
