@@ -188,7 +188,9 @@ class FilesListMixin:
                 else:
                     if current_detail == selected_filepath:
                         self._show_file_detail(None)
-            # else: no saved selection → keep as-is
+            elif current_detail is None:
+                # No saved selection and panel is empty → show the empty state
+                self._show_file_detail(None)
 
         # Watch directories so we know when to refresh without scanning every time
         if watched_dirs and hasattr(self, '_file_watcher'):
