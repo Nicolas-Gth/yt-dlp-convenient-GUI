@@ -85,14 +85,25 @@ class _FlowLayout(QLayout):
 class _ArtworkLabel(QLabel):
     """QLabel that scales its pixmap to fit the label width."""
 
+    _placeholder_pix = None
+
     def __init__(self):
         super().__init__()
         self._pix = None
         self.setAlignment(Qt.AlignCenter)
         self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
 
+    @classmethod
+    def _get_placeholder(cls) -> QPixmap:
+        if cls._placeholder_pix is None:
+            cls._placeholder_pix = QPixmap("assets/ui/image-placeholder-icon.svg")
+        return cls._placeholder_pix
+
     def setArtwork(self, pix):
-        self._pix = pix
+        if pix is not None and not pix.isNull():
+            self._pix = pix
+        else:
+            self._pix = self._get_placeholder()
         self._apply()
 
     def resizeEvent(self, event: QResizeEvent):
@@ -103,8 +114,9 @@ class _ArtworkLabel(QLabel):
         if self._pix and not self._pix.isNull() and self.width() > 4 and self.height() > 4:
             scaled = self._pix.scaled(
                 self.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
-            rounded = round_pixmap(scaled, radius=4)
-            self.setPixmap(rounded)
+            if self._pix is not self._get_placeholder():
+                scaled = round_pixmap(scaled, radius=4)
+            self.setPixmap(scaled)
         else:
             self.clear()
 
@@ -112,9 +124,9 @@ class _ArtworkLabel(QLabel):
         return QSize(20, 20)
 
     def sizeHint(self):
+        w = max(self.width(), 20)
         if not self._pix or self._pix.isNull():
             return QSize(20, 20)
-        w = max(self.width(), 20)
         ratio = self._pix.height() / max(self._pix.width(), 1)
         return QSize(w, int(w * ratio))
 
