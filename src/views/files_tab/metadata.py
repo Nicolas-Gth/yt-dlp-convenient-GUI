@@ -236,3 +236,51 @@ def _extract_lyrics_text(audio) -> Optional[str]:
     except Exception:
         pass
     return None
+
+
+def _embed_artwork(filepath: str, image_data: bytes, mime: str = "image/jpeg") -> bool:
+    """Embed *image_data* as front cover into *filepath*.
+
+    Returns True on success, False on failure.
+    """
+    ext = os.path.splitext(filepath)[1].lower()
+    try:
+        if ext == '.mp3':
+            from mutagen.id3 import ID3, APIC
+            try:
+                audio = ID3(filepath)
+            except Exception:
+                audio = ID3()
+            audio["APIC"] = APIC(
+                encoding=0, mime=mime, type=3, desc="Cover", data=image_data
+            )
+            audio.save(filepath)
+            return True
+
+        elif ext == '.mp4':
+            from mutagen.mp4 import MP4
+            audio = MP4(filepath)
+            audio.tags['covr'] = [image_data]
+            audio.save()
+            return True
+
+        elif ext == '.opus':
+            import base64
+            from mutagen import File as MutagenFile
+            from mutagen.flac import Picture
+            audio = MutagenFile(filepath)
+            if audio is None:
+                return False
+            pic = Picture()
+            pic.type = 3
+            pic.mime = mime
+            pic.desc = "Cover"
+            pic.data = image_data
+            audio['metadata_block_picture'] = [
+                base64.b64encode(pic.write()).decode('ascii')
+            ]
+            audio.save()
+            return True
+    except Exception as e:
+        print(f"[embed_artwork] Failed to embed cover: {e}")
+    return False

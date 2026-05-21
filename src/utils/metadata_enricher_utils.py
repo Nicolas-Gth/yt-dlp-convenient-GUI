@@ -17,6 +17,7 @@ import re
 import urllib.request
 import urllib.parse
 import urllib.error
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from io import BytesIO
 from typing import Optional, Dict, Tuple, List
 from dataclasses import dataclass
@@ -492,16 +493,229 @@ def fetch_cover_art_itunes(artist: str, album: str, title: str = "") -> Optional
     
     if not best_url:
         return None
-    
+
     # iTunes returns 100x100 by default — request 1200x1200
     hd_url = best_url.replace("100x100bb", "1200x1200bb")
-    
+
     cover_data = _request(hd_url, timeout=15)
     if cover_data and len(cover_data) > 1000:
         print(f"[metadata] Got HD cover from iTunes: {len(cover_data)} bytes")
         return cover_data
-    
+
     return None
+
+
+def search_cover_art_itunes(query: str = "", artist: str = "", album: str = "", title: str = "", limit: int = 10) -> List[dict]:
+    """
+    Search iTunes for cover art candidates and return a list of result dicts.
+
+    *query* is free-form text (e.g. "artist album"). If empty, falls back to
+    the old artist/album/title arguments.
+
+    Each dict contains:
+        - artist, album, track, artwork_url, artwork_data (bytes or None)
+    """
+    results: List[dict] = []
+    seen_urls: set = set()
+
+    queries = []
+    if query:
+        queries.append((query, "song"))
+        queries.append((query, "album"))
+    else:
+        if title:
+            queries.append((f"{artist} {title}", "song"))
+        if album:
+            queries.append((f"{artist} {album}", "album"))
+        if artist and not album and not title:
+            queries.append((artist, "album"))
+
+    for q, entity in queries:
+        params = urllib.parse.urlencode({
+            "term": q,
+            "media": "music",
+            "entity": entity,
+            "limit": str(limit),
+            "country": "US"
+        })
+        url = f"{_ITUNES_BASE}/search?{params}"
+        data = _request(url)
+        if not data:
+            continue
+        try:
+            items = json.loads(data).get("results", [])
+        except (json.JSONDecodeError, KeyError):
+            continue
+
+        for item in items:
+            url_100 = item.get("artworkUrl100", "")
+            if not url_100 or url_100 in seen_urls:
+                continue
+            seen_urls.add(url_100)
+
+            hd_url = url_100.replace("100x100bb", "1200x1200bb")
+            thumb_url = url_100.replace("100x100bb", "300x300bb")
+
+            results.append({
+                "artist": item.get("artistName", ""),
+                "album": item.get("collectionName", ""),
+                "track": item.get("trackName", ""),
+                "artwork_url": hd_url,
+                "artwork_thumb_url": thumb_url,
+                "artwork_data": None,
+            })
+
+        if len(results) >= limit:
+            break
+
+    # Download thumbnail data for each result (small, fast)
+    for r in results:
+        thumb_data = _request(r["artwork_thumb_url"], timeout=10)
+        if thumb_data and len(thumb_data) > 500:
+            r["artwork_data"] = thumb_data
+
+    return results[:limit]
+
+
+def search_cover_art_musicbrainz(query: str = "", artist: str = "", album: str = "", title: str = "", limit: int = 10) -> List[dict]:
+    """
+    Search MusicBrainz + Cover Art Archive for cover art candidates.
+
+    Uses parallel requests for CAA checks and thumbnail downloads to
+    minimize latency (CAA is very slow, ~2-4s per request).
+
+    Returns a list of result dicts in the same format as iTunes.
+    """
+    results: List[dict] = []
+
+    # Build Lucene query
+    query_parts = []
+    if query:
+        query_parts.append(query)
+    else:
+        if artist:
+            query_parts.append(f'artist:"{artist}"')
+        if album:
+            query_parts.append(f'release:"{album}"')
+        if title and not album:
+            query_parts.append(f'recording:"{title}"')
+
+    if not query_parts:
+        return results
+
+    mb_query = " AND ".join(query_parts)
+    params = urllib.parse.urlencode({
+        "query": mb_query,
+        "fmt": "json",
+        "limit": str(limit * 3)
+    })
+    url = f"{_MB_BASE}/release?{params}"
+
+    data = _request(url)
+    if not data:
+        return results
+
+    try:
+        releases = json.loads(data).get("releases", [])
+    except (json.JSONDecodeError, KeyError):
+        return results
+
+    # --- Parallel CAA checks ---
+    # Build list of unique (release, rg_id) pairs for deduplication
+    unique_releases = []
+    seen_rg = set()
+    for release in releases:
+        release_id = release.get("id", "")
+        rg_id = release.get("release-group", {}).get("id", "")
+        dedup_id = rg_id or release_id
+        if dedup_id in seen_rg:
+            continue
+        seen_rg.add(dedup_id)
+        unique_releases.append((release, rg_id, release_id))
+        if len(unique_releases) >= limit * 2:
+            break
+
+    def _check_caa(release_rg_id):
+        """Check CAA for a release-group, return (rg_id, thumb_url, hd_url) or None."""
+        if not release_rg_id:
+            return None
+        caa_data = _request(f"{_CA_BASE}/release-group/{release_rg_id}", timeout=10)
+        if not caa_data:
+            return None
+        try:
+            caa_json = json.loads(caa_data)
+            images = caa_json.get("images", [])
+            if images:
+                front = next((img for img in images if img.get("front")), images[0])
+                thumbs = front.get("thumbnails", {})
+                thumb = thumbs.get("small") or thumbs.get("250")
+                hd = front.get("image")
+                return (release_rg_id, thumb, hd)
+        except (json.JSONDecodeError, KeyError):
+            pass
+        return None
+
+    # Run CAA checks in parallel (CAA is very slow, ~2-4s each)
+    caa_results = {}
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        futures = {executor.submit(_check_caa, rg_id): rg_id
+                   for _, rg_id, _ in unique_releases if rg_id}
+        for future in as_completed(futures):
+            result = future.result()
+            if result:
+                rg_id, thumb, hd = result
+                caa_results[rg_id] = (thumb, hd)
+
+    # Build result list from successful CAA checks (release-group only, no release fallback)
+    seen_ids = set()
+    for release, rg_id, release_id in unique_releases:
+        dedup_id = rg_id or release_id
+        if dedup_id in seen_ids:
+            continue
+        seen_ids.add(dedup_id)
+
+        if not rg_id or rg_id not in caa_results:
+            continue
+
+        thumb_url, hd_url = caa_results[rg_id]
+        if not thumb_url:
+            continue
+
+        artists = []
+        for credit in release.get("artist-credit", []):
+            name = credit.get("name", "") or credit.get("artist", {}).get("name", "")
+            if name:
+                artists.append(name)
+
+        results.append({
+            "artist": "; ".join(artists),
+            "album": release.get("title", ""),
+            "track": "",
+            "artwork_url": hd_url or thumb_url,
+            "artwork_thumb_url": thumb_url,
+            "artwork_data": None,
+        })
+
+        if len(results) >= limit:
+            break
+
+    # --- Parallel thumbnail downloads ---
+    def _download_thumb(url):
+        data = _request(url, timeout=10)
+        return data if data and len(data) > 500 else None
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        futures = {executor.submit(_download_thumb, r["artwork_thumb_url"]): r for r in results}
+        for future in as_completed(futures):
+            r = futures[future]
+            try:
+                thumb_data = future.result()
+                if thumb_data:
+                    r["artwork_data"] = thumb_data
+            except Exception:
+                pass
+
+    return results
 
 
 def _fetch_lyrics_lrclib(artist: str, title: str, album: str = "", duration_sec: int = 0) -> Tuple[Optional[str], Optional[str]]:

@@ -11,7 +11,7 @@ from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
 from config import INFO_ICON_PATH
 from utils.i18n_utils import t
 
-from .widgets import _ArtworkLabel, _SeekSlider, _ArtworkWrapper
+from .widgets import _ArtworkLabel, _SeekSlider, _ArtworkWrapper, _ArtworkEditable
 
 
 class FilesSetupMixin:
@@ -142,7 +142,8 @@ class FilesSetupMixin:
         detail_layout = QVBoxLayout(detail_group)
         detail_layout.setContentsMargins(0, 5, 0, 0)
 
-        self._files_artwork = _ArtworkLabel()
+        self._files_artwork = _ArtworkEditable()
+        self._files_artwork.edit_requested.connect(self._on_edit_artwork_clicked)
         self._current_detail_filepath = None
 
         # Audio player
