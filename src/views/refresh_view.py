@@ -11,13 +11,19 @@ class RefreshMixin:
 
     def refresh_table_theme(self):
         """Force table widgets to pick up the new palette colours."""
-        for attr in ('info_table', '_normalize_table', '_skipped_table', '_files_table', '_files_meta', '_play_btn', '_edit_reset_btn', '_edit_save_btn', '_edit_btn_bar'):
+        for attr in ('info_table', '_normalize_table', '_skipped_table', '_files_table', '_files_meta', '_play_btn', '_lyrics_edit', '_elapsed_label', '_total_label', '_edit_reset_btn', '_edit_save_btn', '_edit_btn_bar'):
             widget = getattr(self, attr, None)
             if widget is not None:
                 sheet = widget.styleSheet()
                 widget.setStyleSheet("")
                 widget.setStyleSheet(sheet)
                 widget.update()
+        # Refresh play/pause icon for current theme
+        if hasattr(self, '_play_btn') and self._play_btn is not None:
+            if hasattr(self, '_media_player') and self._media_player is not None:
+                from PySide6.QtMultimedia import QMediaPlayer
+                is_playing = self._media_player.playbackState() == QMediaPlayer.PlayingState
+                self._update_play_icon(is_playing)
 
     def refresh_table_translation(self):
         """Update table headers and cell content after a language change."""

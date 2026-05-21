@@ -1,8 +1,9 @@
 from PySide6.QtWidgets import QLabel, QWidget, QSlider, QStyle, QSizePolicy, QPushButton, QLayout
-from PySide6.QtGui import QPixmap, QResizeEvent
+from PySide6.QtGui import QPixmap, QResizeEvent, QIcon
 from PySide6.QtCore import Qt, QSize, Signal, QRect, QPoint
 
 from views.common.pixmap_utils import round_pixmap
+from utils.i18n_utils import t
 
 
 class _FlowLayout(QLayout):
@@ -125,16 +126,19 @@ class _ArtworkEditable(_ArtworkLabel):
 
     def __init__(self):
         super().__init__()
-        self._btn = QPushButton("✎")
-        self._btn.setFixedSize(28, 28)
+        self._btn = QPushButton(" " + t("artwork.edit"))
+        self._btn.setFixedSize(80, 28)
         self._btn.setCursor(Qt.PointingHandCursor)
+        self._btn.setIcon(QIcon("assets/ui/edit-icon-light.svg"))
+        self._btn.setIconSize(QSize(14, 14))
         self._btn.setStyleSheet(
             "QPushButton {"
             "  background-color: rgba(0,0,0,0.6);"
             "  color: white;"
             "  border: none;"
             "  border-radius: 4px;"
-            "  font-size: 14px;"
+            "  font-size: 12px;"
+            "  padding: 0 6px;"
             "}"
             "QPushButton:hover { background-color: rgba(0,0,0,0.8); }"
         )

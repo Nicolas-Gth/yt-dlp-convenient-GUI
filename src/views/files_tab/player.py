@@ -1,7 +1,9 @@
-from PySide6.QtCore import Qt, QUrl
+from PySide6.QtCore import Qt, QUrl, QSize
+from PySide6.QtGui import QIcon
 from PySide6.QtMultimedia import QMediaPlayer
 
 from utils.i18n_utils import t
+from utils.theme_utils import is_dark_mode
 
 
 class FilesPlayerMixin:
@@ -21,8 +23,18 @@ class FilesPlayerMixin:
                 self._media_player.setSource(current_url)
             self._media_player.play()
 
+    def _update_play_icon(self, is_playing: bool):
+        """Update play/pause icon based on current state and theme."""
+        dark = is_dark_mode()
+        if is_playing:
+            icon_path = "assets/ui/pause-icon-light.svg" if dark else "assets/ui/pause-icon-dark.svg"
+        else:
+            icon_path = "assets/ui/play-icon-light.svg" if dark else "assets/ui/play-icon-dark.svg"
+        self._play_btn.setIcon(QIcon(icon_path))
+        self._play_btn.setIconSize(QSize(16, 16))
+
     def _on_playback_state_changed(self, state):
-        self._play_btn.setText("⏸" if state == QMediaPlayer.PlayingState else "⏵")
+        self._update_play_icon(is_playing=(state == QMediaPlayer.PlayingState))
 
     def _on_position_changed(self, pos_ms):
         if not self._seeking:

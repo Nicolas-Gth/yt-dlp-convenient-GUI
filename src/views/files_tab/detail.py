@@ -226,7 +226,7 @@ class FilesDetailMixin:
         from PySide6.QtWidgets import QApplication, QComboBox
 
         class SearchWorker(QThread):
-            results_ready = Signal(list, int)  # (new_results, limit_used)
+            results_ready = Signal(list, int, bool)  # (new_results, limit_used, has_more)
             error = Signal()
 
             def __init__(self, api_name, query, artist, album, title, limit, seen):
@@ -259,7 +259,9 @@ class FilesDetailMixin:
                     if url and url not in self.seen:
                         self.seen.add(url)
                         new_items.append(item)
-                self.results_ready.emit(new_items, self.limit)
+                # If API returned fewer results than requested, there are no more pages
+                has_more = len(raw) >= self.limit
+                self.results_ready.emit(new_items, self.limit, has_more)
 
         dlg = QDialog(self)
         dlg.setWindowTitle(t("artwork.select_title"))
@@ -415,12 +417,12 @@ class FilesDetailMixin:
             worker = SearchWorker(api_name, query, artist, album, title, limit, seen_urls)
             current_worker[0] = worker
 
-            def _on_results(new_items, limit_used):
+            def _on_results(new_items, limit_used, has_more):
                 current_worker[0] = None
                 _set_loading(False)
                 all_results.extend(new_items)
                 _build_cards()
-                load_more_btn.setVisible(len(new_items) > 0 and limit_used < 50)
+                load_more_btn.setVisible(has_more and limit_used < 50)
 
             worker.results_ready.connect(_on_results)
             worker.error.connect(lambda: (_set_loading(False), load_more_btn.setVisible(False)))

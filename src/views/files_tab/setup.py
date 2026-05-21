@@ -155,12 +155,13 @@ class FilesSetupMixin:
         self._media_player.durationChanged.connect(self._on_duration_changed)
         self._seeking = False
 
-        self._play_btn = QPushButton("⏵")
+        self._play_btn = QPushButton()
         self._play_btn.setFixedSize(28, 24)
         self._play_btn.setCursor(Qt.PointingHandCursor)
         self._play_btn.setEnabled(False)
         self._play_btn.clicked.connect(self._on_play_clicked)
         self._play_btn.setStyleSheet("QPushButton { padding: 0; text-align: center; }")
+        self._update_play_icon(is_playing=False)
 
         self._seek_slider = _SeekSlider(Qt.Horizontal)
         self._seek_slider.setEnabled(False)
