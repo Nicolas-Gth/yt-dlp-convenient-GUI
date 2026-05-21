@@ -4,7 +4,7 @@ import warnings
 from PySide6.QtWidgets import (
     QTableWidgetItem, QFileDialog, QMessageBox, QDialog, QVBoxLayout, QHBoxLayout,
     QPushButton, QLabel, QScrollArea, QWidget, QGridLayout, QSizePolicy, QLayout,
-    QLineEdit, QStackedWidget
+    QLineEdit, QStackedWidget, QTextEdit, QListWidget, QListWidgetItem
 )
 from PySide6.QtCore import Qt, QTimer, QRect, QPoint, QSize, QThread, Signal
 from PySide6.QtGui import QPixmap
@@ -52,6 +52,7 @@ class FilesDetailMixin:
             self._edit_btn_bar.hide()
             self._lyrics_label.hide()
             self._lyrics_edit.hide()
+            self._lyrics_search_btn.hide()
             QTimer.singleShot(0, self._show_empty_detail)
             return
 
@@ -69,6 +70,7 @@ class FilesDetailMixin:
             self._clear_meta_panel()
             self._files_artwork.setArtwork(None)
             self._edit_btn_bar.hide()
+            self._lyrics_search_btn.hide()
             return
 
         # Artwork
@@ -113,7 +115,7 @@ class FilesDetailMixin:
         # Filename
         self._files_meta.setRowHeight(row, 22)
         ki = QTableWidgetItem(t("tag.filename"))
-        ki.setFlags(Qt.NoItemFlags); f = ki.font(); f.setBold(True); ki.setFont(f)
+        ki.setFlags(Qt.NoItemFlags)
         self._files_meta.setItem(row, 0, ki)
         vi = QTableWidgetItem(os.path.basename(filepath))
         vi.setFlags(Qt.ItemIsEnabled | Qt.ItemIsEditable)
@@ -125,7 +127,7 @@ class FilesDetailMixin:
         for field_name, raw_key, val in fixed:
             self._files_meta.setRowHeight(row, 22)
             ki = QTableWidgetItem(t(_FIELD_LABELS[field_name]))
-            ki.setFlags(Qt.NoItemFlags); f = ki.font(); f.setBold(True); ki.setFont(f)
+            ki.setFlags(Qt.NoItemFlags)
             self._files_meta.setItem(row, 0, ki)
             vi = QTableWidgetItem(val)
             vi.setFlags(Qt.ItemIsEnabled | Qt.ItemIsEditable)
@@ -137,7 +139,7 @@ class FilesDetailMixin:
         for key, val in remaining:
             self._files_meta.setRowHeight(row, 22)
             ki = QTableWidgetItem(_tag_label(key))
-            ki.setFlags(Qt.NoItemFlags); f = ki.font(); f.setBold(True); ki.setFont(f)
+            ki.setFlags(Qt.NoItemFlags)
             ki.setData(Qt.UserRole, key)
             self._files_meta.setItem(row, 0, ki)
             vi = QTableWidgetItem(val)
@@ -153,6 +155,7 @@ class FilesDetailMixin:
         self._lyrics_edit.blockSignals(False)
         self._lyrics_edit.setVisible(True)
         self._lyrics_label.setVisible(True)
+        self._lyrics_search_btn.setVisible(True)
 
         self._files_meta.blockSignals(False)
         with warnings.catch_warnings():
@@ -1062,6 +1065,363 @@ class FilesDetailMixin:
                 if cover_data and len(cover_data) > 1000:
                     mime = "image/png" if cover_data[:4] == b'\x89PNG' else "image/jpeg"
                     _embed_artwork(filepath, cover_data, mime, audio_obj=audio)
+
+            audio.save()
+            self._show_file_detail(filepath)
+        except Exception as e:
+            QMessageBox.warning(self, t("artwork.error_title"), str(e))
+
+    def _on_search_lyrics(self):
+        """Open lyrics search dialog for the current file."""
+        filepath = self._current_detail_filepath
+        if not filepath or not os.path.isfile(filepath):
+            return
+        self._show_lyrics_search_dialog(filepath)
+
+    def _show_lyrics_search_dialog(self, filepath: str):
+        """Show a dialog to search lyrics from LRCLIB and Genius."""
+        from utils.metadata_enricher_utils import search_lyrics_lrclib, _fetch_lyrics_genius
+        from PySide6.QtWidgets import QApplication
+
+        # Read file metadata for pre-fill and duration
+        audio = _load_audio(filepath)
+        file_duration = 0
+        artist, title, album = "", "", ""
+        if audio is not None:
+            try:
+                file_duration = int(getattr(audio.info, 'length', 0))
+            except Exception:
+                pass
+            if audio.tags is not None:
+                from mutagen.mp4 import MP4
+                from mutagen.oggopus import OggOpus
+                try:
+                    if isinstance(audio, OggOpus):
+                        artist = "; ".join(audio.tags.get('artist', []) or []).strip()
+                        title = "; ".join(audio.tags.get('title', []) or []).strip()
+                        album = "; ".join(audio.tags.get('album', []) or []).strip()
+                    elif isinstance(audio, MP4):
+                        artist = (audio.tags.get('\xa9ART', [None])[0] or "").strip()
+                        title = (audio.tags.get('\xa9nam', [None])[0] or "").strip()
+                        album = (audio.tags.get('\xa9alb', [None])[0] or "").strip()
+                    else:
+                        artist = "; ".join(audio.tags.get('TPE1') or []).strip()
+                        title = "; ".join(audio.tags.get('TIT2') or []).strip()
+                        album = "; ".join(audio.tags.get('TALB') or []).strip()
+                except Exception:
+                    pass
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle(t("lyrics.search_title"))
+        dlg.setMinimumWidth(700)
+        dlg.setMinimumHeight(500)
+        layout = QVBoxLayout(dlg)
+        layout.setSpacing(8)
+
+        # Search fields — single row, no labels
+        search_row = QHBoxLayout()
+        search_row.setSpacing(6)
+        title_edit = QLineEdit()
+        title_edit.setPlaceholderText(t("files.title"))
+        title_edit.setText(title)
+        title_edit.setClearButtonEnabled(True)
+        search_row.addWidget(title_edit, 2)
+
+        album_edit = QLineEdit()
+        album_edit.setPlaceholderText(t("tag.album"))
+        album_edit.setText(album)
+        album_edit.setClearButtonEnabled(True)
+        search_row.addWidget(album_edit, 2)
+
+        artist_edit = QLineEdit()
+        artist_edit.setPlaceholderText(t("files.artist"))
+        artist_edit.setText(artist)
+        artist_edit.setClearButtonEnabled(True)
+        search_row.addWidget(artist_edit, 2)
+
+        search_btn = QPushButton(t("artwork.search_btn"))
+        search_btn.setCursor(Qt.PointingHandCursor)
+        search_btn.setDefault(True)
+        search_row.addWidget(search_btn)
+        layout.addLayout(search_row)
+
+        # Splitter: results list (left) | lyrics preview (right)
+        from PySide6.QtWidgets import QSplitter
+        main_splitter = QSplitter(Qt.Horizontal)
+        main_splitter.setHandleWidth(6)
+
+        # Left: results list with header
+        left_container = QWidget()
+        left_layout = QVBoxLayout(left_container)
+        left_layout.setContentsMargins(0, 0, 6, 0)
+        left_layout.setSpacing(4)
+        results_label = QLabel(t("lyrics.results"))
+        left_layout.addWidget(results_label)
+        results_list = QListWidget()
+        results_list.setSpacing(2)
+        results_list.setStyleSheet(
+            "QListWidget { border: 1px solid palette(mid); border-radius: 4px; }"
+            "QListWidget::item { padding: 8px; border-bottom: 1px solid palette(midlight); }"
+            "QListWidget::item:selected { background: palette(highlight); color: palette(highlighted-text); }"
+        )
+        left_layout.addWidget(results_list, 1)
+        main_splitter.addWidget(left_container)
+
+        # Right: lyrics preview with header
+        right_container = QWidget()
+        right_layout = QVBoxLayout(right_container)
+        right_layout.setContentsMargins(6, 0, 0, 0)
+        right_layout.setSpacing(4)
+        preview_label = QLabel(t("lyrics.preview"))
+        right_layout.addWidget(preview_label)
+        preview_edit = QTextEdit()
+        preview_edit.setReadOnly(True)
+        preview_edit.setPlaceholderText(t("files.no_lyrics"))
+        preview_edit.setStyleSheet("QTextEdit { border: 1px solid palette(mid); border-radius: 4px; background: palette(base); }")
+        right_layout.addWidget(preview_edit, 1)
+        main_splitter.addWidget(right_container)
+        main_splitter.setSizes([280, 420])
+
+        layout.addWidget(main_splitter, 1)
+
+        # Bottom buttons
+        bottom_row = QHBoxLayout()
+        bottom_row.addStretch()
+        cancel_btn = QPushButton(t("button.cancel"))
+        cancel_btn.setCursor(Qt.PointingHandCursor)
+        cancel_btn.clicked.connect(dlg.reject)
+        bottom_row.addWidget(cancel_btn)
+
+        apply_btn = QPushButton(t("artwork.apply"))
+        apply_btn.setCursor(Qt.PointingHandCursor)
+        apply_btn.setEnabled(False)
+        apply_btn.clicked.connect(dlg.accept)
+        bottom_row.addWidget(apply_btn)
+        layout.addLayout(bottom_row)
+
+        # State
+        all_results = []
+        selected_result = [None]
+        current_worker = [None]
+
+        def _format_duration_diff(result_duration) -> str:
+            result_duration = int(result_duration) if result_duration else 0
+            if result_duration <= 0 or file_duration <= 0:
+                return ""
+            diff = result_duration - file_duration
+            if diff == 0:
+                return ""
+            sign = "+" if diff > 0 else ""
+            minutes = abs(diff) // 60
+            seconds = abs(diff) % 60
+            return f"{sign}{minutes:02d}:{seconds:02d}"
+
+        def _build_result_item(result: dict) -> QListWidgetItem:
+            item = QListWidgetItem()
+            title = result.get("title", "")
+            artist = result.get("artist", "")
+            lines = result.get("lines", 0)
+            synced = result.get("synced", False)
+            source = result.get("source", "")
+            duration_diff = _format_duration_diff(result.get("duration", 0))
+
+            # Line 1: Artist - Title
+            line1 = f"{artist} - {title}" if artist and title else (artist or title)
+
+            # Line 2: lines - synced status (+diff) - source
+            line2_parts = []
+            if lines > 0:
+                line2_parts.append(f"{lines} {t('lyrics.lines')}")
+            synced_text = t("lyrics.synced") if synced else t("lyrics.unsynced")
+            if synced and duration_diff:
+                synced_text += f" ({duration_diff})"
+            line2_parts.append(synced_text)
+            if source:
+                line2_parts.append(source)
+            line2 = " - ".join(line2_parts)
+
+            full_text = f"{line1}\n{line2}"
+            item.setText(full_text)
+            item.setData(Qt.UserRole, result)
+            return item
+
+        def _add_results(results: list):
+            for r in results:
+                all_results.append(r)
+                results_list.addItem(_build_result_item(r))
+            if not results:
+                item = QListWidgetItem(t("artwork.no_results"))
+                item.setFlags(Qt.ItemIsEnabled)
+                item.setTextAlignment(Qt.AlignCenter)
+                results_list.addItem(item)
+
+        def _set_loading(loading: bool):
+            search_btn.setEnabled(not loading)
+            title_edit.setEnabled(not loading)
+            album_edit.setEnabled(not loading)
+            artist_edit.setEnabled(not loading)
+            if loading:
+                results_list.clear()
+                all_results.clear()
+                item = QListWidgetItem(t("artwork.loading"))
+                item.setFlags(Qt.ItemIsEnabled)
+                item.setTextAlignment(Qt.AlignCenter)
+                results_list.addItem(item)
+
+        class LyricsSearchWorker(QThread):
+            results_ready = Signal(list)
+
+            def __init__(self, artist, title, album, duration):
+                super().__init__()
+                self.artist = artist
+                self.title = title
+                self.album = album
+                self.duration = duration
+
+            def run(self):
+                results = []
+                # LRCLIB search — returns multiple candidates
+                try:
+                    lrclib_results = search_lyrics_lrclib(self.artist, self.title, self.album, self.duration, limit=10)
+                    results.extend(lrclib_results)
+                except Exception:
+                    pass
+
+                # Genius search — single fallback result
+                try:
+                    genius_lyrics = _fetch_lyrics_genius(self.artist, self.title)
+                    if genius_lyrics:
+                        lines_count = len(genius_lyrics.splitlines())
+                        results.append({
+                            "title": self.title,
+                            "artist": self.artist,
+                            "album": "",
+                            "lines": lines_count,
+                            "synced": False,
+                            "source": "Genius",
+                            "duration": 0,
+                            "lyrics": genius_lyrics,
+                            "lyrics_type": "plain",
+                        })
+                except Exception:
+                    pass
+
+                # Sort by duration match (if available), then by synced preference
+                def _sort_key(r):
+                    dur = r.get("duration", 0)
+                    score = 0
+                    if dur > 0 and self.duration > 0:
+                        score = -abs(dur - self.duration)  # closer duration = higher score
+                    if r.get("synced"):
+                        score += 1000
+                    return score
+
+                results.sort(key=_sort_key, reverse=True)
+                self.results_ready.emit(results)
+
+        def _do_search():
+            a = artist_edit.text().strip()
+            t_ = title_edit.text().strip()
+            if not a and not t_:
+                return
+            _set_loading(True)
+            selected_result[0] = None
+            apply_btn.setEnabled(False)
+            preview_edit.clear()
+
+            if current_worker[0] is not None:
+                current_worker[0].quit()
+                current_worker[0].wait(2000)
+            worker = LyricsSearchWorker(a, t_, album_edit.text().strip(), file_duration)
+            current_worker[0] = worker
+
+            def _on_results(results):
+                current_worker[0] = None
+                results_list.clear()
+                all_results.clear()
+                _add_results(results)
+                search_btn.setEnabled(True)
+                title_edit.setEnabled(True)
+                album_edit.setEnabled(True)
+                artist_edit.setEnabled(True)
+
+            worker.results_ready.connect(_on_results)
+            worker.finished.connect(worker.deleteLater)
+            worker.start()
+
+        def _on_item_clicked(item: QListWidgetItem):
+            result = item.data(Qt.UserRole)
+            if not result:
+                return
+            selected_result[0] = result
+            apply_btn.setEnabled(True)
+            lyrics = result.get("lyrics", "")
+            preview_edit.setPlainText(lyrics)
+
+        search_btn.clicked.connect(_do_search)
+        title_edit.returnPressed.connect(_do_search)
+        album_edit.returnPressed.connect(_do_search)
+        artist_edit.returnPressed.connect(_do_search)
+        results_list.itemClicked.connect(_on_item_clicked)
+
+        original_key_press = dlg.keyPressEvent
+        def _dlg_key_press(event):
+            if event.key() in (Qt.Key_Return, Qt.Key_Enter):
+                focused = dlg.focusWidget()
+                if focused in (title_edit, album_edit, artist_edit):
+                    _do_search()
+                    return
+                event.ignore()
+                return
+            original_key_press(event)
+        dlg.keyPressEvent = _dlg_key_press
+
+        def _cleanup():
+            if current_worker[0] is not None:
+                current_worker[0].quit()
+                current_worker[0].wait(2000)
+        dlg.finished.connect(_cleanup)
+
+        # Show dialog and auto-search if we have data
+        dlg.show()
+        dlg.raise_()
+        QApplication.processEvents()
+        if title or artist:
+            _do_search()
+
+        if dlg.exec() != QDialog.Accepted or not selected_result[0]:
+            return
+
+        result = selected_result[0]
+        self._apply_lyrics_result(filepath, result)
+
+    def _apply_lyrics_result(self, filepath: str, result: dict):
+        """Apply lyrics from search result to the audio file."""
+        from mutagen.mp4 import MP4
+        from mutagen.oggopus import OggOpus
+        from mutagen.id3 import USLT
+
+        audio = _load_audio(filepath)
+        if audio is None:
+            QMessageBox.warning(self, t("artwork.error_title"), t("artwork.no_metadata"))
+            return
+
+        try:
+            lyrics_text = result.get("lyrics", "")
+            if not lyrics_text:
+                return
+
+            if isinstance(audio, OggOpus):
+                audio.tags['lyrics'] = [lyrics_text]
+            elif isinstance(audio, MP4):
+                audio.tags['\xa9lyr'] = [lyrics_text]
+            else:  # MP3
+                uslt = USLT(encoding=3, lang='eng', desc='', text=lyrics_text)
+                if audio.tags is None:
+                    from mutagen.id3 import ID3
+                    audio.tags = ID3()
+                audio.tags.delall('USLT')
+                audio.tags.add(uslt)
 
             audio.save()
             self._show_file_detail(filepath)

@@ -158,6 +158,9 @@ class _ArtworkEditable(_ArtworkLabel):
         super().leaveEvent(event)
         self._btn.hide()
 
+    def retranslate(self):
+        self._btn.setText(" " + t("artwork.edit"))
+
 
 class _SeekSlider(QSlider):
     """Slider that jumps to click position (not just page-step)."""

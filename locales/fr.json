@@ -260,5 +260,12 @@
   "artwork.album_or_title": "Album ou titre",
   "button.identify": "Identifier",
   "metadata.identify_title": "Identifier les métadonnées",
-  "metadata.identify_success": "Les métadonnées ont été mises à jour avec succès."
+  "metadata.identify_success": "Les métadonnées ont été mises à jour avec succès.",
+  "lyrics.search": "Chercher les paroles",
+  "lyrics.search_title": "Rechercher des paroles",
+  "lyrics.results": "Résultats",
+  "lyrics.preview": "Aperçu",
+  "lyrics.lines": "lignes",
+  "lyrics.synced": "Synchronisées",
+  "lyrics.unsynced": "Non-synchronisées"
 }

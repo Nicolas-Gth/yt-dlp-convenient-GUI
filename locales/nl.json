@@ -238,5 +238,12 @@
   "artwork.album_or_title": "Album of titel",
   "button.identify": "Identificeren",
   "metadata.identify_title": "Metadata identificeren",
-  "metadata.identify_success": "Metadata succesvol bijgewerkt."
+  "metadata.identify_success": "Metadata succesvol bijgewerkt.",
+  "lyrics.search": "Zoek songteksten",
+  "lyrics.search_title": "Zoek songteksten",
+  "lyrics.results": "Resultaten",
+  "lyrics.preview": "Voorbeeld",
+  "lyrics.lines": "regels",
+  "lyrics.synced": "Gesynchroniseerd",
+  "lyrics.unsynced": "Niet gesynchroniseerd"
 }

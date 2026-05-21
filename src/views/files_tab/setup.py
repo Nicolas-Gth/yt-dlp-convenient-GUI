@@ -237,15 +237,25 @@ class FilesSetupMixin:
         self._meta_splitter.setChildrenCollapsible(False)
         self._meta_splitter.addWidget(self._files_meta)
 
-        # Lyrics label + edit
+        # Lyrics label + search button + edit
         lyrics_bottom = QWidget()
         lbl = QVBoxLayout(lyrics_bottom)
         lbl.setContentsMargins(0, 4, 0, 0)
         lbl.setSpacing(2)
+
+        lyrics_header = QHBoxLayout()
         self._lyrics_label = QLabel(t("files.lyrics"))
-        f = self._lyrics_label.font(); f.setBold(True); self._lyrics_label.setFont(f)
+        self._lyrics_label.setStyleSheet("QLabel { color: palette(dark); }")
         self._lyrics_label.hide()
-        lbl.addWidget(self._lyrics_label)
+        lyrics_header.addWidget(self._lyrics_label)
+        lyrics_header.addStretch()
+        self._lyrics_search_btn = QPushButton(t("lyrics.search"))
+        self._lyrics_search_btn.setCursor(Qt.PointingHandCursor)
+        self._lyrics_search_btn.clicked.connect(self._on_search_lyrics)
+        self._lyrics_search_btn.hide()
+        lyrics_header.addWidget(self._lyrics_search_btn)
+        lbl.addLayout(lyrics_header)
+
         self._lyrics_edit = QTextEdit()
         self._lyrics_edit.setAcceptRichText(False)
         self._lyrics_edit.setPlaceholderText(t("files.no_lyrics"))

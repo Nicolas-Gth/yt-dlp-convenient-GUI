@@ -995,38 +995,146 @@ def _fetch_lyrics_lrclib(artist: str, title: str, album: str = "", duration_sec:
     Fetch lyrics from LRCLIB.
     Returns (plain_lyrics, synced_lyrics_lrc) — either or both may be None.
     """
-    params = {
-        "artist_name": artist,
-        "track_name": title,
-    }
+    # --- Try exact match via /get first ---
+    params: dict = {"track_name": title}
+    if artist:
+        params["artist_name"] = artist
     if album:
         params["album_name"] = album
     if duration_sec > 0:
         params["duration"] = str(duration_sec)
-    
+
     query = urllib.parse.urlencode(params)
     url = f"{_LRCLIB_BASE}/get?{query}"
-    
     data = _request(url)
-    if not data:
+
+    if not data and album:
         # Try without album (broader search)
-        if album:
-            params.pop("album_name", None)
-            query = urllib.parse.urlencode(params)
-            url = f"{_LRCLIB_BASE}/get?{query}"
-            data = _request(url)
-        
-        if not data:
-            return None, None
-    
-    try:
-        result = json.loads(data)
-    except json.JSONDecodeError:
+        params.pop("album_name", None)
+        query = urllib.parse.urlencode(params)
+        url = f"{_LRCLIB_BASE}/get?{query}"
+        data = _request(url)
+
+    if data:
+        try:
+            result = json.loads(data)
+            plain = result.get("plainLyrics")
+            synced = result.get("syncedLyrics")
+            if plain or synced:
+                return plain, synced
+        except json.JSONDecodeError:
+            pass
+
+    # --- Fallback to /search (broader, supports artist-less queries) ---
+    search_params: dict
+    if artist:
+        search_params = {"track_name": title, "artist_name": artist}
+    else:
+        # When no artist is given use free-text search — LRCLIB ignores
+        # track_name without artist_name and returns empty results.
+        search_params = {"q": title}
+    if album:
+        search_params["album_name"] = album
+    if duration_sec > 0:
+        search_params["duration"] = str(duration_sec)
+
+    query = urllib.parse.urlencode(search_params)
+    url = f"{_LRCLIB_BASE}/search?{query}"
+    data = _request(url)
+
+    if not data and album:
+        search_params.pop("album_name", None)
+        query = urllib.parse.urlencode(search_params)
+        url = f"{_LRCLIB_BASE}/search?{query}"
+        data = _request(url)
+
+    if not data:
         return None, None
-    
-    plain = result.get("plainLyrics")
-    synced = result.get("syncedLyrics")
-    return plain, synced
+
+    try:
+        results = json.loads(data)
+        if results and len(results) > 0:
+            # Find the first result that actually has lyrics
+            for best in results:
+                plain = best.get("plainLyrics")
+                synced = best.get("syncedLyrics")
+                if plain or synced:
+                    return plain, synced
+    except (json.JSONDecodeError, TypeError):
+        pass
+
+    return None, None
+
+
+def search_lyrics_lrclib(artist: str, title: str, album: str = "", duration_sec: int = 0, limit: int = 10) -> List[Dict]:
+    """
+    Search LRCLIB and return *all* results that have lyrics.
+
+    Each dict contains:
+        - title, artist, album, lines, synced, source, duration, lyrics
+    """
+    results: List[Dict] = []
+
+    # Build search query
+    search_params: dict
+    if artist:
+        search_params = {"track_name": title, "artist_name": artist}
+    else:
+        search_params = {"q": title}
+    if album:
+        search_params["album_name"] = album
+    if duration_sec > 0:
+        search_params["duration"] = str(duration_sec)
+
+    query = urllib.parse.urlencode(search_params)
+    url = f"{_LRCLIB_BASE}/search?{query}"
+    data = _request(url)
+
+    if not data and album:
+        search_params.pop("album_name", None)
+        query = urllib.parse.urlencode(search_params)
+        url = f"{_LRCLIB_BASE}/search?{query}"
+        data = _request(url)
+
+    if not data:
+        return results
+
+    try:
+        raw_results = json.loads(data)
+    except (json.JSONDecodeError, TypeError):
+        return results
+
+    seen = set()
+    for item in raw_results:
+        plain = item.get("plainLyrics")
+        synced = item.get("syncedLyrics")
+        if not plain and not synced:
+            continue
+
+        artist_name = item.get("artistName", "")
+        track_name = item.get("name", "") or item.get("trackName", "")
+        key = f"{artist_name}|{track_name}"
+        if key in seen:
+            continue
+        seen.add(key)
+
+        lyrics_text = synced or plain
+        results.append({
+            "title": track_name,
+            "artist": artist_name,
+            "album": item.get("albumName", ""),
+            "lines": len(lyrics_text.splitlines()) if lyrics_text else 0,
+            "synced": bool(synced),
+            "source": "LRCLIB",
+            "duration": item.get("duration", 0),
+            "lyrics": lyrics_text,
+            "lyrics_type": "synced" if synced else "plain",
+        })
+
+        if len(results) >= limit:
+            break
+
+    return results
 
 
 def _slugify_genius(text: str) -> str:
@@ -1056,7 +1164,12 @@ def _fetch_lyrics_genius(artist: str, title: str) -> Optional[str]:
     """
     slug_artist = _slugify_genius(artist)
     slug_title = _slugify_genius(title)
-    url = f"{_GENIUS_BASE}/{slug_artist}-{slug_title}-lyrics"
+    if slug_artist and slug_title:
+        url = f"{_GENIUS_BASE}/{slug_artist}-{slug_title}-lyrics"
+    elif slug_title:
+        url = f"{_GENIUS_BASE}/{slug_title}-lyrics"
+    else:
+        return None
     
     req = urllib.request.Request(url)
     req.add_header("User-Agent", _USER_AGENT)

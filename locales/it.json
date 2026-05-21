@@ -238,5 +238,12 @@
   "artwork.album_or_title": "Album o titolo",
   "button.identify": "Identifica",
   "metadata.identify_title": "Identifica metadati",
-  "metadata.identify_success": "Metadati aggiornati con successo."
+  "metadata.identify_success": "Metadati aggiornati con successo.",
+  "lyrics.search": "Cerca testi",
+  "lyrics.search_title": "Cerca testi",
+  "lyrics.results": "Risultati",
+  "lyrics.preview": "Anteprima",
+  "lyrics.lines": "righe",
+  "lyrics.synced": "Sincronizzate",
+  "lyrics.unsynced": "Non sincronizzate"
 }
