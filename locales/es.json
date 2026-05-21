@@ -235,5 +235,8 @@
   "shortcut.comment": "Descargar vídeos y audio con yt-dlp",
   "files.no_lyrics": "No lyrics",
   "artwork.optional": "opcional",
-  "artwork.album_or_title": "Álbum o título"
+  "artwork.album_or_title": "Álbum o título",
+  "button.identify": "Identificar",
+  "metadata.identify_title": "Identificar metadatos",
+  "metadata.identify_success": "Metadatos actualizados correctamente."
 }

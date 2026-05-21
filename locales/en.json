@@ -258,5 +258,8 @@
   "shortcut.btn_quit": "Quit",
   "shortcut.comment": "Download videos and audio with yt-dlp",
   "artwork.optional": "optional",
-  "artwork.album_or_title": "Album or title"
+  "artwork.album_or_title": "Album or title",
+  "button.identify": "Identify",
+  "metadata.identify_title": "Identify metadata",
+  "metadata.identify_success": "Metadata updated successfully."
 }

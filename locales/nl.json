@@ -235,5 +235,8 @@
   "shortcut.comment": "Download video's en audio met yt-dlp",
   "files.no_lyrics": "No lyrics",
   "artwork.optional": "opcional",
-  "artwork.album_or_title": "Album of titel"
+  "artwork.album_or_title": "Album of titel",
+  "button.identify": "Identificeren",
+  "metadata.identify_title": "Metadata identificeren",
+  "metadata.identify_success": "Metadata succesvol bijgewerkt."
 }

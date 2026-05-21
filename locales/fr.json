@@ -257,5 +257,8 @@
   "shortcut.btn_quit": "Quitter",
   "shortcut.comment": "Télécharger des vidéos et de l'audio avec yt-dlp",
   "artwork.optional": "optionnel",
-  "artwork.album_or_title": "Album ou titre"
+  "artwork.album_or_title": "Album ou titre",
+  "button.identify": "Identifier",
+  "metadata.identify_title": "Identifier les métadonnées",
+  "metadata.identify_success": "Les métadonnées ont été mises à jour avec succès."
 }

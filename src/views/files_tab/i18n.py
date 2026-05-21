@@ -35,6 +35,8 @@ class FilesI18nMixin:
             self._files_group.setTitle(t("files.group_title"))
         if hasattr(self, '_detail_group') and self._detail_group is not None:
             self._detail_group.setTitle(t("metadata.group_title"))
+        if hasattr(self, '_identify_btn') and self._identify_btn is not None:
+            self._identify_btn.setText(t("button.identify"))
         if hasattr(self, '_edit_reset_btn') and self._edit_reset_btn is not None:
             self._edit_reset_btn.setText(t("button.reset"))
             self._edit_save_btn.setText(t("button.save"))

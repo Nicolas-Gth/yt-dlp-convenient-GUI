@@ -2,7 +2,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QWidget, QTableWidget, QTableWidgetItem,
     QHeaderView, QAbstractItemView, QFrame, QSplitter, QLabel,
     QSizePolicy, QGroupBox, QPushButton, QSlider, QTextEdit,
-    QLineEdit, QComboBox, QMessageBox
+    QLineEdit, QComboBox, QMessageBox, QCheckBox
 )
 from PySide6.QtGui import QIcon
 from PySide6.QtCore import Qt, QTimer, QFileSystemWatcher, QSize
@@ -108,15 +108,15 @@ class FilesSetupMixin:
         self._files_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self._files_table.setHorizontalScrollMode(QAbstractItemView.ScrollPerPixel)
         self._files_table.verticalHeader().setVisible(False)
-        self._files_table.setShowGrid(False)
+        self._files_table.setShowGrid(True)
         self._files_table.setFrameShape(QFrame.NoFrame)
         self._files_table.setStyleSheet(
-            "QTableWidget { border: none; background: transparent; }"
-            "QTableWidget QTableCornerButton::section { background: transparent; }"
+            "QTableWidget { border: none; background: palette(base); gridline-color: palette(mid); }"
+            "QTableWidget QTableCornerButton::section { background: palette(window); border: none; border-right: 1px solid palette(mid); border-bottom: 1px solid palette(mid); }"
             "QHeaderView { background: transparent; font-weight: normal; }"
             "QHeaderView::section {"
-            "  border: none; border-bottom: 1px solid palette(mid);"
-            "  background: transparent; font-weight: normal;"
+            "  border: none; border-right: 1px solid palette(mid); border-bottom: 1px solid palette(mid);"
+            "  background: palette(window); font-weight: normal;"
             "}"
         )
         hdr = self._files_table.horizontalHeader()
@@ -188,6 +188,10 @@ class FilesSetupMixin:
         ebl = QHBoxLayout(self._edit_btn_bar)
         ebl.setContentsMargins(0, 0, 0, 0)
         ebl.setSpacing(6)
+        self._identify_btn = QPushButton(t("button.identify"))
+        self._identify_btn.setCursor(Qt.PointingHandCursor)
+        self._identify_btn.clicked.connect(self._on_identify_metadata)
+        ebl.addWidget(self._identify_btn)
         ebl.addStretch()
         self._edit_reset_btn = QPushButton(t("button.reset"))
         self._edit_reset_btn.setCursor(Qt.PointingHandCursor)

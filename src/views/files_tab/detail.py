@@ -68,6 +68,7 @@ class FilesDetailMixin:
         if audio is None:
             self._clear_meta_panel()
             self._files_artwork.setArtwork(None)
+            self._edit_btn_bar.hide()
             return
 
         # Artwork
@@ -78,7 +79,9 @@ class FilesDetailMixin:
         self._clear_meta_panel()
         self._modified_rows.clear()
         self._edited = False
-        self._edit_btn_bar.hide()
+        self._edit_btn_bar.show()
+        self._edit_reset_btn.hide()
+        self._edit_save_btn.hide()
         self._files_meta.blockSignals(True)
 
         # Extract values for always-shown fields
@@ -594,3 +597,473 @@ class FilesDetailMixin:
                 QMessageBox.warning(self, t("artwork.error_title"), t("artwork.error_msg"))
         else:
             QMessageBox.warning(self, t("artwork.error_title"), t("artwork.error_msg"))
+
+    def _on_identify_metadata(self):
+        """Open metadata identification dialog for the current file."""
+        filepath = self._current_detail_filepath
+        if not filepath or not os.path.isfile(filepath):
+            return
+        self._show_metadata_selector(filepath)
+
+    def _show_metadata_selector(self, filepath: str):
+        """Show a dialog with metadata candidates. Same UI as cover selector."""
+        from utils.metadata_enricher_utils import search_metadata_candidates, search_metadata_itunes, _request
+        from PySide6.QtWidgets import QApplication, QComboBox
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle(t("metadata.identify_title"))
+        dlg.setMinimumWidth(500)
+        dlg.setMinimumHeight(400)
+        layout = QVBoxLayout(dlg)
+        layout.setSpacing(8)
+
+        # API selector + Artist + Type + Term + Search button
+        search_row = QHBoxLayout()
+        api_combo = QComboBox()
+        api_combo.addItem("iTunes")
+        api_combo.addItem("MusicBrainz")
+        api_combo.setCurrentIndex(0)
+        api_combo.setCursor(Qt.PointingHandCursor)
+        search_row.addWidget(api_combo)
+
+        artist_edit = QLineEdit()
+        artist_edit.setPlaceholderText(t("files.artist"))
+        artist_edit.setClearButtonEnabled(True)
+        search_row.addWidget(artist_edit, 1)
+
+        album_edit = QLineEdit()
+        album_edit.setPlaceholderText(t("tag.album"))
+        album_edit.setClearButtonEnabled(True)
+        search_row.addWidget(album_edit, 1)
+
+        title_edit = QLineEdit()
+        title_edit.setPlaceholderText(t("files.title"))
+        title_edit.setClearButtonEnabled(True)
+        search_row.addWidget(title_edit, 1)
+
+        search_btn = QPushButton(t("artwork.search_btn"))
+        search_btn.setCursor(Qt.PointingHandCursor)
+        search_btn.setDefault(True)
+        search_row.addWidget(search_btn)
+        layout.addLayout(search_row)
+
+        # Spinner (centered in its own page)
+        spinner_lbl = QLabel(t("artwork.loading"))
+        spinner_lbl.setAlignment(Qt.AlignCenter)
+        spinner_lbl.setStyleSheet("QLabel { font-size: 14px; color: palette(text); padding: 40px; }")
+        spinner_container = QWidget()
+        spinner_layout = QVBoxLayout(spinner_container)
+        spinner_layout.addStretch()
+        spinner_layout.addWidget(spinner_lbl, alignment=Qt.AlignCenter)
+        spinner_layout.addStretch()
+
+        # Results scroll area
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.NoFrame)
+        container = QWidget()
+        flow_container = QWidget()
+        flow = _FlowLayout(flow_container, spacing=16)
+        flow.setContentsMargins(8, 8, 8, 8)
+
+        selected_result = [None]
+        selected_card_border = [None]
+        no_results_lbl = QLabel(t("artwork.no_results"))
+        no_results_lbl.setAlignment(Qt.AlignCenter)
+        no_results_lbl.hide()
+
+        all_results = []
+        seen_ids = set()
+        current_limit = [10]
+        current_artist = [""]
+        current_album = [""]
+        current_title = [""]
+        current_api = ["MusicBrainz"]
+        current_worker = [None]
+
+        def _on_pick(result: dict, card: QWidget):
+            selected_result[0] = result
+            apply_btn.setEnabled(True)
+            if selected_card_border[0] is not None:
+                prev = selected_card_border[0]
+                prev.setStyleSheet(f"#{prev.objectName()}:hover {{ background-color: palette(midlight); border-radius: 4px; }}")
+            card.setStyleSheet(
+                f"#{card.objectName()} {{ border: 2px solid palette(highlight); border-radius: 4px; }}"
+                f" #{card.objectName()}:hover {{ background-color: palette(midlight); border-radius: 4px; }}"
+            )
+            selected_card_border[0] = card
+
+        def _clear_flow():
+            while flow.count():
+                item = flow.takeAt(0)
+                w = item.widget()
+                if w:
+                    w.deleteLater()
+            selected_card_border[0] = None
+
+        def _build_cards():
+            _clear_flow()
+            no_results_lbl.setVisible(not all_results)
+            for i, item in enumerate(all_results):
+                card = QWidget()
+                card.setObjectName(f"meta_card_{i}")
+                card.setCursor(Qt.PointingHandCursor)
+                card.setFixedSize(200, 280)
+                card.setStyleSheet(f"#{card.objectName()}:hover {{ background-color: palette(midlight); border-radius: 4px; }}")
+                card_layout = QVBoxLayout(card)
+                card_layout.setContentsMargins(8, 8, 8, 8)
+                card_layout.setSpacing(4)
+
+                thumb_lbl = QLabel()
+                thumb_lbl.setAlignment(Qt.AlignCenter)
+                thumb_lbl.setFixedSize(150, 150)
+                thumb_lbl.setStyleSheet("QLabel { background: transparent; }")
+                data = item.get("artwork_data")
+                if data:
+                    pix = QPixmap()
+                    pix.loadFromData(data)
+                    if not pix.isNull():
+                        thumb_lbl.setPixmap(pix.scaled(150, 150, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+                card_layout.addWidget(thumb_lbl, alignment=Qt.AlignCenter)
+
+                title_lbl = QLabel(item.get("title", ""))
+                title_lbl.setWordWrap(True)
+                title_lbl.setAlignment(Qt.AlignCenter)
+                title_lbl.setFixedSize(180, 30)
+                f = title_lbl.font(); f.setBold(True); title_lbl.setFont(f)
+                card_layout.addWidget(title_lbl)
+
+                artist_lbl = QLabel(item.get("artist", ""))
+                artist_lbl.setWordWrap(True)
+                artist_lbl.setAlignment(Qt.AlignCenter)
+                artist_lbl.setFixedSize(180, 20)
+                card_layout.addWidget(artist_lbl)
+
+                album_text = item.get("album", "")
+                year = item.get("date", "")
+                if year:
+                    album_text += f" ({year})"
+                album_lbl = QLabel(album_text)
+                album_lbl.setWordWrap(True)
+                album_lbl.setAlignment(Qt.AlignCenter)
+                album_lbl.setFixedSize(180, 20)
+                album_lbl.setStyleSheet("QLabel { color: palette(dark); font-size: 11px; }")
+                card_layout.addWidget(album_lbl)
+
+                info_parts = []
+                if item.get("genre"):
+                    info_parts.append(item["genre"])
+                if item.get("track_number") and item.get("total_tracks"):
+                    info_parts.append(f"Track {item['track_number']}/{item['total_tracks']}")
+                info_lbl = QLabel("  |  ".join(info_parts))
+                info_lbl.setWordWrap(True)
+                info_lbl.setAlignment(Qt.AlignCenter)
+                info_lbl.setFixedSize(180, 20)
+                info_lbl.setStyleSheet("QLabel { color: palette(dark); font-size: 10px; }")
+                card_layout.addWidget(info_lbl)
+
+                card.mousePressEvent = lambda _e, r=item, c=card: _on_pick(r, c)
+                thumb_lbl.mousePressEvent = lambda _e, r=item, c=card: _on_pick(r, c)
+                title_lbl.mousePressEvent = lambda _e, r=item, c=card: _on_pick(r, c)
+                artist_lbl.mousePressEvent = lambda _e, r=item, c=card: _on_pick(r, c)
+                album_lbl.mousePressEvent = lambda _e, r=item, c=card: _on_pick(r, c)
+                info_lbl.mousePressEvent = lambda _e, r=item, c=card: _on_pick(r, c)
+
+                flow.addWidget(card)
+
+        def _set_loading(loading: bool):
+            stack.setCurrentIndex(0 if loading else 1)
+            search_btn.setEnabled(not loading)
+            artist_edit.setEnabled(not loading)
+            album_edit.setEnabled(not loading)
+            title_edit.setEnabled(not loading)
+            load_more_btn.setEnabled(not loading)
+            api_combo.setEnabled(not loading)
+
+        class IdentifyWorker(QThread):
+            results_ready = Signal(list, int, bool)
+            error = Signal()
+
+            def __init__(self, artist, album, title, limit, seen, api):
+                super().__init__()
+                self.artist = artist
+                self.album = album
+                self.title = title
+                self.limit = limit
+                self.seen = seen
+                self.api = api
+
+            def run(self):
+                try:
+                    if self.api == "iTunes":
+                        raw = search_metadata_itunes(self.artist, self.title, self.album, limit=self.limit)
+                    else:
+                        raw = search_metadata_candidates(self.artist, self.title, self.album, limit=self.limit)
+                except Exception:
+                    raw = []
+                new_items = []
+                for item in raw:
+                    rid = item.get("mb_release_group_id") or item.get("mb_release_id") or item.get("itunes_track_id")
+                    if rid and rid not in self.seen:
+                        self.seen.add(rid)
+                        new_items.append(item)
+                has_more = len(raw) >= self.limit
+                self.results_ready.emit(new_items, self.limit, has_more)
+
+        def _start_worker(artist: str, album: str, title: str, limit: int):
+            if current_worker[0] is not None:
+                current_worker[0].quit()
+                current_worker[0].wait(2000)
+            worker = IdentifyWorker(artist, album, title, limit, seen_ids, current_api[0])
+            current_worker[0] = worker
+
+            def _on_results(new_items, limit_used, has_more):
+                current_worker[0] = None
+                all_results.extend(new_items)
+                _set_loading(False)
+                _build_cards()
+                load_more_btn.setVisible(has_more and limit_used < 50)
+
+            worker.results_ready.connect(_on_results)
+            worker.error.connect(lambda: (_set_loading(False), load_more_btn.setVisible(False)))
+            worker.finished.connect(worker.deleteLater)
+            _set_loading(True)
+            worker.start()
+
+        def _do_search():
+            artist = artist_edit.text().strip()
+            album = album_edit.text().strip()
+            title = title_edit.text().strip()
+            if not artist and not album and not title:
+                return
+            current_artist[0] = artist
+            current_album[0] = album
+            current_title[0] = title
+            current_limit[0] = 10
+            current_api[0] = api_combo.currentText()
+            all_results.clear()
+            seen_ids.clear()
+            selected_result[0] = None
+            apply_btn.setEnabled(False)
+            load_more_btn.setVisible(False)
+            _start_worker(artist, album, title, 10)
+
+        def _on_load_more():
+            current_limit[0] += 10
+            load_more_btn.setVisible(False)
+            _start_worker(current_artist[0], current_album[0], current_title[0], current_limit[0])
+
+        vbox = QVBoxLayout(container)
+        vbox.setContentsMargins(0, 0, 0, 0)
+        vbox.setSpacing(0)
+        vbox.addWidget(flow_container)
+        vbox.addWidget(no_results_lbl, alignment=Qt.AlignCenter)
+
+        load_more_widget = QWidget()
+        load_more_layout = QHBoxLayout(load_more_widget)
+        load_more_layout.setContentsMargins(0, 8, 0, 8)
+        load_more_layout.addStretch()
+        load_more_btn = QPushButton(t("artwork.load_more"))
+        load_more_btn.setCursor(Qt.PointingHandCursor)
+        load_more_btn.clicked.connect(_on_load_more)
+        load_more_layout.addWidget(load_more_btn)
+        load_more_layout.addStretch()
+        vbox.addWidget(load_more_widget)
+        vbox.addStretch()
+
+        scroll.setWidget(container)
+
+        stack = QStackedWidget()
+        stack.addWidget(spinner_container)
+        stack.addWidget(scroll)
+        layout.addWidget(stack, 1)
+
+        btn_row = QHBoxLayout()
+        btn_row.addStretch()
+        cancel_btn = QPushButton(t("button.cancel"))
+        cancel_btn.setCursor(Qt.PointingHandCursor)
+        cancel_btn.clicked.connect(dlg.reject)
+        btn_row.addWidget(cancel_btn)
+
+        apply_btn = QPushButton(t("artwork.apply"))
+        apply_btn.setCursor(Qt.PointingHandCursor)
+        apply_btn.setEnabled(False)
+        apply_btn.clicked.connect(dlg.accept)
+        btn_row.addWidget(apply_btn)
+        layout.addLayout(btn_row)
+
+        search_btn.clicked.connect(_do_search)
+        artist_edit.returnPressed.connect(_do_search)
+        album_edit.returnPressed.connect(_do_search)
+        title_edit.returnPressed.connect(_do_search)
+
+        original_key_press = dlg.keyPressEvent
+        def _dlg_key_press(event):
+            if event.key() in (Qt.Key_Return, Qt.Key_Enter):
+                focused = dlg.focusWidget()
+                if focused in (artist_edit, album_edit, title_edit):
+                    _do_search()
+                    return
+                event.ignore()
+                return
+            original_key_press(event)
+        dlg.keyPressEvent = _dlg_key_press
+
+        def _cleanup():
+            if current_worker[0] is not None:
+                current_worker[0].quit()
+                current_worker[0].wait(2000)
+        dlg.finished.connect(_cleanup)
+
+        # ── Show dialog immediately, then load data ──
+        dlg.show()
+        dlg.raise_()
+        QApplication.processEvents()
+
+        # Read file metadata (fast, local)
+        audio = _load_audio(filepath)
+        artist, title, album = "", "", ""
+        if audio is not None and audio.tags is not None:
+            from mutagen.mp4 import MP4
+            from mutagen.oggopus import OggOpus
+            try:
+                if isinstance(audio, OggOpus):
+                    artist = "; ".join(audio.tags.get('artist', []) or []).strip()
+                    title = "; ".join(audio.tags.get('title', []) or []).strip()
+                    album = "; ".join(audio.tags.get('album', []) or []).strip()
+                elif isinstance(audio, MP4):
+                    artist = (audio.tags.get('\xa9ART', [None])[0] or "").strip()
+                    title = (audio.tags.get('\xa9nam', [None])[0] or "").strip()
+                    album = (audio.tags.get('\xa9alb', [None])[0] or "").strip()
+                else:
+                    artist = "; ".join(audio.tags.get('TPE1') or []).strip()
+                    title = "; ".join(audio.tags.get('TIT2') or []).strip()
+                    album = "; ".join(audio.tags.get('TALB') or []).strip()
+            except Exception:
+                pass
+
+        clean_album = album if album and album.lower() not in ("unknown album", "") else ""
+        artist_edit.setText(artist)
+        album_edit.setText(clean_album)
+        title_edit.setText(title)
+
+        if not clean_album and not title:
+            filename = os.path.splitext(os.path.basename(filepath))[0]
+            title_edit.setText(filename)
+
+        current_artist[0] = artist
+        current_album[0] = clean_album
+        current_title[0] = title if title else (filename if not clean_album else "")
+        current_limit[0] = 10
+        current_api[0] = api_combo.currentText()
+        _start_worker(current_artist[0], current_album[0], current_title[0], 10)
+
+        if dlg.exec() != QDialog.Accepted or not selected_result[0]:
+            return
+
+        result = selected_result[0]
+        self._apply_metadata_result(filepath, result)
+
+    def _apply_metadata_result(self, filepath: str, result: dict):
+        """Apply a metadata candidate to the audio file.
+
+        Replaces ALL known fields. If a field is absent from the result,
+        the existing tag is cleared/deleted.
+        """
+        from mutagen.mp3 import MP3
+        from mutagen.mp4 import MP4
+        from mutagen.oggopus import OggOpus
+        from utils.metadata_enricher_utils import _request
+
+        audio = _load_audio(filepath)
+        if audio is None:
+            QMessageBox.warning(self, t("artwork.error_title"), t("artwork.no_metadata"))
+            return
+
+        try:
+            # ── Opus ──
+            if isinstance(audio, OggOpus):
+                tags = audio.tags
+                for key in ("title", "artist", "album", "albumartist", "date", "genre", "tracknumber"):
+                    if key in tags:
+                        del tags[key]
+                if result.get("title"):
+                    tags["title"] = result["title"]
+                if result.get("artist"):
+                    tags["artist"] = result["artist"]
+                if result.get("album"):
+                    tags["album"] = result["album"]
+                if result.get("album_artist"):
+                    tags["albumartist"] = result["album_artist"]
+                if result.get("date"):
+                    tags["date"] = result["date"]
+                if result.get("genre"):
+                    tags["genre"] = result["genre"]
+                if result.get("track_number"):
+                    tags["tracknumber"] = result["track_number"]
+
+            # ── MP4 ──
+            elif isinstance(audio, MP4):
+                tags = audio.tags
+                for key in ("\xa9nam", "\xa9ART", "\xa9alb", "aART", "\xa9day", "\xa9gen", "trkn"):
+                    if key in tags:
+                        del tags[key]
+                if result.get("title"):
+                    tags["\xa9nam"] = [result["title"]]
+                if result.get("artist"):
+                    tags["\xa9ART"] = [result["artist"]]
+                if result.get("album"):
+                    tags["\xa9alb"] = [result["album"]]
+                if result.get("album_artist"):
+                    tags["aART"] = [result["album_artist"]]
+                if result.get("date"):
+                    tags["\xa9day"] = [result["date"]]
+                if result.get("genre"):
+                    tags["\xa9gen"] = [result["genre"]]
+                if result.get("track_number"):
+                    try:
+                        tn = int(result["track_number"])
+                        tt_raw = result.get("total_tracks", "")
+                        tt = int(tt_raw) if str(tt_raw).strip() else 0
+                        tags["trkn"] = [(tn, tt)]
+                    except (ValueError, TypeError):
+                        pass
+
+            # ── MP3 ──
+            else:
+                from mutagen.id3 import ID3, TIT2, TPE1, TALB, TPE2, TDRC, TCON, TRCK
+                if audio.tags is None:
+                    audio.tags = ID3()
+                tags = audio.tags
+                # Delete all known frames first
+                for frame_id in ("TIT2", "TPE1", "TALB", "TPE2", "TDRC", "TCON", "TRCK"):
+                    tags.delall(frame_id)
+                if result.get("title"):
+                    tags["TIT2"] = TIT2(encoding=3, text=result["title"])
+                if result.get("artist"):
+                    tags["TPE1"] = TPE1(encoding=3, text=result["artist"])
+                if result.get("album"):
+                    tags["TALB"] = TALB(encoding=3, text=result["album"])
+                if result.get("album_artist"):
+                    tags["TPE2"] = TPE2(encoding=3, text=result["album_artist"])
+                if result.get("date"):
+                    tags["TDRC"] = TDRC(text=result["date"])
+                if result.get("genre"):
+                    tags["TCON"] = TCON(encoding=3, text=result["genre"])
+                if result.get("track_number"):
+                    total = result.get("total_tracks", "")
+                    track_text = f"{result['track_number']}/{total}" if total else result["track_number"]
+                    tags["TRCK"] = TRCK(encoding=3, text=track_text)
+
+            # ── Cover art (pass audio_obj so text tags aren't overwritten) ──
+            cover_url = result.get("artwork_url", "")
+            if cover_url:
+                cover_data = _request(cover_url, timeout=15)
+                if cover_data and len(cover_data) > 1000:
+                    mime = "image/png" if cover_data[:4] == b'\x89PNG' else "image/jpeg"
+                    _embed_artwork(filepath, cover_data, mime, audio_obj=audio)
+
+            audio.save()
+            self._show_file_detail(filepath)
+        except Exception as e:
+            QMessageBox.warning(self, t("artwork.error_title"), str(e))
