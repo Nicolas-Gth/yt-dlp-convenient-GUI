@@ -749,6 +749,11 @@ def fetch_cover_art_itunes(artist: str, album: str, title: str = "") -> Optional
                     track_sim = _similarity(title, item_track)
                     combined = artist_sim * 0.5 + track_sim * 0.5
                     if combined > best_song_sim and artist_sim >= 0.4 and track_sim >= 0.4:
+                        # Per-track genre is a track-level attribute — capture it
+                        # even if the album doesn't match (iTunes may report a
+                        # different album name than yt-dlp).
+                        if not _itunes_last_genre:
+                            _itunes_last_genre = item.get("primaryGenreName")
                         # When we know the album, verify the result comes from
                         # the correct album to avoid compilation covers
                         if album:
@@ -756,7 +761,7 @@ def fetch_cover_art_itunes(artist: str, album: str, title: str = "") -> Optional
                             if _similarity(album, item_album) < 0.4:
                                 continue
                         best_song_sim = combined
-                        # Per-track genre is more accurate than album genre
+                        # Overwrite genre with the best matching result (including album)
                         _itunes_last_genre = item.get("primaryGenreName")
                         if not best_url:
                             best_url = item.get("artworkUrl100", "")
