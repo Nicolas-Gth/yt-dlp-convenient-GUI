@@ -53,6 +53,20 @@ class FilesEditorMixin:
                     uslt = USLT(encoding=3, lang='eng', desc='', text=lyrics_val)
                     tags.delall('USLT')
                     tags.add(uslt)
+            else:
+                # Remove lyrics tag when text is empty
+                if isinstance(audio, OggOpus):
+                    try:
+                        del tags['lyrics']
+                    except KeyError:
+                        pass
+                elif isinstance(audio, MP4):
+                    try:
+                        del tags['\xa9lyr']
+                    except KeyError:
+                        pass
+                else:
+                    tags.delall('USLT')
             for row in range(self._files_meta.rowCount()):
                 val_item = self._files_meta.item(row, 1)
                 if not val_item:

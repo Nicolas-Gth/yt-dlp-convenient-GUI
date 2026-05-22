@@ -1220,7 +1220,10 @@ def _fetch_lyrics_genius(artist: str, title: str) -> Optional[str]:
     for marker in skip_markers:
         if lyrics.endswith(marker):
             lyrics = lyrics[:-len(marker)].rstrip()
-    
+
+    # Remove Genius meta header line: e.g. "4 ContributorsWe Thought You Were Sleeping Lyrics"
+    lyrics = re.sub(r'^\d+\s*Contributors?.*(?:\n|$)', '', lyrics, count=1).strip()
+
     # Remove trailing numbers (Genius embed IDs)
     lyrics = re.sub(r'\d+$', '', lyrics).rstrip()
     

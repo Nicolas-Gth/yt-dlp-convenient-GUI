@@ -1251,7 +1251,7 @@ class FilesDetailMixin:
             for r in results:
                 all_results.append(r)
                 results_list.addItem(_build_result_item(r))
-            if not results:
+            if not all_results:
                 item = QListWidgetItem(t("artwork.no_results"))
                 item.setFlags(Qt.ItemIsEnabled)
                 item.setTextAlignment(Qt.AlignCenter)
@@ -1266,9 +1266,10 @@ class FilesDetailMixin:
                 results_list.clear()
                 all_results.clear()
                 item = QListWidgetItem(t("artwork.loading"))
-                item.setFlags(Qt.ItemIsEnabled)
+                item.setFlags(Qt.NoItemFlags)
                 item.setTextAlignment(Qt.AlignCenter)
                 results_list.addItem(item)
+                results_list.setCurrentItem(None)
 
         class LyricsSearchWorker(QThread):
             results_ready = Signal(list)
@@ -1280,40 +1281,73 @@ class FilesDetailMixin:
                 self.album = album
                 self.duration = duration
 
+            def _search_lrclib(self, album: str, limit: int = 10) -> list:
+                try:
+                    return search_lyrics_lrclib(self.artist, self.title, album, self.duration, limit=limit)
+                except Exception:
+                    return []
+
             def run(self):
                 results = []
-                # LRCLIB search — returns multiple candidates
-                try:
-                    lrclib_results = search_lyrics_lrclib(self.artist, self.title, self.album, self.duration, limit=10)
-                    results.extend(lrclib_results)
-                except Exception:
-                    pass
+                seen = set()
 
-                # Genius search — single fallback result
-                try:
-                    genius_lyrics = _fetch_lyrics_genius(self.artist, self.title)
-                    if genius_lyrics:
-                        lines_count = len(genius_lyrics.splitlines())
-                        results.append({
-                            "title": self.title,
-                            "artist": self.artist,
-                            "album": "",
-                            "lines": lines_count,
-                            "synced": False,
-                            "source": "Genius",
-                            "duration": 0,
-                            "lyrics": genius_lyrics,
-                            "lyrics_type": "plain",
-                        })
-                except Exception:
-                    pass
+                from concurrent.futures import ThreadPoolExecutor
 
-                # Sort by duration match (if available), then by synced preference
+                with ThreadPoolExecutor(max_workers=3) as pool:
+                    # Submit all searches in parallel
+                    f_album = pool.submit(self._search_lrclib, self.album, 10) if self.album else None
+                    f_noalbum = pool.submit(self._search_lrclib, "", 10)
+                    f_genius = pool.submit(_fetch_lyrics_genius, self.artist, self.title)
+
+                    # Process album results first to ensure correct priority
+                    tagged = []
+                    if f_album:
+                        try:
+                            for r in (f_album.result(timeout=15) or []):
+                                tagged.append((r, True))
+                        except Exception:
+                            pass
+                    try:
+                        for r in (f_noalbum.result(timeout=15) or []):
+                            tagged.append((r, False))
+                    except Exception:
+                        pass
+
+                    for r, album_match in tagged:
+                        key = f"{r.get('artist', '')}|{r.get('title', '')}"
+                        if key not in seen:
+                            seen.add(key)
+                            r["_album_match"] = album_match
+                            results.append(r)
+
+                    # Genius fallback
+                    try:
+                        genius_lyrics = f_genius.result(timeout=15)
+                        if genius_lyrics:
+                            lines_count = len(genius_lyrics.splitlines())
+                            results.append({
+                                "title": self.title,
+                                "artist": self.artist,
+                                "album": "",
+                                "lines": lines_count,
+                                "synced": False,
+                                "source": "Genius",
+                                "duration": 0,
+                                "lyrics": genius_lyrics,
+                                "lyrics_type": "plain",
+                                "_album_match": False,
+                            })
+                    except Exception:
+                        pass
+
+                # Sort: album-matched first, then by duration match / synced
                 def _sort_key(r):
-                    dur = r.get("duration", 0)
                     score = 0
+                    if r.get("_album_match"):
+                        score += 10000
+                    dur = r.get("duration", 0)
                     if dur > 0 and self.duration > 0:
-                        score = -abs(dur - self.duration)  # closer duration = higher score
+                        score += -abs(dur - self.duration)
                     if r.get("synced"):
                         score += 1000
                     return score
