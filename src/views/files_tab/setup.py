@@ -10,6 +10,7 @@ from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
 
 from config import INFO_ICON_PATH
 from utils.i18n_utils import t
+from utils.theme_utils import is_dark_mode
 
 from .widgets import _ArtworkLabel, _SeekSlider, _ArtworkWrapper, _ArtworkEditable
 
@@ -190,6 +191,9 @@ class FilesSetupMixin:
         ebl.setSpacing(6)
         self._identify_btn = QPushButton(t("button.identify"))
         self._identify_btn.setCursor(Qt.PointingHandCursor)
+        identify_icon = "assets/ui/search-icon-light.svg" if is_dark_mode() else "assets/ui/search-icon-dark.svg"
+        self._identify_btn.setIcon(QIcon(identify_icon))
+        self._identify_btn.setIconSize(QSize(16, 16))
         self._identify_btn.clicked.connect(self._on_identify_metadata)
         ebl.addWidget(self._identify_btn)
         ebl.addStretch()
@@ -251,6 +255,9 @@ class FilesSetupMixin:
         lyrics_header.addStretch()
         self._lyrics_search_btn = QPushButton(t("lyrics.search"))
         self._lyrics_search_btn.setCursor(Qt.PointingHandCursor)
+        lyrics_search_icon = "assets/ui/search-icon-light.svg" if is_dark_mode() else "assets/ui/search-icon-dark.svg"
+        self._lyrics_search_btn.setIcon(QIcon(lyrics_search_icon))
+        self._lyrics_search_btn.setIconSize(QSize(16, 16))
         self._lyrics_search_btn.clicked.connect(self._on_search_lyrics)
         self._lyrics_search_btn.hide()
         lyrics_header.addWidget(self._lyrics_search_btn)
@@ -285,3 +292,11 @@ class FilesSetupMixin:
         self._file_watcher.directoryChanged.connect(self._on_watcher_changed)
         self._file_watcher.fileChanged.connect(self._on_watcher_changed)
         self.path_entry.textChanged.connect(self._on_download_path_changed)
+
+    def _update_search_icons(self):
+        """Update search button icons (identify & lyrics) based on current theme."""
+        icon = "assets/ui/search-icon-light.svg" if is_dark_mode() else "assets/ui/search-icon-dark.svg"
+        for attr in ('_identify_btn', '_lyrics_search_btn'):
+            btn = getattr(self, attr, None)
+            if btn is not None:
+                btn.setIcon(QIcon(icon))
