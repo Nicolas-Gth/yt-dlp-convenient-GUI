@@ -129,9 +129,12 @@ class FilesListMixin:
                 l_item.setText(lyrics)
                 l_item.setData(Qt.UserRole, lyr_type)
                 self._files_table.item(row, 4).setText(mtime)
+            self._restoring_widths = True
             self._files_table.horizontalHeader().resizeSections(QHeaderView.ResizeToContents)
+            self._restoring_widths = False
             self._files_table.setSortingEnabled(True)
             self._files_table.blockSignals(False)
+            self._restore_column_widths()
         else:
             # Full rebuild (files added/removed/reordered)
             self._files_table.blockSignals(True)
@@ -170,10 +173,13 @@ class FilesListMixin:
                 mtime_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
                 self._files_table.setItem(idx, 4, mtime_item)
 
+            self._restoring_widths = True
             self._files_table.horizontalHeader().resizeSections(QHeaderView.ResizeToContents)
+            self._restoring_widths = False
             self._files_table.setSortingEnabled(True)
             self._files_table.setEnabled(True)
             self._files_table.blockSignals(False)
+            self._restore_column_widths()
 
             # Restore selection by filepath — row index may have changed due to sorting.
             if selected_filepath:

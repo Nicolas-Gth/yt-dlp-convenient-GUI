@@ -11,6 +11,7 @@ from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
 from config import INFO_ICON_PATH
 from utils.i18n_utils import t
 from utils.theme_utils import is_dark_mode
+from utils.settings_utils import settings_manager
 
 from .widgets import _ArtworkLabel, _SeekSlider, _ArtworkWrapper, _ArtworkEditable
 
@@ -121,12 +122,15 @@ class FilesSetupMixin:
             "}"
         )
         hdr = self._files_table.horizontalHeader()
+        hdr.setMinimumSectionSize(60)
         hdr.setSectionResizeMode(0, QHeaderView.Interactive)
         hdr.setSectionResizeMode(1, QHeaderView.Interactive)
         hdr.setSectionResizeMode(2, QHeaderView.Interactive)
         hdr.setSectionResizeMode(3, QHeaderView.Interactive)
-        hdr.setSectionResizeMode(4, QHeaderView.Stretch)
+        hdr.setSectionResizeMode(4, QHeaderView.Interactive)
+        hdr.setStretchLastSection(True)
         hdr.setDefaultAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        hdr.sectionResized.connect(self._on_section_resized)
         self._files_table.itemSelectionChanged.connect(self._on_file_selected)
         files_layout.addWidget(self._files_table, 1)
         left_layout.addWidget(files_group, 1)
@@ -300,3 +304,32 @@ class FilesSetupMixin:
             btn = getattr(self, attr, None)
             if btn is not None:
                 btn.setIcon(QIcon(icon))
+
+    def _restore_column_widths(self):
+        """Restore file table column widths from settings."""
+        self._columns_ready = True
+        widths = settings_manager.get_setting("files_table_column_widths")
+        if not widths or len(widths) != self._files_table.columnCount():
+            return
+        self._restoring_widths = True
+        hdr = self._files_table.horizontalHeader()
+        minimums = {3: 70, 4: 110}
+        for i, w in enumerate(widths):
+            w = max(w, minimums.get(i, 60))
+            hdr.resizeSection(i, w)
+        self._restoring_widths = False
+
+    def _on_section_resized(self, logical_index, old_size, new_size):
+        """Enforce minimum column widths then persist."""
+        if getattr(self, '_restoring_widths', False) or not getattr(self, '_columns_ready', False):
+            return
+        hdr = self._files_table.horizontalHeader()
+        minimums = {3: 70, 4: 110}
+        min_w = minimums.get(logical_index, 0)
+        if min_w and new_size < min_w:
+            self._restoring_widths = True
+            hdr.resizeSection(logical_index, min_w)
+            self._restoring_widths = False
+            return
+        widths = [hdr.sectionSize(i) for i in range(hdr.count())]
+        settings_manager.set_setting("files_table_column_widths", widths)
