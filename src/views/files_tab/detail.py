@@ -273,6 +273,7 @@ class FilesDetailMixin:
         dlg.setWindowTitle(t("artwork.select_title"))
         dlg.setMinimumWidth(500)
         dlg.setMinimumHeight(400)
+        dlg.resize(750, 550)
         layout = QVBoxLayout(dlg)
         layout.setSpacing(8)
 
@@ -617,6 +618,7 @@ class FilesDetailMixin:
         dlg.setWindowTitle(t("metadata.identify_title"))
         dlg.setMinimumWidth(500)
         dlg.setMinimumHeight(400)
+        dlg.resize(750, 550)
         layout = QVBoxLayout(dlg)
         layout.setSpacing(8)
 
