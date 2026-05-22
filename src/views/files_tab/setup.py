@@ -124,7 +124,7 @@ class FilesSetupMixin:
         hdr.setSectionResizeMode(1, QHeaderView.Interactive)
         hdr.setSectionResizeMode(2, QHeaderView.Interactive)
         hdr.setSectionResizeMode(3, QHeaderView.Interactive)
-        hdr.setSectionResizeMode(4, QHeaderView.Interactive)
+        hdr.setSectionResizeMode(4, QHeaderView.Stretch)
         hdr.setDefaultAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         self._files_table.itemSelectionChanged.connect(self._on_file_selected)
         files_layout.addWidget(self._files_table, 1)
