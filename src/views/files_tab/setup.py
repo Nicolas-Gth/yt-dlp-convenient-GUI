@@ -131,6 +131,7 @@ class FilesSetupMixin:
         hdr.setStretchLastSection(True)
         hdr.setDefaultAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         hdr.sectionResized.connect(self._on_section_resized)
+        hdr.sortIndicatorChanged.connect(self._save_sort_column)
         self._files_table.itemSelectionChanged.connect(self._on_file_selected)
         files_layout.addWidget(self._files_table, 1)
         left_layout.addWidget(files_group, 1)
@@ -333,3 +334,21 @@ class FilesSetupMixin:
             return
         widths = [hdr.sectionSize(i) for i in range(hdr.count())]
         settings_manager.set_setting("files_table_column_widths", widths)
+
+    def _save_sort_column(self, logical_index, order):
+        """Persist sort column and order to settings."""
+        if getattr(self, '_restoring_widths', False) or not getattr(self, '_columns_ready', False):
+            return
+        settings_manager.set_setting("files_table_sort", [logical_index, order.value])
+
+    def _restore_sort_column(self):
+        """Restore sort column and order from settings."""
+        data = settings_manager.get_setting("files_table_sort")
+        if not data or len(data) != 2:
+            return
+        col, order = data
+        if 0 <= col < self._files_table.columnCount():
+            self._restoring_widths = True
+            hdr = self._files_table.horizontalHeader()
+            hdr.setSortIndicator(col, Qt.SortOrder(order))
+            self._restoring_widths = False

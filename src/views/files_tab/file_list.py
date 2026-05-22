@@ -176,6 +176,7 @@ class FilesListMixin:
             self._restoring_widths = True
             self._files_table.horizontalHeader().resizeSections(QHeaderView.ResizeToContents)
             self._restoring_widths = False
+            self._restore_sort_column()
             self._files_table.setSortingEnabled(True)
             self._files_table.setEnabled(True)
             self._files_table.blockSignals(False)
