@@ -1115,7 +1115,7 @@ class FilesDetailMixin:
 
         dlg = QDialog(self)
         dlg.setWindowTitle(t("lyrics.search_title"))
-        dlg.setMinimumWidth(700)
+        dlg.setMinimumWidth(900)
         dlg.setMinimumHeight(500)
         layout = QVBoxLayout(dlg)
         layout.setSpacing(8)
