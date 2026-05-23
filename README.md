@@ -16,8 +16,9 @@
 
 ## Preview
 <p align="center">
-  <img src="https://github.com/user-attachments/assets/49605fe5-894f-4047-9af7-f832ea62f187" width="30%" align="middle"/>
-  <img src="https://github.com/user-attachments/assets/83271379-f116-4e17-81b2-99919d1bdb68" width="60%" align="middle"/>
+  <img alt="downloading a song" src="https://github.com/user-attachments/assets/3d6a077f-5c6d-4511-9acb-1ec7c60f4284" width="40%" align="middle"/>
+
+  <img src="https://github.com/user-attachments/assets/867aa06b-e105-448e-b754-bbf8632fb8f2" width="50%" align="middle"/>
 </p>
 
 ## Features
