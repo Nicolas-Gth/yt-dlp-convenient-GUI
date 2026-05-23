@@ -90,6 +90,8 @@
   "files.no_selection": "Keine Datei ausgewählt",
   "files.number": "#",
   "files.path": "Pfad",
+  "files.reorganize_error": "Fehler beim Verschieben",
+  "files.reorganize_error_detail": "Konnte nicht verschoben werden:\n{src}\n→ {dst}\n\nFehler: {error}",
   "files.search_placeholder": "Suchen…",
   "files.structure_title": "Ordnerstruktur",
   "files.title": "Titel",

@@ -90,6 +90,8 @@
   "files.no_selection": "Ningún archivo seleccionado",
   "files.number": "#",
   "files.path": "Ruta",
+  "files.reorganize_error": "Error de reorganización",
+  "files.reorganize_error_detail": "No se pudo mover:\n{src}\n→ {dst}\n\nError: {error}",
   "files.search_placeholder": "Buscar…",
   "files.structure_title": "Estructura de carpetas",
   "files.title": "Título",

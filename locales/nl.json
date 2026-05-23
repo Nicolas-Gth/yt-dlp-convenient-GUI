@@ -90,6 +90,8 @@
   "files.no_selection": "Geen bestand geselecteerd",
   "files.number": "#",
   "files.path": "Pad",
+  "files.reorganize_error": "Reorganisatiefout",
+  "files.reorganize_error_detail": "Kon niet worden verplaatst:\n{src}\n→ {dst}\n\nFout: {error}",
   "files.search_placeholder": "Zoeken…",
   "files.structure_title": "Mapstructuur",
   "files.title": "Titel",

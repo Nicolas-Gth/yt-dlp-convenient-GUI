@@ -1,6 +1,7 @@
 import os
 import re
 import shutil
+import unicodedata
 from datetime import datetime
 
 from PySide6.QtWidgets import (
@@ -308,6 +309,7 @@ class FilesListMixin:
             if not new_relpath:
                 continue
             new_path = os.path.join(directory, new_relpath)
+            new_path = unicodedata.normalize('NFC', new_path)
             # ensure extension is preserved
             orig_ext = os.path.splitext(filepath)[1]
             new_ext = os.path.splitext(new_path)[1]
@@ -329,7 +331,10 @@ class FilesListMixin:
             try:
                 shutil.move(filepath, new_path)
             except Exception as e:
-                print(f"[reorganize] Error moving {filepath} -> {new_path}: {e}")
+                QMessageBox.warning(
+                    self._files_tab, t("files.reorganize_error"),
+                    t("files.reorganize_error_detail").format(src=filepath, dst=new_path, error=str(e))
+                )
         self._files_pending_refresh = True
         self.refresh_files_list()
 
@@ -367,4 +372,4 @@ class FilesListMixin:
         s = sanitized.strip()
         if not s or s in ('.', '..'):
             return '_'
-        return s
+        return unicodedata.normalize('NFC', s)

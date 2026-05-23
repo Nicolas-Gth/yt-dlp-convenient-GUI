@@ -90,6 +90,8 @@
   "files.no_selection": "Nessun file selezionato",
   "files.number": "#",
   "files.path": "Percorso",
+  "files.reorganize_error": "Errore di riorganizzazione",
+  "files.reorganize_error_detail": "Impossibile spostare:\n{src}\n→ {dst}\n\nErrore: {error}",
   "files.search_placeholder": "Cerca…",
   "files.structure_title": "Struttura cartella",
   "files.title": "Titolo",
