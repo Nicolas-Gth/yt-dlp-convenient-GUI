@@ -70,9 +70,10 @@ class DownloadConfig:
     normalize_volume: bool = False
     normalize_target: float = -14.0  # Target loudness in LUFS
     enrich_metadata: bool = False  # Fetch HD album cover + lyrics from MusicBrainz/LRCLIB
-    
+    output_template: str = ""  # User-defined filename template (e.g. "{artist} - {title}.{format}")
+
     @property
-    def output_template(self) -> str:
+    def ydl_output_template(self) -> str:
         """Generate the output template for yt-dlp."""
         return f"{self.output_directory}/%(title)s.%(ext)s"
 

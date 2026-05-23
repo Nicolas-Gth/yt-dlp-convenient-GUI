@@ -1,7 +1,3 @@
-<h2 align="center">
-  <img src="assets/titre_features.png" alt="Features" width="100%">
-</h2>
-
 # yt-dlp Convenient GUI
 <div align="center">
   <img src="assets/yt-dlp_convenient_gui_icon.png" alt="yt-dlp Convenient GUI" width="300">
@@ -16,8 +12,9 @@
 
 ## Preview
 <p align="center">
-  <img src="https://github.com/user-attachments/assets/49605fe5-894f-4047-9af7-f832ea62f187" width="30%" align="middle"/>
-  <img src="https://github.com/user-attachments/assets/83271379-f116-4e17-81b2-99919d1bdb68" width="60%" align="middle"/>
+  <img alt="downloading a song" src="https://github.com/user-attachments/assets/3d6a077f-5c6d-4511-9acb-1ec7c60f4284" width="40%" align="middle"/>
+
+  <img src="https://github.com/user-attachments/assets/867aa06b-e105-448e-b754-bbf8632fb8f2" width="50%" align="middle"/>
 </p>
 
 ## Features
@@ -25,6 +22,7 @@
 - Audio normalization for consistent playback volume
 - Advanced metadata search: automatically fetches and embeds rich track info (artist, album, cover art, etc.)
 - Synchronized lyrics search: embeds time-synced lyrics (LRC) directly into downloaded files
+- Edit easily the files in your downloads folder
 - Remembers settings
 - Warns you if videos from your playlist are no longer accessible, private or age-restricted so you can search for an alternative or set a cookies file.
 

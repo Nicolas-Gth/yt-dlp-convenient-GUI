@@ -11,13 +11,22 @@ class RefreshMixin:
 
     def refresh_table_theme(self):
         """Force table widgets to pick up the new palette colours."""
-        for attr in ('info_table', '_normalize_table', '_skipped_table'):
+        for attr in ('info_table', '_normalize_table', '_skipped_table', '_files_table', '_files_meta', '_play_btn', '_lyrics_edit', '_elapsed_label', '_total_label', '_edit_reset_btn', '_edit_save_btn', '_edit_btn_bar', '_prevent_sleep_check', '_experimental_check', '_lyrics_search_btn'):
             widget = getattr(self, attr, None)
             if widget is not None:
                 sheet = widget.styleSheet()
                 widget.setStyleSheet("")
                 widget.setStyleSheet(sheet)
                 widget.update()
+        # Refresh play/pause icon for current theme
+        if hasattr(self, '_play_btn') and self._play_btn is not None:
+            if hasattr(self, '_media_player') and self._media_player is not None:
+                from PySide6.QtMultimedia import QMediaPlayer
+                is_playing = self._media_player.playbackState() == QMediaPlayer.PlayingState
+                self._update_play_icon(is_playing)
+        # Refresh search button icons for current theme
+        if hasattr(self, '_update_search_icons'):
+            self._update_search_icons()
 
     def refresh_table_translation(self):
         """Update table headers and cell content after a language change."""
@@ -85,3 +94,7 @@ class RefreshMixin:
                 self.convert_button.setText(" " + t("button.new_download"))
             elif not self.convert_button.isHidden():
                 self.convert_button.setText(" " + t("button.download"))
+
+        # Files tab
+        if hasattr(self, 'retranslate_files_tab'):
+            self.retranslate_files_tab()

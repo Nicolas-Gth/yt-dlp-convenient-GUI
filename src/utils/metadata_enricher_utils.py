@@ -17,6 +17,7 @@ import re
 import urllib.request
 import urllib.parse
 import urllib.error
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from io import BytesIO
 from typing import Optional, Dict, Tuple, List
 from dataclasses import dataclass
@@ -225,6 +226,278 @@ def search_musicbrainz(artist: str, title: str, album: str) -> Optional[Dict]:
         return None
 
 
+def search_metadata_candidates(artist: str, title: str, album: str = "", limit: int = 10) -> List[Dict]:
+    """
+    Search MusicBrainz for recording candidates and return rich metadata dicts.
+    
+    Each dict contains:
+        - artist, title, album, date, genre, track_number, total_tracks
+        - artwork_url, artwork_data (thumbnail bytes or None)
+        - mb_recording_id, mb_release_id, confidence
+    """
+    results: List[Dict] = []
+    if not artist and not title:
+        return results
+
+    query_parts = []
+    if artist:
+        query_parts.append(f'artist:"{artist}"')
+    if title:
+        query_parts.append(f'recording:"{title}"')
+    if album:
+        query_parts.append(f'release:"{album}"')
+
+    query = " AND ".join(query_parts)
+    params = urllib.parse.urlencode({
+        "query": query,
+        "fmt": "json",
+        "limit": str(limit)
+    })
+    url = f"{_MB_BASE}/recording?{params}"
+
+    data = _request(url)
+    if not data:
+        return results
+
+    try:
+        recordings = json.loads(data).get("recordings", [])
+    except (json.JSONDecodeError, KeyError):
+        return results
+
+    seen_rg = set()
+
+    for rec in recordings:
+        rec_title = rec.get("title", "")
+        rec_artist = ""
+        for credit in rec.get("artist-credit", []):
+            name = credit.get("name", "") or credit.get("artist", {}).get("name", "")
+            if name:
+                rec_artist = name
+                break
+
+        # Get the best release for this recording
+        releases = rec.get("releases", [])
+        if not releases:
+            continue
+
+        best_release = None
+        best_priority = -100
+        for release in releases:
+            priority = 0
+            release_group = release.get("release-group", {})
+            primary_type = (release_group.get("primary-type") or "").lower()
+            
+            if album:
+                album_sim = _similarity(album, release.get("title", ""))
+                if album_sim >= 0.8:
+                    priority += 30
+                elif album_sim >= 0.6:
+                    priority += 15
+            
+            if primary_type == "album":
+                priority += 10
+            elif primary_type == "ep":
+                priority += 7
+            elif primary_type == "single":
+                priority += 5
+            
+            if release.get("date"):
+                priority += 2
+
+            if priority > best_priority:
+                best_priority = priority
+                best_release = release
+
+        if not best_release:
+            continue
+
+        release_group = best_release.get("release-group", {})
+        rg_id = release_group.get("id", "")
+        
+        # Deduplicate by release-group
+        if rg_id in seen_rg:
+            continue
+        seen_rg.add(rg_id)
+
+        # Extract metadata
+        date = ""
+        raw_date = best_release.get("date", "")
+        if raw_date and len(raw_date) >= 4 and raw_date[:4].isdigit():
+            date = raw_date[:4]
+
+        track_number = ""
+        total_tracks = ""
+        for medium in best_release.get("media", []):
+            track_offset = medium.get("track-offset", 0)
+            track_count = medium.get("track-count", 0)
+            if track_count > 0:
+                track_number = str(track_offset + 1)
+                total_tracks = str(track_count)
+                break
+
+        album_artist = ""
+        if release_group:
+            for credit in release_group.get("artist-credit", []):
+                album_artist = credit.get("name", "") or credit.get("artist", {}).get("name", "")
+                break
+
+        # Try to get cover art
+        artwork_url = ""
+        artwork_data = None
+        release_id = best_release.get("id", "")
+        
+        if rg_id:
+            caa_data = _request(f"{_CA_BASE}/release-group/{rg_id}", timeout=8)
+            if caa_data:
+                try:
+                    caa_json = json.loads(caa_data)
+                    images = caa_json.get("images", [])
+                    if images:
+                        front = next((img for img in images if img.get("front")), images[0])
+                        thumbs = front.get("thumbnails", {})
+                        thumb_url = thumbs.get("small") or thumbs.get("250")
+                        hd_url = front.get("image")
+                        if thumb_url:
+                            artwork_url = hd_url or thumb_url
+                            thumb_data = _request(thumb_url, timeout=8)
+                            if thumb_data and len(thumb_data) > 500:
+                                artwork_data = thumb_data
+                except (json.JSONDecodeError, KeyError):
+                    pass
+
+        if not artwork_url and release_id:
+            caa_data = _request(f"{_CA_BASE}/release/{release_id}", timeout=8)
+            if caa_data:
+                try:
+                    caa_json = json.loads(caa_data)
+                    images = caa_json.get("images", [])
+                    if images:
+                        front = next((img for img in images if img.get("front")), images[0])
+                        thumbs = front.get("thumbnails", {})
+                        thumb_url = thumbs.get("small") or thumbs.get("250")
+                        hd_url = front.get("image")
+                        if thumb_url:
+                            artwork_url = hd_url or thumb_url
+                            thumb_data = _request(thumb_url, timeout=8)
+                            if thumb_data and len(thumb_data) > 500:
+                                artwork_data = thumb_data
+                except (json.JSONDecodeError, KeyError):
+                    pass
+
+        # Genre
+        genre = ""
+        genres = rec.get("genres", [])
+        if genres:
+            genre = genres[0].get("name", "")
+        else:
+            tags = rec.get("tags", [])
+            if tags:
+                genre = tags[0].get("name", "")
+
+        results.append({
+            "artist": rec_artist,
+            "title": rec_title,
+            "album": best_release.get("title", ""),
+            "album_artist": album_artist,
+            "date": date,
+            "genre": genre.title() if genre else "",
+            "track_number": track_number,
+            "total_tracks": total_tracks,
+            "artwork_url": artwork_url,
+            "artwork_data": artwork_data,
+            "mb_recording_id": rec.get("id", ""),
+            "mb_release_id": release_id,
+            "mb_release_group_id": rg_id,
+            "confidence": rec.get("score", 0),
+        })
+
+        if len(results) >= limit:
+            break
+
+    return results
+
+
+def search_metadata_itunes(artist: str, title: str, album: str = "", limit: int = 10) -> List[Dict]:
+    """
+    Search iTunes for track candidates and return rich metadata dicts.
+
+    Same output format as search_metadata_candidates.
+    """
+    results: List[Dict] = []
+    if not artist and not title and not album:
+        return results
+
+    query_parts = []
+    if artist:
+        query_parts.append(artist)
+    if title:
+        query_parts.append(title)
+    elif album:
+        query_parts.append(album)
+
+    query = " ".join(query_parts)
+    params = urllib.parse.urlencode({
+        "term": query,
+        "media": "music",
+        "entity": "song",
+        "limit": str(min(limit, 50)),
+        "country": "US"
+    })
+    url = f"{_ITUNES_BASE}/search?{params}"
+
+    data = _request(url)
+    if not data:
+        return results
+
+    try:
+        items = json.loads(data).get("results", [])
+    except (json.JSONDecodeError, KeyError):
+        return results
+
+    for item in items:
+        track_id = str(item.get("trackId", ""))
+        if not track_id:
+            continue
+
+        date = ""
+        raw_date = item.get("releaseDate", "")
+        if raw_date and len(raw_date) >= 4 and raw_date[:4].isdigit():
+            date = raw_date[:4]
+
+        artwork_url = ""
+        artwork_data = None
+        url_100 = item.get("artworkUrl100", "")
+        if url_100:
+            artwork_url = url_100.replace("100x100bb", "1200x1200bb")
+            thumb_url = url_100.replace("100x100bb", "300x300bb")
+            thumb_data = _request(thumb_url, timeout=8)
+            if thumb_data and len(thumb_data) > 500:
+                artwork_data = thumb_data
+
+        results.append({
+            "artist": item.get("artistName", ""),
+            "title": item.get("trackName", ""),
+            "album": item.get("collectionName", ""),
+            "album_artist": item.get("artistName", ""),
+            "date": date,
+            "genre": item.get("primaryGenreName", ""),
+            "track_number": str(item.get("trackNumber", "")),
+            "total_tracks": str(item.get("trackCount", "")),
+            "artwork_url": artwork_url,
+            "artwork_data": artwork_data,
+            "mb_recording_id": "",
+            "mb_release_id": "",
+            "mb_release_group_id": "",
+            "itunes_track_id": track_id,
+            "confidence": 0,
+        })
+
+        if len(results) >= limit:
+            break
+
+    return results
+
+
 def _pick_best_release(recording: Dict, album_from_yt: str) -> Optional[Dict]:
     """
     Pick the release from MusicBrainz that matches the album name from YouTube.
@@ -261,16 +534,14 @@ def _pick_best_release(recording: Dict, album_from_yt: str) -> Optional[Dict]:
             priority += 7
         elif primary_type == "single":
             priority += 5
-        
+
         if "compilation" in secondary_types:
             priority -= 5
-        
-        # Prefer releases with a date and country (more complete data)
+
+        # Prefer releases with a date (more complete data)
         if release.get("date"):
             priority += 2
-        if release.get("country"):
-            priority += 1
-        
+
         # When priorities are equal, prefer the oldest release (original)
         # over reissues/remasters which have later dates
         release_date = release.get("date", "9999")
@@ -379,16 +650,17 @@ def fetch_cover_art(release_id: str, release_group_id: str = "",
     Returns JPEG/PNG bytes or None.
     """
     urls_to_try = []
-    
-    # Priority 1: release-group (aggregates all editions of the album)
+
+    # Priority 1: release-group (usually gives the canonical/global cover
+    # independent of regional editions, avoiding Japanese obi strips etc.)
     if release_group_id:
         urls_to_try.append(f"{_CA_BASE}/release-group/{release_group_id}/front-1200")
         urls_to_try.append(f"{_CA_BASE}/release-group/{release_group_id}/front")
-    
+
     # Priority 2: the specific release matched
     urls_to_try.append(f"{_CA_BASE}/release/{release_id}/front-1200")
     urls_to_try.append(f"{_CA_BASE}/release/{release_id}/front")
-    
+
     # Priority 3: other releases of the same album
     for rid in (fallback_release_ids or []):
         if rid != release_id:
@@ -477,6 +749,11 @@ def fetch_cover_art_itunes(artist: str, album: str, title: str = "") -> Optional
                     track_sim = _similarity(title, item_track)
                     combined = artist_sim * 0.5 + track_sim * 0.5
                     if combined > best_song_sim and artist_sim >= 0.4 and track_sim >= 0.4:
+                        # Per-track genre is a track-level attribute — capture it
+                        # even if the album doesn't match (iTunes may report a
+                        # different album name than yt-dlp).
+                        if not _itunes_last_genre:
+                            _itunes_last_genre = item.get("primaryGenreName")
                         # When we know the album, verify the result comes from
                         # the correct album to avoid compilation covers
                         if album:
@@ -484,7 +761,7 @@ def fetch_cover_art_itunes(artist: str, album: str, title: str = "") -> Optional
                             if _similarity(album, item_album) < 0.4:
                                 continue
                         best_song_sim = combined
-                        # Per-track genre is more accurate than album genre
+                        # Overwrite genre with the best matching result (including album)
                         _itunes_last_genre = item.get("primaryGenreName")
                         if not best_url:
                             best_url = item.get("artworkUrl100", "")
@@ -493,16 +770,229 @@ def fetch_cover_art_itunes(artist: str, album: str, title: str = "") -> Optional
     
     if not best_url:
         return None
-    
+
     # iTunes returns 100x100 by default — request 1200x1200
     hd_url = best_url.replace("100x100bb", "1200x1200bb")
-    
+
     cover_data = _request(hd_url, timeout=15)
     if cover_data and len(cover_data) > 1000:
         print(f"[metadata] Got HD cover from iTunes: {len(cover_data)} bytes")
         return cover_data
-    
+
     return None
+
+
+def search_cover_art_itunes(query: str = "", artist: str = "", album: str = "", title: str = "", limit: int = 10) -> List[dict]:
+    """
+    Search iTunes for cover art candidates and return a list of result dicts.
+
+    *query* is free-form text (e.g. "artist album"). If empty, falls back to
+    the old artist/album/title arguments.
+
+    Each dict contains:
+        - artist, album, track, artwork_url, artwork_data (bytes or None)
+    """
+    results: List[dict] = []
+    seen_urls: set = set()
+
+    queries = []
+    if query:
+        queries.append((query, "song"))
+        queries.append((query, "album"))
+    else:
+        if title:
+            queries.append((f"{artist} {title}", "song"))
+        if album:
+            queries.append((f"{artist} {album}", "album"))
+        if artist and not album and not title:
+            queries.append((artist, "album"))
+
+    for q, entity in queries:
+        params = urllib.parse.urlencode({
+            "term": q,
+            "media": "music",
+            "entity": entity,
+            "limit": str(limit),
+            "country": "US"
+        })
+        url = f"{_ITUNES_BASE}/search?{params}"
+        data = _request(url)
+        if not data:
+            continue
+        try:
+            items = json.loads(data).get("results", [])
+        except (json.JSONDecodeError, KeyError):
+            continue
+
+        for item in items:
+            url_100 = item.get("artworkUrl100", "")
+            if not url_100 or url_100 in seen_urls:
+                continue
+            seen_urls.add(url_100)
+
+            hd_url = url_100.replace("100x100bb", "1200x1200bb")
+            thumb_url = url_100.replace("100x100bb", "300x300bb")
+
+            results.append({
+                "artist": item.get("artistName", ""),
+                "album": item.get("collectionName", ""),
+                "track": item.get("trackName", ""),
+                "artwork_url": hd_url,
+                "artwork_thumb_url": thumb_url,
+                "artwork_data": None,
+            })
+
+        if len(results) >= limit:
+            break
+
+    # Download thumbnail data for each result (small, fast)
+    for r in results:
+        thumb_data = _request(r["artwork_thumb_url"], timeout=10)
+        if thumb_data and len(thumb_data) > 500:
+            r["artwork_data"] = thumb_data
+
+    return results[:limit]
+
+
+def search_cover_art_musicbrainz(query: str = "", artist: str = "", album: str = "", title: str = "", limit: int = 10) -> List[dict]:
+    """
+    Search MusicBrainz + Cover Art Archive for cover art candidates.
+
+    Uses parallel requests for CAA checks and thumbnail downloads to
+    minimize latency (CAA is very slow, ~2-4s per request).
+
+    Returns a list of result dicts in the same format as iTunes.
+    """
+    results: List[dict] = []
+
+    # Build Lucene query
+    query_parts = []
+    if query:
+        query_parts.append(query)
+    else:
+        if artist:
+            query_parts.append(f'artist:"{artist}"')
+        if album:
+            query_parts.append(f'release:"{album}"')
+        if title and not album:
+            query_parts.append(f'recording:"{title}"')
+
+    if not query_parts:
+        return results
+
+    mb_query = " AND ".join(query_parts)
+    params = urllib.parse.urlencode({
+        "query": mb_query,
+        "fmt": "json",
+        "limit": str(limit * 3)
+    })
+    url = f"{_MB_BASE}/release?{params}"
+
+    data = _request(url)
+    if not data:
+        return results
+
+    try:
+        releases = json.loads(data).get("releases", [])
+    except (json.JSONDecodeError, KeyError):
+        return results
+
+    # --- Parallel CAA checks ---
+    # Build list of unique (release, rg_id) pairs for deduplication
+    unique_releases = []
+    seen_rg = set()
+    for release in releases:
+        release_id = release.get("id", "")
+        rg_id = release.get("release-group", {}).get("id", "")
+        dedup_id = rg_id or release_id
+        if dedup_id in seen_rg:
+            continue
+        seen_rg.add(dedup_id)
+        unique_releases.append((release, rg_id, release_id))
+        if len(unique_releases) >= limit * 2:
+            break
+
+    def _check_caa(release_rg_id):
+        """Check CAA for a release-group, return (rg_id, thumb_url, hd_url) or None."""
+        if not release_rg_id:
+            return None
+        caa_data = _request(f"{_CA_BASE}/release-group/{release_rg_id}", timeout=10)
+        if not caa_data:
+            return None
+        try:
+            caa_json = json.loads(caa_data)
+            images = caa_json.get("images", [])
+            if images:
+                front = next((img for img in images if img.get("front")), images[0])
+                thumbs = front.get("thumbnails", {})
+                thumb = thumbs.get("small") or thumbs.get("250")
+                hd = front.get("image")
+                return (release_rg_id, thumb, hd)
+        except (json.JSONDecodeError, KeyError):
+            pass
+        return None
+
+    # Run CAA checks in parallel (CAA is very slow, ~2-4s each)
+    caa_results = {}
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        futures = {executor.submit(_check_caa, rg_id): rg_id
+                   for _, rg_id, _ in unique_releases if rg_id}
+        for future in as_completed(futures):
+            result = future.result()
+            if result:
+                rg_id, thumb, hd = result
+                caa_results[rg_id] = (thumb, hd)
+
+    # Build result list from successful CAA checks (release-group only, no release fallback)
+    seen_ids = set()
+    for release, rg_id, release_id in unique_releases:
+        dedup_id = rg_id or release_id
+        if dedup_id in seen_ids:
+            continue
+        seen_ids.add(dedup_id)
+
+        if not rg_id or rg_id not in caa_results:
+            continue
+
+        thumb_url, hd_url = caa_results[rg_id]
+        if not thumb_url:
+            continue
+
+        artists = []
+        for credit in release.get("artist-credit", []):
+            name = credit.get("name", "") or credit.get("artist", {}).get("name", "")
+            if name:
+                artists.append(name)
+
+        results.append({
+            "artist": "; ".join(artists),
+            "album": release.get("title", ""),
+            "track": "",
+            "artwork_url": hd_url or thumb_url,
+            "artwork_thumb_url": thumb_url,
+            "artwork_data": None,
+        })
+
+        if len(results) >= limit:
+            break
+
+    # --- Parallel thumbnail downloads ---
+    def _download_thumb(url):
+        data = _request(url, timeout=10)
+        return data if data and len(data) > 500 else None
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        futures = {executor.submit(_download_thumb, r["artwork_thumb_url"]): r for r in results}
+        for future in as_completed(futures):
+            r = futures[future]
+            try:
+                thumb_data = future.result()
+                if thumb_data:
+                    r["artwork_data"] = thumb_data
+            except Exception:
+                pass
+
+    return results
 
 
 def _fetch_lyrics_lrclib(artist: str, title: str, album: str = "", duration_sec: int = 0) -> Tuple[Optional[str], Optional[str]]:
@@ -510,38 +1000,146 @@ def _fetch_lyrics_lrclib(artist: str, title: str, album: str = "", duration_sec:
     Fetch lyrics from LRCLIB.
     Returns (plain_lyrics, synced_lyrics_lrc) — either or both may be None.
     """
-    params = {
-        "artist_name": artist,
-        "track_name": title,
-    }
+    # --- Try exact match via /get first ---
+    params: dict = {"track_name": title}
+    if artist:
+        params["artist_name"] = artist
     if album:
         params["album_name"] = album
     if duration_sec > 0:
         params["duration"] = str(duration_sec)
-    
+
     query = urllib.parse.urlencode(params)
     url = f"{_LRCLIB_BASE}/get?{query}"
-    
     data = _request(url)
-    if not data:
+
+    if not data and album:
         # Try without album (broader search)
-        if album:
-            params.pop("album_name", None)
-            query = urllib.parse.urlencode(params)
-            url = f"{_LRCLIB_BASE}/get?{query}"
-            data = _request(url)
-        
-        if not data:
-            return None, None
-    
-    try:
-        result = json.loads(data)
-    except json.JSONDecodeError:
+        params.pop("album_name", None)
+        query = urllib.parse.urlencode(params)
+        url = f"{_LRCLIB_BASE}/get?{query}"
+        data = _request(url)
+
+    if data:
+        try:
+            result = json.loads(data)
+            plain = result.get("plainLyrics")
+            synced = result.get("syncedLyrics")
+            if plain or synced:
+                return plain, synced
+        except json.JSONDecodeError:
+            pass
+
+    # --- Fallback to /search (broader, supports artist-less queries) ---
+    search_params: dict
+    if artist:
+        search_params = {"track_name": title, "artist_name": artist}
+    else:
+        # When no artist is given use free-text search — LRCLIB ignores
+        # track_name without artist_name and returns empty results.
+        search_params = {"q": title}
+    if album:
+        search_params["album_name"] = album
+    if duration_sec > 0:
+        search_params["duration"] = str(duration_sec)
+
+    query = urllib.parse.urlencode(search_params)
+    url = f"{_LRCLIB_BASE}/search?{query}"
+    data = _request(url)
+
+    if not data and album:
+        search_params.pop("album_name", None)
+        query = urllib.parse.urlencode(search_params)
+        url = f"{_LRCLIB_BASE}/search?{query}"
+        data = _request(url)
+
+    if not data:
         return None, None
-    
-    plain = result.get("plainLyrics")
-    synced = result.get("syncedLyrics")
-    return plain, synced
+
+    try:
+        results = json.loads(data)
+        if results and len(results) > 0:
+            # Find the first result that actually has lyrics
+            for best in results:
+                plain = best.get("plainLyrics")
+                synced = best.get("syncedLyrics")
+                if plain or synced:
+                    return plain, synced
+    except (json.JSONDecodeError, TypeError):
+        pass
+
+    return None, None
+
+
+def search_lyrics_lrclib(artist: str, title: str, album: str = "", duration_sec: int = 0, limit: int = 10) -> List[Dict]:
+    """
+    Search LRCLIB and return *all* results that have lyrics.
+
+    Each dict contains:
+        - title, artist, album, lines, synced, source, duration, lyrics
+    """
+    results: List[Dict] = []
+
+    # Build search query
+    search_params: dict
+    if artist:
+        search_params = {"track_name": title, "artist_name": artist}
+    else:
+        search_params = {"q": title}
+    if album:
+        search_params["album_name"] = album
+    if duration_sec > 0:
+        search_params["duration"] = str(duration_sec)
+
+    query = urllib.parse.urlencode(search_params)
+    url = f"{_LRCLIB_BASE}/search?{query}"
+    data = _request(url)
+
+    if not data and album:
+        search_params.pop("album_name", None)
+        query = urllib.parse.urlencode(search_params)
+        url = f"{_LRCLIB_BASE}/search?{query}"
+        data = _request(url)
+
+    if not data:
+        return results
+
+    try:
+        raw_results = json.loads(data)
+    except (json.JSONDecodeError, TypeError):
+        return results
+
+    seen = set()
+    for item in raw_results:
+        plain = item.get("plainLyrics")
+        synced = item.get("syncedLyrics")
+        if not plain and not synced:
+            continue
+
+        artist_name = item.get("artistName", "")
+        track_name = item.get("name", "") or item.get("trackName", "")
+        key = f"{artist_name}|{track_name}"
+        if key in seen:
+            continue
+        seen.add(key)
+
+        lyrics_text = synced or plain
+        results.append({
+            "title": track_name,
+            "artist": artist_name,
+            "album": item.get("albumName", ""),
+            "lines": len(lyrics_text.splitlines()) if lyrics_text else 0,
+            "synced": bool(synced),
+            "source": "LRCLIB",
+            "duration": item.get("duration", 0),
+            "lyrics": lyrics_text,
+            "lyrics_type": "synced" if synced else "plain",
+        })
+
+        if len(results) >= limit:
+            break
+
+    return results
 
 
 def _slugify_genius(text: str) -> str:
@@ -571,7 +1169,12 @@ def _fetch_lyrics_genius(artist: str, title: str) -> Optional[str]:
     """
     slug_artist = _slugify_genius(artist)
     slug_title = _slugify_genius(title)
-    url = f"{_GENIUS_BASE}/{slug_artist}-{slug_title}-lyrics"
+    if slug_artist and slug_title:
+        url = f"{_GENIUS_BASE}/{slug_artist}-{slug_title}-lyrics"
+    elif slug_title:
+        url = f"{_GENIUS_BASE}/{slug_title}-lyrics"
+    else:
+        return None
     
     req = urllib.request.Request(url)
     req.add_header("User-Agent", _USER_AGENT)
@@ -617,7 +1220,10 @@ def _fetch_lyrics_genius(artist: str, title: str) -> Optional[str]:
     for marker in skip_markers:
         if lyrics.endswith(marker):
             lyrics = lyrics[:-len(marker)].rstrip()
-    
+
+    # Remove Genius meta header line: e.g. "4 ContributorsWe Thought You Were Sleeping Lyrics"
+    lyrics = re.sub(r'^\d+\s*Contributors?.*(?:\n|$)', '', lyrics, count=1).strip()
+
     # Remove trailing numbers (Genius embed IDs)
     lyrics = re.sub(r'\d+$', '', lyrics).rstrip()
     
@@ -737,15 +1343,26 @@ def enrich_metadata(video_infos: Dict) -> Optional[EnrichedMetadata]:
     enriched = EnrichedMetadata()
     
     # --- Step 1: HD album cover (ONLY if YouTube provides album info) ---
+    # Strategy: iTunes first (clean, curated digital covers), then MusicBrainz/CAA.
     if yt_album:
-        print(f"[metadata] Album from YouTube: \"{yt_album}\" — searching MusicBrainz for HD cover")
+        print(f"[metadata] Album from YouTube: \"{yt_album}\" — trying iTunes cover first")
+        itunes_cover = fetch_cover_art_itunes(artist, yt_album, title)
+        if itunes_cover:
+            enriched.cover_data = itunes_cover
+            enriched.cover_mime = "image/jpeg"
+            print(f"[metadata] HD cover from iTunes")
+        if _itunes_last_genre:
+            enriched.genre = _itunes_last_genre
+
+        # Always query MusicBrainz for textual metadata (date, track number, etc.)
+        print(f"[metadata] Searching MusicBrainz for textual metadata...")
         recording = search_musicbrainz(artist, title, yt_album)
-        
+
         if recording:
             enriched.confidence = recording.get("_match_score", 0)
             enriched.mb_recording_id = recording.get("id", "")
             release = _pick_best_release(recording, yt_album)
-            
+
             if release:
                 enriched.mb_release_id = release.get("id")
                 enriched.album = release.get("title")
@@ -757,12 +1374,12 @@ def enrich_metadata(video_infos: Dict) -> Optional[EnrichedMetadata]:
                         enriched.full_date = raw_date
                 else:
                     enriched.date = raw_date
-                
+
                 # Get release-group ID for cover art fallback
                 release_group = release.get("release-group", {})
                 release_group_id = release_group.get("id", "")
                 enriched.mb_release_group_id = release_group_id
-                
+
                 # Collect other release IDs as fallback for cover art
                 # ONLY include releases from the same release-group
                 # (= same album, different editions) to avoid getting
@@ -772,7 +1389,7 @@ def enrich_metadata(video_infos: Dict) -> Optional[EnrichedMetadata]:
                     if r.get("id") and r.get("id") != enriched.mb_release_id
                     and r.get("release-group", {}).get("id") == release_group_id
                 ]
-                
+
                 # Get track number from the release media
                 for medium in release.get("media", []):
                     track_offset = medium.get("track-offset", 0)
@@ -780,19 +1397,16 @@ def enrich_metadata(video_infos: Dict) -> Optional[EnrichedMetadata]:
                     if track_count > 0:
                         enriched.track_number = str(track_offset + 1)
                         enriched.total_tracks = str(track_count)
-                
+
                 # Get album artist
                 if release_group:
                     for credit in release_group.get("artist-credit", []):
                         enriched.album_artist = credit.get("name", "") or credit.get("artist", {}).get("name", "")
                         break
-                
-                # Fetch genre: iTunes first (curated), MusicBrainz as fallback
-                # (iTunes genre is fetched later, after cover art)
-                
-                # Fetch HD cover art (release-group → release → fallback releases)
-                if enriched.mb_release_id:
-                    print(f"[metadata] Fetching HD cover from Cover Art Archive...")
+
+                # Fallback to CAA if iTunes didn't return a cover
+                if not enriched.cover_data and enriched.mb_release_id:
+                    print(f"[metadata] No iTunes cover, trying Cover Art Archive...")
                     cover_data = fetch_cover_art(
                         enriched.mb_release_id,
                         release_group_id=release_group_id,
@@ -804,33 +1418,14 @@ def enrich_metadata(video_infos: Dict) -> Optional[EnrichedMetadata]:
                             enriched.cover_mime = "image/png"
                         else:
                             enriched.cover_mime = "image/jpeg"
-                    else:
-                        # Fallback: try iTunes Search API
-                        print(f"[metadata] Trying iTunes as fallback...")
-                        itunes_cover = fetch_cover_art_itunes(artist, yt_album, title)
-                        if itunes_cover:
-                            enriched.cover_data = itunes_cover
-                            enriched.cover_mime = "image/jpeg"
-
             else:
                 print(f"[metadata] No matching release for album \"{yt_album}\"")
-                # Fallback: try iTunes even without a MusicBrainz release match
-                print(f"[metadata] Trying iTunes as fallback...")
-                itunes_cover = fetch_cover_art_itunes(artist, yt_album, title)
-                if itunes_cover:
-                    enriched.cover_data = itunes_cover
-                    enriched.cover_mime = "image/jpeg"
-                    enriched.album = yt_album
-
         else:
             print(f"[metadata] MusicBrainz search returned no match for album \"{yt_album}\"")
-            # Fallback: try iTunes directly (doesn't need MusicBrainz)
-            print(f"[metadata] Trying iTunes as fallback...")
-            itunes_cover = fetch_cover_art_itunes(artist, yt_album, title)
-            if itunes_cover:
-                enriched.cover_data = itunes_cover
-                enriched.cover_mime = "image/jpeg"
-                enriched.album = yt_album
+
+        # If we still have no album name but iTunes found a cover, at least set album
+        if not enriched.album and enriched.cover_data:
+            enriched.album = yt_album
 
     else:
         print(f"[metadata] No album info from YouTube — skipping cover art lookup")
@@ -851,14 +1446,9 @@ def enrich_metadata(video_infos: Dict) -> Optional[EnrichedMetadata]:
     enriched.synced_lyrics = synced_lyrics
     
     # --- Step 3: Genre ---
-    # Priority 1: iTunes per-song genre (curated, standardized classification)
-    # Always call iTunes for this specific track — don't reuse _itunes_last_genre
-    # from an earlier track in the same playlist session (it would be wrong).
-    if not enriched.genre:
-        fetch_cover_art_itunes(artist, yt_album or "", title)
-        if _itunes_last_genre:
-            enriched.genre = _itunes_last_genre
-            print(f"[metadata] \u2713 Genre (iTunes): {enriched.genre}")
+    # Priority 1: iTunes per-song genre (already fetched alongside cover art above).
+    if enriched.genre:
+        print(f"[metadata] \u2713 Genre (iTunes): {enriched.genre}")
     
     # Priority 2: MusicBrainz recording + release-group tags (more detailed)
     if not enriched.genre:

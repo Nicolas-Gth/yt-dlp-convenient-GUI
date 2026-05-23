@@ -36,6 +36,12 @@ def main():
         import ctypes
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("nicolasgth.ytdlp-convenient-gui")
 
+    # Suppress Qt multimedia / ffmpeg debug noise
+    if 'QT_LOGGING_RULES' not in os.environ:
+        os.environ['QT_LOGGING_RULES'] = 'qt.multimedia.ffmpeg.debug=false;qt.multimedia.ffmpeg.info=false'
+    if 'AV_LOG_LEVEL' not in os.environ:
+        os.environ['AV_LOG_LEVEL'] = 'quiet'
+
     from PySide6.QtWidgets import QApplication
     from PySide6.QtGui import QIcon
     from config import ICON_PATH

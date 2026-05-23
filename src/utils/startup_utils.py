@@ -531,8 +531,12 @@ def install_requirements(on_progress: Optional[Callable[[str], None]] = None) ->
 # Git update helpers
 # ---------------------------------------------------------------------------
 
-def check_git_updates() -> tuple:
+def check_git_updates(branch: str = "") -> tuple:
     """Check for Git-based app updates.
+
+    Args:
+        branch: Remote branch name to check (e.g. "main" or "dev").
+                If empty, defaults to "main" or "master".
 
     Returns (commits_behind: int, remote_branch: str | None).
     0 means up-to-date, -1 means could not check.
@@ -558,14 +562,20 @@ def check_git_updates() -> tuple:
         return (-1, None)
 
     # Determine remote branch
-    remote_branch = None
-    for branch in ("origin/main", "origin/master"):
-        r = _run(["git", "rev-parse", branch], cwd=project_root)
-        if r.returncode == 0:
-            remote_branch = branch
-            break
-    if not remote_branch:
-        return (-1, None)
+    if branch:
+        remote_branch = f"origin/{branch}"
+        r = _run(["git", "rev-parse", remote_branch], cwd=project_root)
+        if r.returncode != 0:
+            return (-1, None)
+    else:
+        remote_branch = None
+        for candidate in ("origin/main", "origin/master"):
+            r = _run(["git", "rev-parse", candidate], cwd=project_root)
+            if r.returncode == 0:
+                remote_branch = candidate
+                break
+        if not remote_branch:
+            return (-1, None)
 
     # Compare
     local = _run(["git", "rev-parse", "HEAD"], cwd=project_root).stdout.strip()

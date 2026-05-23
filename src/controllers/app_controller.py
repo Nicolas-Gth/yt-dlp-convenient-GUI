@@ -174,7 +174,7 @@ class ApplicationController:
         self.update_initial_progress_display(video_info, config)
         self.download_controller.start_download(config)
 
-        if self.view.prevent_sleep_check.isChecked():
+        if self.view._prevent_sleep_check.isChecked():
             sleep_inhibitor.inhibit()
     
     def update_initial_progress_display(self, video_info: Dict, config):
@@ -561,6 +561,14 @@ class ApplicationController:
         
         self.download_controller.progress.reset()
         self._playlist_total = 0
+        
+        # Invalidate files-tab cache and refresh immediately if on the Files tab
+        if hasattr(self.view, '_files_pending_refresh'):
+            self.view._files_pending_refresh = True
+        if hasattr(self.view, 'tabs') and hasattr(self.view, '_files_tab'):
+            if self.view.tabs.currentWidget() is self.view._files_tab:
+                if hasattr(self.view, 'refresh_files_list'):
+                    self.view.refresh_files_list()
         
         self.view.show_new_download_button()
         
