@@ -19,6 +19,7 @@ class FilesI18nMixin:
                 t("files.title"),
                 t("files.artist"),
                 t("files.lyrics"),
+                t("files.modified"),
             ])
             for r in range(self._files_table.rowCount()):
                 item = self._files_table.item(r, 3)
@@ -30,7 +31,6 @@ class FilesI18nMixin:
                         item.setText('Txt')
                     else:
                         item.setText(t("table.none"))
-                    item.setText(t("table.none"))
         if hasattr(self, '_files_group') and self._files_group is not None:
             self._files_group.setTitle(t("files.group_title"))
         if hasattr(self, '_files_structure_group') and self._files_structure_group is not None:
