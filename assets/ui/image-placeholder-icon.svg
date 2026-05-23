@@ -8,7 +8,7 @@
    fill="none"
    version="1.1"
    id="svg1"
-   sodipodi:docname="refresh-icon.svg"
+   sodipodi:docname="image-svgrepo-com.svg"
    inkscape:version="1.4.4 (dcaf3e7d9e, 2026-05-05)"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
@@ -27,19 +27,31 @@
      inkscape:deskcolor="#d1d1d1"
      inkscape:zoom="1.43875"
      inkscape:cx="399.65248"
-     inkscape:cy="400"
+     inkscape:cy="412.51086"
      inkscape:window-width="2560"
      inkscape:window-height="1364"
      inkscape:window-x="0"
      inkscape:window-y="0"
      inkscape:window-maximized="1"
      inkscape:current-layer="svg1" />
+  <rect
+     width="24"
+     height="24"
+     fill="white"
+     id="rect1"
+     style="fill:#ffffff;fill-opacity:0" />
   <path
-     d="M20.9844 10H17M20.9844 10V6M20.9844 10L17.6569 6.34315C14.5327 3.21895 9.46734 3.21895 6.34315 6.34315C3.21895 9.46734 3.21895 14.5327 6.34315 17.6569C9.46734 20.781 14.5327 20.781 17.6569 17.6569C18.4407 16.873 19.0279 15.9669 19.4184 15"
+     d="M21 16V20C21 20.5523 20.5523 21 20 21H4C3.44772 21 3 20.5523 3 20V18M21 16V4C21 3.44772 20.5523 3 20 3H4C3.44772 3 3 3.44772 3 4V18M21 16L15.4829 12.3219C15.1843 12.1228 14.8019 12.099 14.4809 12.2595L3 18"
      stroke="#000000"
-     stroke-width="2"
-     stroke-linecap="round"
      stroke-linejoin="round"
      id="path1"
-     style="stroke-width:2.00001;stroke-dasharray:none;stroke:#ffffff;stroke-opacity:1" />
+     style="stroke:#7f7f7f;stroke-opacity:1" />
+  <circle
+     cx="8"
+     cy="9"
+     r="2"
+     stroke="#000000"
+     stroke-linejoin="round"
+     id="circle1"
+     style="stroke:#7f7f7f;stroke-opacity:1" />
 </svg>

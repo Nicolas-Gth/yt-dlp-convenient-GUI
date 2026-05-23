@@ -1,6 +1,7 @@
 import os
 import re
 import shutil
+import unicodedata
 from datetime import datetime
 
 from PySide6.QtWidgets import (
@@ -129,9 +130,12 @@ class FilesListMixin:
                 l_item.setText(lyrics)
                 l_item.setData(Qt.UserRole, lyr_type)
                 self._files_table.item(row, 4).setText(mtime)
+            self._restoring_widths = True
             self._files_table.horizontalHeader().resizeSections(QHeaderView.ResizeToContents)
+            self._restoring_widths = False
             self._files_table.setSortingEnabled(True)
             self._files_table.blockSignals(False)
+            self._restore_column_widths()
         else:
             # Full rebuild (files added/removed/reordered)
             self._files_table.blockSignals(True)
@@ -170,10 +174,14 @@ class FilesListMixin:
                 mtime_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
                 self._files_table.setItem(idx, 4, mtime_item)
 
+            self._restoring_widths = True
             self._files_table.horizontalHeader().resizeSections(QHeaderView.ResizeToContents)
+            self._restoring_widths = False
+            self._restore_sort_column()
             self._files_table.setSortingEnabled(True)
             self._files_table.setEnabled(True)
             self._files_table.blockSignals(False)
+            self._restore_column_widths()
 
             # Restore selection by filepath — row index may have changed due to sorting.
             if selected_filepath:
@@ -188,7 +196,9 @@ class FilesListMixin:
                 else:
                     if current_detail == selected_filepath:
                         self._show_file_detail(None)
-            # else: no saved selection → keep as-is
+            elif current_detail is None:
+                # No saved selection and panel is empty → show the empty state
+                self._show_file_detail(None)
 
         # Watch directories so we know when to refresh without scanning every time
         if watched_dirs and hasattr(self, '_file_watcher'):
@@ -213,6 +223,21 @@ class FilesListMixin:
             self._show_file_detail(None)
             return
         self._show_file_detail(filepath)
+
+    def _on_files_search_changed(self, text):
+        """Filter the file table rows based on the search text."""
+        query = text.lower().strip()
+        for row in range(self._files_table.rowCount()):
+            if not query:
+                self._files_table.setRowHidden(row, False)
+                continue
+            match = False
+            for col in (0, 1, 2):
+                item = self._files_table.item(row, col)
+                if item and query in item.text().lower():
+                    match = True
+                    break
+            self._files_table.setRowHidden(row, not match)
 
     def _on_watcher_changed(self, path):
         """Mark file list as stale — refresh will happen on next explicit request."""
@@ -284,6 +309,7 @@ class FilesListMixin:
             if not new_relpath:
                 continue
             new_path = os.path.join(directory, new_relpath)
+            new_path = unicodedata.normalize('NFC', new_path)
             # ensure extension is preserved
             orig_ext = os.path.splitext(filepath)[1]
             new_ext = os.path.splitext(new_path)[1]
@@ -305,7 +331,10 @@ class FilesListMixin:
             try:
                 shutil.move(filepath, new_path)
             except Exception as e:
-                print(f"[reorganize] Error moving {filepath} -> {new_path}: {e}")
+                QMessageBox.warning(
+                    self._files_tab, t("files.reorganize_error"),
+                    t("files.reorganize_error_detail").format(src=filepath, dst=new_path, error=str(e))
+                )
         self._files_pending_refresh = True
         self.refresh_files_list()
 
@@ -343,4 +372,4 @@ class FilesListMixin:
         s = sanitized.strip()
         if not s or s in ('.', '..'):
             return '_'
-        return s
+        return unicodedata.normalize('NFC', s)

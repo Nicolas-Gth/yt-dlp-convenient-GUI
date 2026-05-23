@@ -2,13 +2,13 @@
 <!-- Uploaded to: SVG Repo, www.svgrepo.com, Generator: SVG Repo Mixer Tools -->
 
 <svg
+   fill="#000000"
    width="800px"
    height="800px"
    viewBox="0 0 24 24"
-   fill="none"
    version="1.1"
    id="svg1"
-   sodipodi:docname="refresh-icon.svg"
+   sodipodi:docname="search-icon-light.svg"
    inkscape:version="1.4.4 (dcaf3e7d9e, 2026-05-05)"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
@@ -35,11 +35,7 @@
      inkscape:window-maximized="1"
      inkscape:current-layer="svg1" />
   <path
-     d="M20.9844 10H17M20.9844 10V6M20.9844 10L17.6569 6.34315C14.5327 3.21895 9.46734 3.21895 6.34315 6.34315C3.21895 9.46734 3.21895 14.5327 6.34315 17.6569C9.46734 20.781 14.5327 20.781 17.6569 17.6569C18.4407 16.873 19.0279 15.9669 19.4184 15"
-     stroke="#000000"
-     stroke-width="2"
-     stroke-linecap="round"
-     stroke-linejoin="round"
+     d="M10.035,18.069a7.981,7.981,0,0,0,3.938-1.035l3.332,3.332a2.164,2.164,0,0,0,3.061-3.061l-3.332-3.332A8.032,8.032,0,0,0,4.354,4.354a8.034,8.034,0,0,0,5.681,13.715ZM5.768,5.768A6.033,6.033,0,1,1,4,10.035,5.989,5.989,0,0,1,5.768,5.768Z"
      id="path1"
-     style="stroke-width:2.00001;stroke-dasharray:none;stroke:#ffffff;stroke-opacity:1" />
+     style="fill:#ffffff;fill-opacity:1" />
 </svg>

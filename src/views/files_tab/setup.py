@@ -2,7 +2,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QWidget, QTableWidget, QTableWidgetItem,
     QHeaderView, QAbstractItemView, QFrame, QSplitter, QLabel,
     QSizePolicy, QGroupBox, QPushButton, QSlider, QTextEdit,
-    QLineEdit, QComboBox, QMessageBox
+    QLineEdit, QComboBox, QMessageBox, QCheckBox
 )
 from PySide6.QtGui import QIcon
 from PySide6.QtCore import Qt, QTimer, QFileSystemWatcher, QSize
@@ -10,8 +10,10 @@ from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
 
 from config import INFO_ICON_PATH
 from utils.i18n_utils import t
+from utils.theme_utils import is_dark_mode
+from utils.settings_utils import settings_manager
 
-from .widgets import _ArtworkLabel, _SeekSlider, _ArtworkWrapper
+from .widgets import _ArtworkLabel, _SeekSlider, _ArtworkWrapper, _ArtworkEditable
 
 
 class FilesSetupMixin:
@@ -88,6 +90,13 @@ class FilesSetupMixin:
         files_layout = QVBoxLayout(files_group)
         files_layout.setContentsMargins(5, 10, 5, 8)
 
+        # Search bar above the file table
+        self._files_search = QLineEdit()
+        self._files_search.setPlaceholderText(t("files.search_placeholder"))
+        self._files_search.setClearButtonEnabled(True)
+        self._files_search.textChanged.connect(self._on_files_search_changed)
+        files_layout.addWidget(self._files_search)
+
         self._files_table = QTableWidget(0, 5)
         self._files_table.setHorizontalHeaderLabels([
             t("files.filename"),
@@ -101,24 +110,28 @@ class FilesSetupMixin:
         self._files_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self._files_table.setHorizontalScrollMode(QAbstractItemView.ScrollPerPixel)
         self._files_table.verticalHeader().setVisible(False)
-        self._files_table.setShowGrid(False)
+        self._files_table.setShowGrid(True)
         self._files_table.setFrameShape(QFrame.NoFrame)
         self._files_table.setStyleSheet(
-            "QTableWidget { border: none; background: transparent; }"
-            "QTableWidget QTableCornerButton::section { background: transparent; }"
+            "QTableWidget { border: none; background: palette(base); gridline-color: palette(mid); }"
+            "QTableWidget QTableCornerButton::section { background: palette(window); border: none; border-right: 1px solid palette(mid); border-bottom: 1px solid palette(mid); }"
             "QHeaderView { background: transparent; font-weight: normal; }"
             "QHeaderView::section {"
-            "  border: none; border-bottom: 1px solid palette(mid);"
-            "  background: transparent; font-weight: normal;"
+            "  border: none; border-right: 1px solid palette(mid); border-bottom: 1px solid palette(mid);"
+            "  background: palette(window); font-weight: normal;"
             "}"
         )
         hdr = self._files_table.horizontalHeader()
+        hdr.setMinimumSectionSize(60)
         hdr.setSectionResizeMode(0, QHeaderView.Interactive)
         hdr.setSectionResizeMode(1, QHeaderView.Interactive)
         hdr.setSectionResizeMode(2, QHeaderView.Interactive)
         hdr.setSectionResizeMode(3, QHeaderView.Interactive)
         hdr.setSectionResizeMode(4, QHeaderView.Interactive)
+        hdr.setStretchLastSection(True)
         hdr.setDefaultAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        hdr.sectionResized.connect(self._on_section_resized)
+        hdr.sortIndicatorChanged.connect(self._save_sort_column)
         self._files_table.itemSelectionChanged.connect(self._on_file_selected)
         files_layout.addWidget(self._files_table, 1)
         left_layout.addWidget(files_group, 1)
@@ -135,7 +148,8 @@ class FilesSetupMixin:
         detail_layout = QVBoxLayout(detail_group)
         detail_layout.setContentsMargins(0, 5, 0, 0)
 
-        self._files_artwork = _ArtworkLabel()
+        self._files_artwork = _ArtworkEditable()
+        self._files_artwork.edit_requested.connect(self._on_edit_artwork_clicked)
         self._current_detail_filepath = None
 
         # Audio player
@@ -147,12 +161,13 @@ class FilesSetupMixin:
         self._media_player.durationChanged.connect(self._on_duration_changed)
         self._seeking = False
 
-        self._play_btn = QPushButton("⏵")
+        self._play_btn = QPushButton()
         self._play_btn.setFixedSize(28, 24)
         self._play_btn.setCursor(Qt.PointingHandCursor)
         self._play_btn.setEnabled(False)
         self._play_btn.clicked.connect(self._on_play_clicked)
         self._play_btn.setStyleSheet("QPushButton { padding: 0; text-align: center; }")
+        self._update_play_icon(is_playing=False)
 
         self._seek_slider = _SeekSlider(Qt.Horizontal)
         self._seek_slider.setEnabled(False)
@@ -179,6 +194,13 @@ class FilesSetupMixin:
         ebl = QHBoxLayout(self._edit_btn_bar)
         ebl.setContentsMargins(0, 0, 0, 0)
         ebl.setSpacing(6)
+        self._identify_btn = QPushButton(t("button.identify"))
+        self._identify_btn.setCursor(Qt.PointingHandCursor)
+        identify_icon = "assets/ui/search-icon-light.svg" if is_dark_mode() else "assets/ui/search-icon-dark.svg"
+        self._identify_btn.setIcon(QIcon(identify_icon))
+        self._identify_btn.setIconSize(QSize(16, 16))
+        self._identify_btn.clicked.connect(self._on_identify_metadata)
+        ebl.addWidget(self._identify_btn)
         ebl.addStretch()
         self._edit_reset_btn = QPushButton(t("button.reset"))
         self._edit_reset_btn.setCursor(Qt.PointingHandCursor)
@@ -224,15 +246,28 @@ class FilesSetupMixin:
         self._meta_splitter.setChildrenCollapsible(False)
         self._meta_splitter.addWidget(self._files_meta)
 
-        # Lyrics label + edit
+        # Lyrics label + search button + edit
         lyrics_bottom = QWidget()
         lbl = QVBoxLayout(lyrics_bottom)
         lbl.setContentsMargins(0, 4, 0, 0)
         lbl.setSpacing(2)
+
+        lyrics_header = QHBoxLayout()
         self._lyrics_label = QLabel(t("files.lyrics"))
-        f = self._lyrics_label.font(); f.setBold(True); self._lyrics_label.setFont(f)
+        self._lyrics_label.setStyleSheet("QLabel { color: palette(dark); }")
         self._lyrics_label.hide()
-        lbl.addWidget(self._lyrics_label)
+        lyrics_header.addWidget(self._lyrics_label)
+        lyrics_header.addStretch()
+        self._lyrics_search_btn = QPushButton(t("lyrics.search"))
+        self._lyrics_search_btn.setCursor(Qt.PointingHandCursor)
+        lyrics_search_icon = "assets/ui/search-icon-light.svg" if is_dark_mode() else "assets/ui/search-icon-dark.svg"
+        self._lyrics_search_btn.setIcon(QIcon(lyrics_search_icon))
+        self._lyrics_search_btn.setIconSize(QSize(16, 16))
+        self._lyrics_search_btn.clicked.connect(self._on_search_lyrics)
+        self._lyrics_search_btn.hide()
+        lyrics_header.addWidget(self._lyrics_search_btn)
+        lbl.addLayout(lyrics_header)
+
         self._lyrics_edit = QTextEdit()
         self._lyrics_edit.setAcceptRichText(False)
         self._lyrics_edit.setPlaceholderText(t("files.no_lyrics"))
@@ -262,3 +297,58 @@ class FilesSetupMixin:
         self._file_watcher.directoryChanged.connect(self._on_watcher_changed)
         self._file_watcher.fileChanged.connect(self._on_watcher_changed)
         self.path_entry.textChanged.connect(self._on_download_path_changed)
+
+    def _update_search_icons(self):
+        """Update search button icons (identify & lyrics) based on current theme."""
+        icon = "assets/ui/search-icon-light.svg" if is_dark_mode() else "assets/ui/search-icon-dark.svg"
+        for attr in ('_identify_btn', '_lyrics_search_btn'):
+            btn = getattr(self, attr, None)
+            if btn is not None:
+                btn.setIcon(QIcon(icon))
+
+    def _restore_column_widths(self):
+        """Restore file table column widths from settings."""
+        self._columns_ready = True
+        widths = settings_manager.get_setting("files_table_column_widths")
+        if not widths or len(widths) != self._files_table.columnCount():
+            return
+        self._restoring_widths = True
+        hdr = self._files_table.horizontalHeader()
+        minimums = {3: 70, 4: 110}
+        for i, w in enumerate(widths):
+            w = max(w, minimums.get(i, 60))
+            hdr.resizeSection(i, w)
+        self._restoring_widths = False
+
+    def _on_section_resized(self, logical_index, old_size, new_size):
+        """Enforce minimum column widths then persist."""
+        if getattr(self, '_restoring_widths', False) or not getattr(self, '_columns_ready', False):
+            return
+        hdr = self._files_table.horizontalHeader()
+        minimums = {3: 70, 4: 110}
+        min_w = minimums.get(logical_index, 0)
+        if min_w and new_size < min_w:
+            self._restoring_widths = True
+            hdr.resizeSection(logical_index, min_w)
+            self._restoring_widths = False
+            return
+        widths = [hdr.sectionSize(i) for i in range(hdr.count())]
+        settings_manager.set_setting("files_table_column_widths", widths)
+
+    def _save_sort_column(self, logical_index, order):
+        """Persist sort column and order to settings."""
+        if getattr(self, '_restoring_widths', False) or not getattr(self, '_columns_ready', False):
+            return
+        settings_manager.set_setting("files_table_sort", [logical_index, order.value])
+
+    def _restore_sort_column(self):
+        """Restore sort column and order from settings."""
+        data = settings_manager.get_setting("files_table_sort")
+        if not data or len(data) != 2:
+            return
+        col, order = data
+        if 0 <= col < self._files_table.columnCount():
+            self._restoring_widths = True
+            hdr = self._files_table.horizontalHeader()
+            hdr.setSortIndicator(col, Qt.SortOrder(order))
+            self._restoring_widths = False

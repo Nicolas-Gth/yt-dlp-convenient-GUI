@@ -14,13 +14,15 @@ class FilesEditorMixin:
 
     def _on_lyrics_changed(self):
         self._edited = True
-        self._edit_btn_bar.show()
+        self._edit_reset_btn.show()
+        self._edit_save_btn.show()
 
     def _on_meta_item_changed(self, item):
         if item.column() == 1 and item.flags() & Qt.ItemIsEditable:
             self._modified_rows.add(item.row())
             self._edited = True
-            self._edit_btn_bar.show()
+            self._edit_reset_btn.show()
+            self._edit_save_btn.show()
 
     def _on_reset_metadata(self):
         if self._current_detail_filepath:
@@ -51,6 +53,20 @@ class FilesEditorMixin:
                     uslt = USLT(encoding=3, lang='eng', desc='', text=lyrics_val)
                     tags.delall('USLT')
                     tags.add(uslt)
+            else:
+                # Remove lyrics tag when text is empty
+                if isinstance(audio, OggOpus):
+                    try:
+                        del tags['lyrics']
+                    except KeyError:
+                        pass
+                elif isinstance(audio, MP4):
+                    try:
+                        del tags['\xa9lyr']
+                    except KeyError:
+                        pass
+                else:
+                    tags.delall('USLT')
             for row in range(self._files_meta.rowCount()):
                 val_item = self._files_meta.item(row, 1)
                 if not val_item:
@@ -97,7 +113,8 @@ class FilesEditorMixin:
                 self._current_detail_filepath = new_filepath
             self._modified_rows.clear()
             self._edited = False
-            self._edit_btn_bar.hide()
+            self._edit_reset_btn.hide()
+            self._edit_save_btn.hide()
             self._files_saved_selection = new_filepath
             self.refresh_files_list()
         except Exception as e:

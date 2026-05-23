@@ -107,6 +107,15 @@ def _build_light_palette() -> QPalette:
     return palette
 
 
+def is_dark_mode() -> bool:
+    """Check whether the current application palette is dark."""
+    app = QApplication.instance()
+    if app is None:
+        return system_prefers_dark()
+    bg = app.palette().color(QPalette.Window)
+    return bg.lightness() < 128
+
+
 def apply_theme(app: QApplication, name: str):
     """Apply the given theme ('system', 'dark', or 'light') to *app*."""
     app.setStyle('Fusion')
