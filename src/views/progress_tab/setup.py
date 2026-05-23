@@ -77,8 +77,8 @@ class ProgressSetupMixin(ProgressLayoutMixin):
         self._info_row_title = row
         for label in [t("progress.info.title"), t("progress.info.author"), t("progress.info.duration")]:
             item = QTableWidgetItem(label)
-            f = item.font(); f.setBold(True); item.setFont(f)
             item.setFlags(Qt.ItemIsEnabled)
+            item.setForeground(Qt.gray)
             self.info_table.setItem(row, 0, item)
             val_item = QTableWidgetItem(""); val_item.setFlags(Qt.ItemIsEnabled)
             self.info_table.setItem(row, 1, val_item)
