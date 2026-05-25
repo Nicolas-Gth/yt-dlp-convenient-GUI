@@ -251,6 +251,7 @@ def _embed_artwork(filepath: str, image_data: bytes, mime: str = "image/jpeg", a
         if ext == '.mp3':
             from mutagen.id3 import APIC
             if audio_obj is not None and audio_obj.tags is not None:
+                audio_obj.tags.delall("APIC")
                 audio_obj.tags["APIC"] = APIC(
                     encoding=0, mime=mime, type=3, desc="Cover", data=image_data
                 )
@@ -260,6 +261,7 @@ def _embed_artwork(filepath: str, image_data: bytes, mime: str = "image/jpeg", a
                 audio = ID3(filepath)
             except Exception:
                 audio = ID3()
+            audio.delall("APIC")
             audio["APIC"] = APIC(
                 encoding=0, mime=mime, type=3, desc="Cover", data=image_data
             )

@@ -259,6 +259,8 @@ class FilesDetailMixin:
                         )
                 except Exception:
                     raw = []
+                if self.isInterruptionRequested():
+                    return
                 new_items = []
                 for item in raw:
                     url = item.get("artwork_url", "")
@@ -417,14 +419,29 @@ class FilesDetailMixin:
             api_combo.setEnabled(not loading)
 
         def _start_worker(query: str, artist: str, album: str, title: str, limit: int):
-            if current_worker[0] is not None:
-                current_worker[0].quit()
-                current_worker[0].wait(2000)
+            old = current_worker[0]
+            if old is not None:
+                try:
+                    old.results_ready.disconnect()
+                except Exception:
+                    pass
+                try:
+                    old.error.disconnect()
+                except Exception:
+                    pass
+                try:
+                    old.finished.disconnect()
+                except Exception:
+                    pass
+                old.requestInterruption()
+                old.wait(2000)
             api_name = api_combo.currentText()
             worker = SearchWorker(api_name, query, artist, album, title, limit, seen_urls)
             current_worker[0] = worker
 
             def _on_results(new_items, limit_used, has_more):
+                if current_worker[0] != worker:
+                    return
                 current_worker[0] = None
                 _set_loading(False)
                 all_results.extend(new_items)
@@ -526,9 +543,22 @@ class FilesDetailMixin:
         dlg.keyPressEvent = _dlg_key_press
 
         def _cleanup():
-            if current_worker[0] is not None:
-                current_worker[0].quit()
-                current_worker[0].wait(2000)
+            old = current_worker[0]
+            if old is not None:
+                try:
+                    old.results_ready.disconnect()
+                except Exception:
+                    pass
+                try:
+                    old.error.disconnect()
+                except Exception:
+                    pass
+                try:
+                    old.finished.disconnect()
+                except Exception:
+                    pass
+                old.requestInterruption()
+                old.wait(5000)
         dlg.finished.connect(_cleanup)
 
         # ── Show dialog immediately, then load data ──
@@ -806,6 +836,8 @@ class FilesDetailMixin:
                         raw = search_metadata_candidates(self.artist, self.title, self.album, limit=self.limit)
                 except Exception:
                     raw = []
+                if self.isInterruptionRequested():
+                    return
                 new_items = []
                 for item in raw:
                     rid = item.get("mb_release_group_id") or item.get("mb_release_id") or item.get("itunes_track_id")
@@ -816,13 +848,28 @@ class FilesDetailMixin:
                 self.results_ready.emit(new_items, self.limit, has_more)
 
         def _start_worker(artist: str, album: str, title: str, limit: int):
-            if current_worker[0] is not None:
-                current_worker[0].quit()
-                current_worker[0].wait(2000)
+            old = current_worker[0]
+            if old is not None:
+                try:
+                    old.results_ready.disconnect()
+                except Exception:
+                    pass
+                try:
+                    old.error.disconnect()
+                except Exception:
+                    pass
+                try:
+                    old.finished.disconnect()
+                except Exception:
+                    pass
+                old.requestInterruption()
+                old.wait(2000)
             worker = IdentifyWorker(artist, album, title, limit, seen_ids, current_api[0])
             current_worker[0] = worker
 
             def _on_results(new_items, limit_used, has_more):
+                if current_worker[0] != worker:
+                    return
                 current_worker[0] = None
                 all_results.extend(new_items)
                 _set_loading(False)
@@ -915,9 +962,22 @@ class FilesDetailMixin:
         dlg.keyPressEvent = _dlg_key_press
 
         def _cleanup():
-            if current_worker[0] is not None:
-                current_worker[0].quit()
-                current_worker[0].wait(2000)
+            old = current_worker[0]
+            if old is not None:
+                try:
+                    old.results_ready.disconnect()
+                except Exception:
+                    pass
+                try:
+                    old.error.disconnect()
+                except Exception:
+                    pass
+                try:
+                    old.finished.disconnect()
+                except Exception:
+                    pass
+                old.requestInterruption()
+                old.wait(5000)
         dlg.finished.connect(_cleanup)
 
         # ── Show dialog immediately, then load data ──
@@ -1040,8 +1100,7 @@ class FilesDetailMixin:
                 if audio.tags is None:
                     audio.tags = ID3()
                 tags = audio.tags
-                # Delete all known frames first
-                for frame_id in ("TIT2", "TPE1", "TALB", "TPE2", "TDRC", "TCON", "TRCK"):
+                for frame_id in ("TIT2", "TPE1", "TALB", "TPE2", "TDRC", "TCON", "TRCK", "APIC"):
                     tags.delall(frame_id)
                 if result.get("title"):
                     tags["TIT2"] = TIT2(encoding=3, text=result["title"])
@@ -1070,6 +1129,7 @@ class FilesDetailMixin:
 
             audio.save()
             self._show_file_detail(filepath)
+            self.refresh_files_list()
         except Exception as e:
             QMessageBox.warning(self, t("artwork.error_title"), str(e))
 
@@ -1353,7 +1413,8 @@ class FilesDetailMixin:
                     return score
 
                 results.sort(key=_sort_key, reverse=True)
-                self.results_ready.emit(results)
+                if not self.isInterruptionRequested():
+                    self.results_ready.emit(results)
 
         def _do_search():
             a = artist_edit.text().strip()
@@ -1365,13 +1426,24 @@ class FilesDetailMixin:
             apply_btn.setEnabled(False)
             preview_edit.clear()
 
-            if current_worker[0] is not None:
-                current_worker[0].quit()
-                current_worker[0].wait(2000)
+            old = current_worker[0]
+            if old is not None:
+                try:
+                    old.results_ready.disconnect()
+                except Exception:
+                    pass
+                try:
+                    old.finished.disconnect()
+                except Exception:
+                    pass
+                old.requestInterruption()
+                old.wait(2000)
             worker = LyricsSearchWorker(a, t_, album_edit.text().strip(), file_duration)
             current_worker[0] = worker
 
             def _on_results(results):
+                if current_worker[0] != worker:
+                    return
                 current_worker[0] = None
                 results_list.clear()
                 all_results.clear()
@@ -1413,9 +1485,22 @@ class FilesDetailMixin:
         dlg.keyPressEvent = _dlg_key_press
 
         def _cleanup():
-            if current_worker[0] is not None:
-                current_worker[0].quit()
-                current_worker[0].wait(2000)
+            old = current_worker[0]
+            if old is not None:
+                try:
+                    old.results_ready.disconnect()
+                except Exception:
+                    pass
+                try:
+                    old.error.disconnect()
+                except Exception:
+                    pass
+                try:
+                    old.finished.disconnect()
+                except Exception:
+                    pass
+                old.requestInterruption()
+                old.wait(5000)
         dlg.finished.connect(_cleanup)
 
         # Show dialog and auto-search if we have data
@@ -1461,5 +1546,6 @@ class FilesDetailMixin:
 
             audio.save()
             self._show_file_detail(filepath)
+            self.refresh_files_list()
         except Exception as e:
             QMessageBox.warning(self, t("artwork.error_title"), str(e))

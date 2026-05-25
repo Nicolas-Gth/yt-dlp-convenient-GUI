@@ -70,8 +70,7 @@ class FilesListMixin:
                 return
             # Different directory: stop old thread and start new one
             self._scanner.requestInterruption()
-            self._scanner.quit()
-            self._scanner.wait(1000)
+            self._scanner.wait(5000)
 
         self._scanner_target_dir = directory
         self._scanner = FileScanner(directory, self)

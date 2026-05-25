@@ -44,6 +44,8 @@ class FileScanner(QThread):
 
         for root, _dirs, filenames in os.walk(directory):
             for fname in filenames:
+                if self.isInterruptionRequested():
+                    return
                 if os.path.splitext(fname)[1].lower() in extensions:
                     full = os.path.join(root, fname)
                     if _is_temp_file(full):
@@ -57,5 +59,6 @@ class FileScanner(QThread):
                         continue
                     results.append((full, rel, artist, title, lyrics, lyr_type, mtime))
 
-        results.sort(key=lambda x: x[1].lower())
-        self.results_ready.emit(results, directory)
+        if not self.isInterruptionRequested():
+            results.sort(key=lambda x: x[1].lower())
+            self.results_ready.emit(results, directory)
