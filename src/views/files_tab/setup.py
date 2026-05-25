@@ -97,12 +97,13 @@ class FilesSetupMixin:
         self._files_search.textChanged.connect(self._on_files_search_changed)
         files_layout.addWidget(self._files_search)
 
-        self._files_table = QTableWidget(0, 5)
+        self._files_table = QTableWidget(0, 6)
         self._files_table.setHorizontalHeaderLabels([
             t("files.filename"),
             t("files.title"),
             t("files.artist"),
             t("files.lyrics"),
+            t("files.size"),
             t("files.modified"),
         ])
         self._files_table.setEditTriggers(QAbstractItemView.NoEditTriggers)

@@ -15,6 +15,19 @@ from .metadata import _extract_title_artist, _check_lyrics, _extract_template_in
 from .scanner import FileScanner
 
 
+class _NumericItem(QTableWidgetItem):
+    """QTableWidgetItem that sorts by an internal numeric value."""
+
+    def __init__(self, text: str, value: int):
+        super().__init__(text)
+        self._sort_value = value
+
+    def __lt__(self, other):
+        if isinstance(other, _NumericItem):
+            return self._sort_value < other._sort_value
+        return super().__lt__(other)
+
+
 class FilesListMixin:
     """Mixin that provides file-list scanning and selection."""
 
@@ -89,6 +102,7 @@ class FilesListMixin:
             self._files_table.setItem(0, 2, QTableWidgetItem(""))
             self._files_table.setItem(0, 3, QTableWidgetItem(""))
             self._files_table.setItem(0, 4, QTableWidgetItem(""))
+            self._files_table.setItem(0, 5, QTableWidgetItem(""))
             self._files_table.setEnabled(False)
 
         self._scanner.start()
@@ -119,7 +133,7 @@ class FilesListMixin:
         if same_set and len(existing_rows) == len(results):
             self._files_table.blockSignals(True)
             self._files_table.setSortingEnabled(False)
-            for idx, (filepath, relpath, artist, title, lyrics, lyr_type, mtime) in enumerate(results):
+            for idx, (filepath, relpath, artist, title, lyrics, lyr_type, size, mtime) in enumerate(results):
                 watched_dirs.add(os.path.dirname(filepath))
                 row = existing_rows[filepath]
                 self._files_table.item(row, 0).setText(relpath)
@@ -128,7 +142,11 @@ class FilesListMixin:
                 l_item = self._files_table.item(row, 3)
                 l_item.setText(lyrics)
                 l_item.setData(Qt.UserRole, lyr_type)
-                self._files_table.item(row, 4).setText(mtime)
+                s_item = self._files_table.item(row, 4)
+                if isinstance(s_item, _NumericItem):
+                    s_item.setText(_format_size(size))
+                    s_item._sort_value = size
+                self._files_table.item(row, 5).setText(mtime)
             self._restoring_widths = True
             self._files_table.horizontalHeader().resizeSections(QHeaderView.ResizeToContents)
             self._restoring_widths = False
@@ -144,7 +162,7 @@ class FilesListMixin:
             ROW_HEIGHT = 24
             selected_row = -1
 
-            for idx, (filepath, relpath, artist, title, lyrics, lyr_type, mtime) in enumerate(results):
+            for idx, (filepath, relpath, artist, title, lyrics, lyr_type, size, mtime) in enumerate(results):
                 self._files_table.setRowHeight(idx, ROW_HEIGHT)
                 watched_dirs.add(os.path.dirname(filepath))
 
@@ -169,9 +187,13 @@ class FilesListMixin:
                 lyrics_item.setData(Qt.UserRole, lyr_type)
                 self._files_table.setItem(idx, 3, lyrics_item)
 
+                size_item = _NumericItem(_format_size(size), size)
+                size_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
+                self._files_table.setItem(idx, 4, size_item)
+
                 mtime_item = QTableWidgetItem(mtime)
                 mtime_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
-                self._files_table.setItem(idx, 4, mtime_item)
+                self._files_table.setItem(idx, 5, mtime_item)
 
             self._restoring_widths = True
             self._files_table.horizontalHeader().resizeSections(QHeaderView.ResizeToContents)
@@ -372,3 +394,14 @@ class FilesListMixin:
         if not s or s in ('.', '..'):
             return '_'
         return unicodedata.normalize('NFC', s)
+
+
+def _format_size(size: int) -> str:
+    """Return a human-readable file size string (e.g. '3.5 MB')."""
+    for unit in ('B', 'KB', 'MB', 'GB', 'TB'):
+        if size < 1024:
+            if unit == 'B':
+                return f"{size} {unit}"
+            return f"{size:.1f} {unit}"
+        size /= 1024
+    return f"{size:.1f} PB"

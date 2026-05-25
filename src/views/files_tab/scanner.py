@@ -55,9 +55,10 @@ class FileScanner(QThread):
                     lyrics, lyr_type = _check_lyrics(full)
                     try:
                         mtime = datetime.fromtimestamp(os.path.getmtime(full)).strftime("%d/%m/%Y %H:%M")
+                        size = os.path.getsize(full)
                     except (OSError, FileNotFoundError):
                         continue
-                    results.append((full, rel, artist, title, lyrics, lyr_type, mtime))
+                    results.append((full, rel, artist, title, lyrics, lyr_type, size, mtime))
 
         if not self.isInterruptionRequested():
             results.sort(key=lambda x: x[1].lower())

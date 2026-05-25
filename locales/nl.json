@@ -93,6 +93,7 @@
   "files.reorganize_error": "Reorganisatiefout",
   "files.reorganize_error_detail": "Kon niet worden verplaatst:\n{src}\n→ {dst}\n\nFout: {error}",
   "files.search_placeholder": "Zoeken…",
+  "files.size": "Grootte",
   "files.structure_title": "Mapstructuur",
   "files.title": "Titel",
   "format.group_title": "Uitvoerbestandsformaat",

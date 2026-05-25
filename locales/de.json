@@ -93,6 +93,7 @@
   "files.reorganize_error": "Fehler beim Verschieben",
   "files.reorganize_error_detail": "Konnte nicht verschoben werden:\n{src}\n→ {dst}\n\nFehler: {error}",
   "files.search_placeholder": "Suchen…",
+  "files.size": "Größe",
   "files.structure_title": "Ordnerstruktur",
   "files.title": "Titel",
   "format.group_title": "Ausgabedateiformat",

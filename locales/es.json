@@ -93,6 +93,7 @@
   "files.reorganize_error": "Error de reorganización",
   "files.reorganize_error_detail": "No se pudo mover:\n{src}\n→ {dst}\n\nError: {error}",
   "files.search_placeholder": "Buscar…",
+  "files.size": "Tamaño",
   "files.structure_title": "Estructura de carpetas",
   "files.title": "Título",
   "format.group_title": "Formato del archivo de salida",

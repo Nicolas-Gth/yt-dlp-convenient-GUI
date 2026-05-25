@@ -19,6 +19,7 @@ class FilesI18nMixin:
                 t("files.title"),
                 t("files.artist"),
                 t("files.lyrics"),
+                t("files.size"),
                 t("files.modified"),
             ])
             for r in range(self._files_table.rowCount()):

@@ -93,6 +93,7 @@
   "files.reorganize_error": "Errore di riorganizzazione",
   "files.reorganize_error_detail": "Impossibile spostare:\n{src}\n→ {dst}\n\nErrore: {error}",
   "files.search_placeholder": "Cerca…",
+  "files.size": "Dimensione",
   "files.structure_title": "Struttura cartella",
   "files.title": "Titolo",
   "format.group_title": "Formato file di uscita",
