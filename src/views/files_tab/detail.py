@@ -6,7 +6,7 @@ from PySide6.QtWidgets import (
     QPushButton, QLabel, QScrollArea, QWidget, QGridLayout, QSizePolicy, QLayout,
     QLineEdit, QStackedWidget, QTextEdit, QListWidget, QListWidgetItem
 )
-from PySide6.QtCore import Qt, QTimer, QRect, QPoint, QSize, QThread, Signal
+from PySide6.QtCore import Qt, QTimer, QRect, QPoint, QSize, QThread, Signal, QUrl
 from PySide6.QtGui import QPixmap
 
 from utils.i18n_utils import t
@@ -60,6 +60,7 @@ class FilesDetailMixin:
 
         if self._current_detail_filepath != filepath:
             self._media_player.stop()
+            self._media_player.setSource(QUrl.fromLocalFile(filepath))
             self._seek_slider.setValue(0)
         self._current_detail_filepath = filepath
         self._play_btn.setEnabled(True)
