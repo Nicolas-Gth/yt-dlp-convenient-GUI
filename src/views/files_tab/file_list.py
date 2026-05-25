@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt
 
 from utils.i18n_utils import t
+from utils.settings_utils import settings_manager
 
 from .metadata import _extract_title_artist, _check_lyrics, _extract_template_info
 from .scanner import FileScanner
@@ -486,7 +487,7 @@ class FilesListMixin:
     # ------------------------------------------------------------------
 
     _TEMPLATE_VAR_RE = re.compile(r'\{(\w+)\}')
-    _FILENAME_ILLEGAL_RE = re.compile(r'[!?:#%&{}<>|*$@~]')
+    _FILENAME_ILLEGAL_RE = re.compile(r'[!?:#%&{}<>|*$@~/\\]')
     _DATE_TOKENS = ('Y', 'y', 'm', 'd', 'H', 'M', 'S', 'B', 'b')
 
     def _on_files_template_preset_changed(self, index):
@@ -513,6 +514,7 @@ class FilesListMixin:
         )
         if reply != QMessageBox.Yes:
             return
+        settings_manager.set_setting("last_output_template", template)
         self._reorganize_files(template)
 
     def _reorganize_files(self, template: str):
@@ -520,6 +522,7 @@ class FilesListMixin:
         directory = self.path_entry.text().strip()
         if not directory or not os.path.isdir(directory):
             return
+        moved_from = set()
         for r in range(self._files_table.rowCount()):
             item = self._files_table.item(r, 0)
             if not item:
@@ -552,11 +555,13 @@ class FilesListMixin:
                     counter += 1
             try:
                 shutil.move(filepath, new_path)
+                moved_from.add(os.path.dirname(filepath))
             except Exception as e:
                 QMessageBox.warning(
                     self._files_tab, t("files.reorganize_error"),
                     t("files.reorganize_error_detail").format(src=filepath, dst=new_path, error=str(e))
                 )
+        self._remove_empty_dirs(directory, moved_from)
         self._files_pending_refresh = True
         self.refresh_files_list()
 
@@ -565,6 +570,7 @@ class FilesListMixin:
         directory = self.path_entry.text().strip()
         if not directory or not os.path.isdir(directory):
             return
+        moved_from = set()
         for filepath in filepaths:
             if not os.path.isfile(filepath):
                 continue
@@ -590,11 +596,13 @@ class FilesListMixin:
                     counter += 1
             try:
                 shutil.move(filepath, new_path)
+                moved_from.add(os.path.dirname(filepath))
             except Exception as e:
                 QMessageBox.warning(
                     self._files_tab, t("files.reorganize_error"),
                     t("files.reorganize_error_detail").format(src=filepath, dst=new_path, error=str(e))
                 )
+        self._remove_empty_dirs(directory, moved_from)
         self._files_pending_refresh = True
         self.refresh_files_list()
 
@@ -613,9 +621,9 @@ class FilesListMixin:
         def replace_var(m):
             name = m.group(1)
             if name in tokens:
-                return tokens[name]
+                return tokens[name].replace('/', '_').replace('\\', '_')
             if name in info:
-                return info[name]
+                return info[name].replace('/', '_').replace('\\', '_')
             return m.group(0)
 
         raw_name = self._TEMPLATE_VAR_RE.sub(replace_var, template)
@@ -633,6 +641,25 @@ class FilesListMixin:
         if not s or s in ('.', '..'):
             return '_'
         return unicodedata.normalize('NFC', s)
+
+    @staticmethod
+    def _remove_empty_dirs(root_dir: str, moved_from: set):
+        """Remove directories in *moved_from* that became empty after moves.
+        Walks upward until a non-empty directory or *root_dir* is reached."""
+        if not root_dir or not os.path.isdir(root_dir):
+            return
+        root_dir = os.path.normpath(root_dir)
+        for src_dir in sorted(moved_from, key=lambda d: d.count(os.sep), reverse=True):
+            current = os.path.normpath(src_dir)
+            while current and current.startswith(root_dir) and current != root_dir:
+                try:
+                    if not os.listdir(current):
+                        os.rmdir(current)
+                        current = os.path.dirname(current)
+                    else:
+                        break
+                except OSError:
+                    break
 
 
 def _format_size(size: int) -> str:
