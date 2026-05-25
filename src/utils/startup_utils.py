@@ -588,7 +588,11 @@ def check_git_updates(branch: str = "") -> tuple:
         count = int(behind.stdout.strip())
     except ValueError:
         count = 1
-    return (count, remote_branch)
+    # If HEAD and the remote branch differ, always report at least 1
+    # commit behind so the user gets an update prompt even when switching
+    # branches (e.g. from dev back to main where dev already contains all
+    # main commits, making rev-list return 0).
+    return (max(count, 1), remote_branch)
 
 
 def apply_git_update(remote_branch: str) -> bool:
