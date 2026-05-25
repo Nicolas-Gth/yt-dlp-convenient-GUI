@@ -92,21 +92,36 @@ class FilesEditorMixin:
                     key = tag_key
                 val = val_item.text()
                 if isinstance(audio, OggOpus):
-                    tags[key] = [val]
-                elif isinstance(audio, MP4):
-                    tags[key] = [val]
-                else:
-                    frame = tags.get(key)
-                    if frame and hasattr(frame, 'text'):
-                        frame.text = [val]
-                    elif val:
+                    if val:
+                        tags[key] = [val]
+                    else:
                         try:
-                            cls = type(tags).__module__
-                            frame_cls = getattr(tags, '_ID3Tags__module', {}).get(key)
-                            if frame_cls:
-                                tags.add(frame_cls(encoding=3, text=[val]))
-                        except (KeyError, AttributeError):
+                            del tags[key]
+                        except KeyError:
                             pass
+                elif isinstance(audio, MP4):
+                    if val:
+                        tags[key] = [val]
+                    else:
+                        try:
+                            del tags[key]
+                        except KeyError:
+                            pass
+                else:
+                    if val:
+                        frame = tags.get(key)
+                        if frame and hasattr(frame, 'text'):
+                            frame.text = [val]
+                        else:
+                            try:
+                                cls = type(tags).__module__
+                                frame_cls = getattr(tags, '_ID3Tags__module', {}).get(key)
+                                if frame_cls:
+                                    tags.add(frame_cls(encoding=3, text=[val]))
+                            except (KeyError, AttributeError):
+                                pass
+                    else:
+                        tags.delall(key)
             audio.save()
             if new_filepath != self._current_detail_filepath and os.path.exists(self._current_detail_filepath):
                 os.rename(self._current_detail_filepath, new_filepath)
