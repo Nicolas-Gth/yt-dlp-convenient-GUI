@@ -134,6 +134,8 @@ class FilesSetupMixin:
         hdr.sectionResized.connect(self._on_section_resized)
         hdr.sortIndicatorChanged.connect(self._save_sort_column)
         self._files_table.itemSelectionChanged.connect(self._on_file_selected)
+        self._files_table.setContextMenuPolicy(Qt.CustomContextMenu)
+        self._files_table.customContextMenuRequested.connect(self._on_files_context_menu)
         files_layout.addWidget(self._files_table, 1)
         left_layout.addWidget(files_group, 1)
         splitter.addWidget(left)
