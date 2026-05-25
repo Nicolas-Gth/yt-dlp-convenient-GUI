@@ -204,8 +204,6 @@ class ProgressSetupMixin(ProgressLayoutMixin):
         if hasattr(self, 'input_container') and self.input_container is not None:
             self.input_container.show()
 
-        self.adjust_window_size(margin=1.0)
-
     def _reset_convert_button(self):
         """Reset the convert button to its original download state."""
         if not hasattr(self, 'convert_button') or self.convert_button is None:

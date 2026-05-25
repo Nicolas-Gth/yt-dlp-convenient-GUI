@@ -45,7 +45,8 @@ class FilesSetupMixin:
         structure_row = QHBoxLayout()
         structure_row.setSpacing(6)
 
-        self._files_template_entry = QLineEdit("{artist} - {title}")
+        default_template = settings_manager.get_setting("last_output_template", "")
+        self._files_template_entry = QLineEdit(default_template or "{artist} - {title}")
         self._files_template_entry.setPlaceholderText(t("format.template_placeholder"))
 
         self._files_template_presets = QComboBox()
@@ -63,6 +64,14 @@ class FilesSetupMixin:
             self._files_template_presets.addItem(t(label_key), template_val)
         self._files_template_presets.addItem(t("format.template_preset_custom"), None)
         self._files_template_presets.currentIndexChanged.connect(self._on_files_template_preset_changed)
+
+        if default_template:
+            for i in range(self._files_template_presets.count()):
+                if self._files_template_presets.itemData(i) == default_template:
+                    self._files_template_presets.blockSignals(True)
+                    self._files_template_presets.setCurrentIndex(i)
+                    self._files_template_presets.blockSignals(False)
+                    break
 
         self._files_template_info_btn = QPushButton()
         self._files_template_info_btn.setIcon(QIcon(INFO_ICON_PATH))
@@ -134,6 +143,8 @@ class FilesSetupMixin:
         hdr.sectionResized.connect(self._on_section_resized)
         hdr.sortIndicatorChanged.connect(self._save_sort_column)
         self._files_table.itemSelectionChanged.connect(self._on_file_selected)
+        self._files_table.setContextMenuPolicy(Qt.CustomContextMenu)
+        self._files_table.customContextMenuRequested.connect(self._on_files_context_menu)
         files_layout.addWidget(self._files_table, 1)
         left_layout.addWidget(files_group, 1)
         splitter.addWidget(left)

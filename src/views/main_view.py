@@ -47,6 +47,7 @@ class MainApplicationView(QMainWindow, WindowMixin, DownloadTabMixin, ProgressMi
 
         # Right panel — progress / download status (hidden until a download starts)
         self.progress_container = QWidget()
+        self.progress_container.setMinimumWidth(250)
         self.progress_container.hide()
         self.progress_container_layout = QVBoxLayout(self.progress_container)
         self.progress_container_layout.setContentsMargins(0, 0, 0, 0)
@@ -85,6 +86,16 @@ class MainApplicationView(QMainWindow, WindowMixin, DownloadTabMixin, ProgressMi
         self.on_stop_callback = None
         self.on_theme_change_callback = None
         self.on_language_change_callback = None
+
+        self._restore_window_geometry()
+
+    def closeEvent(self, event):
+        """Save window geometry before closing."""
+        if not self.isMaximized() and not self.isMinimized() and not self.isFullScreen():
+            geo = self.geometry()
+            settings_manager.set_setting("window_geometry",
+                (geo.x(), geo.y(), geo.width(), geo.height()))
+        super().closeEvent(event)
 
     # ------------------------------------------------------------------
     # Variables (simple Python attributes instead of Tk vars)

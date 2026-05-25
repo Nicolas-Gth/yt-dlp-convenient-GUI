@@ -5,11 +5,12 @@ import unicodedata
 from datetime import datetime
 
 from PySide6.QtWidgets import (
-    QTableWidgetItem, QHeaderView, QAbstractItemView, QFrame, QGroupBox, QMessageBox
+    QTableWidgetItem, QHeaderView, QAbstractItemView, QFrame, QGroupBox, QMessageBox, QMenu
 )
 from PySide6.QtCore import Qt
 
 from utils.i18n_utils import t
+from utils.settings_utils import settings_manager
 
 from .metadata import _extract_title_artist, _check_lyrics, _extract_template_info
 from .scanner import FileScanner
@@ -231,6 +232,12 @@ class FilesListMixin:
         # Clear the saved selection so the next refresh reads from the table again.
         self._files_saved_selection = None
 
+        # Re-apply search filter if one is active
+        if hasattr(self, '_files_search'):
+            current_search = self._files_search.text()
+            if current_search:
+                self._on_files_search_changed(current_search)
+
     def _on_file_selected(self):
         """Show detail for the first selected file."""
         rows = set(idx.row() for idx in self._files_table.selectedIndexes())
@@ -244,6 +251,201 @@ class FilesListMixin:
             self._show_file_detail(None)
             return
         self._show_file_detail(filepath)
+
+    def _on_files_context_menu(self, pos):
+        """Right-click context menu on the file table."""
+        from PySide6.QtGui import QAction, QIcon
+        from PySide6.QtWidgets import QApplication
+        from utils.theme_utils import is_dark_mode
+        rows = set(idx.row() for idx in self._files_table.selectedIndexes())
+        if not rows:
+            return
+        dark = is_dark_mode()
+        menu = QMenu(self._files_table)
+        copy_icon = QIcon("assets/ui/copy-icon-light.svg" if dark else "assets/ui/copy-icon-dark.svg")
+        copy_path_action = menu.addAction(copy_icon, t("files.copy_path"))
+        copy_name_action = menu.addAction(copy_icon, t("files.copy_name"))
+        menu.addSeparator()
+        rename_icon = QIcon("assets/ui/rename-icon-light.svg" if dark else "assets/ui/rename-icon-dark.svg")
+        restructure_action = menu.addAction(rename_icon, t("files.restructure_selected"))
+        menu.addSeparator()
+        delete_icon = QIcon("assets/ui/delete-icon-light.svg" if dark else "assets/ui/delete-icon-dark.svg")
+        delete_action = menu.addAction(delete_icon, t("files.delete"))
+        action = menu.exec(self._files_table.viewport().mapToGlobal(pos))
+        if action == delete_action:
+            self._delete_selected_files(rows)
+        elif action == restructure_action:
+            self._restructure_selected_files(rows)
+        elif action == copy_path_action:
+            self._copy_selected_paths(rows)
+        elif action == copy_name_action:
+            self._copy_selected_names(rows)
+
+    def _get_selected_filepaths(self, rows):
+        """Return list of absolute paths for the given selected rows."""
+        filepaths = []
+        for r in rows:
+            item = self._files_table.item(r, 0)
+            if item:
+                fp = item.data(Qt.UserRole)
+                if fp and os.path.isfile(fp):
+                    filepaths.append(fp)
+        return filepaths
+
+    def _copy_selected_paths(self, rows):
+        filepaths = self._get_selected_filepaths(rows)
+        if filepaths:
+            from PySide6.QtWidgets import QApplication
+            QApplication.clipboard().setText("\n".join(filepaths))
+
+    def _copy_selected_names(self, rows):
+        filepaths = self._get_selected_filepaths(rows)
+        if filepaths:
+            from PySide6.QtWidgets import QApplication
+            QApplication.clipboard().setText("\n".join(os.path.basename(fp) for fp in filepaths))
+
+    def _delete_selected_files(self, rows):
+        """Delete the files in the given selected rows."""
+        filepaths = []
+        filenames = []
+        for r in rows:
+            item = self._files_table.item(r, 0)
+            if item:
+                fp = item.data(Qt.UserRole)
+                if fp and os.path.isfile(fp):
+                    filepaths.append(fp)
+                    filenames.append(os.path.basename(fp))
+        if not filepaths:
+            return
+        msg = t("files.delete_confirm_text") if len(filepaths) == 1 else t("files.delete_confirm_text_multi")
+        reply = QMessageBox.question(
+            self,
+            t("files.delete_confirm_title"),
+            msg.format(files="\n".join(f" • {n}" for n in filenames)),
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        if reply != QMessageBox.Yes:
+            return
+        for fp in filepaths:
+            try:
+                os.remove(fp)
+            except OSError:
+                pass
+        self.refresh_files_list()
+
+    def _restructure_selected_files(self, rows):
+        """Open a template dialog and restructure the selected files."""
+        from PySide6.QtWidgets import (
+            QDialog, QVBoxLayout, QHBoxLayout, QLineEdit, QComboBox, QPushButton, QLabel
+        )
+        from PySide6.QtGui import QIcon
+        from PySide6.QtCore import QSize
+        from config import INFO_ICON_PATH
+        from utils.settings_utils import settings_manager
+
+        filepaths = []
+        for r in rows:
+            item = self._files_table.item(r, 0)
+            if item:
+                fp = item.data(Qt.UserRole)
+                if fp and os.path.isfile(fp):
+                    filepaths.append(fp)
+        if not filepaths:
+            return
+
+        _TEMPLATE_PRESETS = [
+            ("{artist} - {title}", "format.template_preset_default"),
+            ("{Y}-{m}-{d} - {artist} - {title}", "format.template_preset_date_artist"),
+            ("{Y}{m}{d}_{H}{M}{S}_{title}", "format.template_preset_date_time"),
+            ("{tracknumber} - {artist} - {title}", "format.template_preset_track_artist"),
+            ("{artist}/{album}/{artist} - {title}", "format.template_preset_artist_album"),
+            ("{artist}/{album}/{tracknumber} - {title}", "format.template_preset_album_track"),
+            ("{title}", "format.template_preset_simple"),
+        ]
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle(t("files.restructure_title"))
+        dlg.setMinimumWidth(620)
+        layout = QVBoxLayout(dlg)
+        layout.setSpacing(8)
+
+        # Template row: entry + presets dropdown + info button
+        template_row = QHBoxLayout()
+        template_entry = QLineEdit()
+        default_template = settings_manager.get_setting("last_output_template", "")
+        template_entry.setText(default_template)
+        template_entry.setClearButtonEnabled(True)
+        template_row.addWidget(template_entry, 1)
+
+        template_presets = QComboBox()
+        template_presets.setCursor(Qt.PointingHandCursor)
+        for template_val, label_key in _TEMPLATE_PRESETS:
+            template_presets.addItem(t(label_key), template_val)
+        template_presets.addItem(t("format.template_preset_custom"), None)
+        current_text = template_entry.text().strip()
+        idx = template_presets.findData(current_text)
+        template_presets.setCurrentIndex(idx if idx >= 0 else template_presets.count() - 1)
+        template_presets.currentIndexChanged.connect(
+            lambda i: template_entry.setText(template_presets.itemData(i) or template_entry.text())
+        )
+        template_row.addWidget(template_presets)
+
+        info_btn = QPushButton()
+        info_btn.setIcon(QIcon(INFO_ICON_PATH))
+        info_btn.setIconSize(QSize(14, 14))
+        info_btn.setFlat(True)
+        info_btn.setCursor(Qt.PointingHandCursor)
+        info_btn.setFixedSize(20, 20)
+        info_btn.clicked.connect(
+            lambda: QMessageBox.information(dlg, t("format.template_info_title"), t("format.template_info_text"))
+        )
+        template_row.addWidget(info_btn)
+
+        layout.addLayout(template_row)
+
+        # Selected files list (max 5, then summary)
+        MAX_VISIBLE = 5
+        remaining = len(filepaths) - MAX_VISIBLE
+        names = [os.path.basename(fp) for fp in filepaths[:MAX_VISIBLE]]
+        if remaining > 0:
+            names.append(t("files.restructure_more_selected").format(n=remaining))
+        files_label = QLabel("\n".join(f"  • {n}" for n in names))
+        files_label.setWordWrap(True)
+        layout.addWidget(files_label)
+
+        # OK / Cancel
+        btn_row = QHBoxLayout()
+        btn_row.addStretch()
+        cancel_btn = QPushButton(t("button.cancel"))
+        cancel_btn.setCursor(Qt.PointingHandCursor)
+        cancel_btn.clicked.connect(dlg.reject)
+        btn_row.addWidget(cancel_btn)
+        apply_btn = QPushButton(t("artwork.apply"))
+        apply_btn.setCursor(Qt.PointingHandCursor)
+        apply_btn.clicked.connect(dlg.accept)
+        apply_btn.setDefault(True)
+        btn_row.addWidget(apply_btn)
+        layout.addLayout(btn_row)
+
+        # Prevent Enter from closing without going through accept
+        dlg.keyPressEvent_orig = dlg.keyPressEvent
+        def _key_handler(event):
+            if event.key() in (Qt.Key_Return, Qt.Key_Enter):
+                focused = dlg.focusWidget()
+                if focused is template_entry:
+                    dlg.accept()
+                    return
+            dlg.keyPressEvent_orig(event)
+        dlg.keyPressEvent = _key_handler
+
+        if dlg.exec() != QDialog.Accepted:
+            return
+        template = template_entry.text().strip()
+        if not template:
+            return
+
+        self._reorganize_selected(filepaths, template)
 
     def _on_files_search_changed(self, text):
         """Filter the file table rows based on the search text."""
@@ -285,7 +487,7 @@ class FilesListMixin:
     # ------------------------------------------------------------------
 
     _TEMPLATE_VAR_RE = re.compile(r'\{(\w+)\}')
-    _FILENAME_ILLEGAL_RE = re.compile(r'[!?:#%&{}<>|*$@~]')
+    _FILENAME_ILLEGAL_RE = re.compile(r'[!?:#%&{}<>|*$@~/\\]')
     _DATE_TOKENS = ('Y', 'y', 'm', 'd', 'H', 'M', 'S', 'B', 'b')
 
     def _on_files_template_preset_changed(self, index):
@@ -312,6 +514,7 @@ class FilesListMixin:
         )
         if reply != QMessageBox.Yes:
             return
+        settings_manager.set_setting("last_output_template", template)
         self._reorganize_files(template)
 
     def _reorganize_files(self, template: str):
@@ -319,6 +522,7 @@ class FilesListMixin:
         directory = self.path_entry.text().strip()
         if not directory or not os.path.isdir(directory):
             return
+        moved_from = set()
         for r in range(self._files_table.rowCount()):
             item = self._files_table.item(r, 0)
             if not item:
@@ -351,11 +555,54 @@ class FilesListMixin:
                     counter += 1
             try:
                 shutil.move(filepath, new_path)
+                moved_from.add(os.path.dirname(filepath))
             except Exception as e:
                 QMessageBox.warning(
                     self._files_tab, t("files.reorganize_error"),
                     t("files.reorganize_error_detail").format(src=filepath, dst=new_path, error=str(e))
                 )
+        self._remove_empty_dirs(directory, moved_from)
+        self._files_pending_refresh = True
+        self.refresh_files_list()
+
+    def _reorganize_selected(self, filepaths: list, template: str):
+        """Move/rename the given *filepaths* according to *template*."""
+        directory = self.path_entry.text().strip()
+        if not directory or not os.path.isdir(directory):
+            return
+        moved_from = set()
+        for filepath in filepaths:
+            if not os.path.isfile(filepath):
+                continue
+            new_relpath = self._resolve_file_template(filepath, template)
+            if not new_relpath:
+                continue
+            new_path = os.path.join(directory, new_relpath)
+            new_path = unicodedata.normalize('NFC', new_path)
+            orig_ext = os.path.splitext(filepath)[1]
+            new_ext = os.path.splitext(new_path)[1]
+            if new_ext.lower() != orig_ext.lower():
+                new_path += orig_ext
+            if os.path.normpath(filepath) == os.path.normpath(new_path):
+                continue
+            target_dir = os.path.dirname(new_path)
+            if target_dir and not os.path.exists(target_dir):
+                os.makedirs(target_dir, exist_ok=True)
+            if os.path.exists(new_path):
+                base, ext = os.path.splitext(new_path)
+                counter = 1
+                while os.path.exists(new_path):
+                    new_path = f"{base} ({counter}){ext}"
+                    counter += 1
+            try:
+                shutil.move(filepath, new_path)
+                moved_from.add(os.path.dirname(filepath))
+            except Exception as e:
+                QMessageBox.warning(
+                    self._files_tab, t("files.reorganize_error"),
+                    t("files.reorganize_error_detail").format(src=filepath, dst=new_path, error=str(e))
+                )
+        self._remove_empty_dirs(directory, moved_from)
         self._files_pending_refresh = True
         self.refresh_files_list()
 
@@ -374,9 +621,9 @@ class FilesListMixin:
         def replace_var(m):
             name = m.group(1)
             if name in tokens:
-                return tokens[name]
+                return tokens[name].replace('/', '_').replace('\\', '_')
             if name in info:
-                return info[name]
+                return info[name].replace('/', '_').replace('\\', '_')
             return m.group(0)
 
         raw_name = self._TEMPLATE_VAR_RE.sub(replace_var, template)
@@ -394,6 +641,25 @@ class FilesListMixin:
         if not s or s in ('.', '..'):
             return '_'
         return unicodedata.normalize('NFC', s)
+
+    @staticmethod
+    def _remove_empty_dirs(root_dir: str, moved_from: set):
+        """Remove directories in *moved_from* that became empty after moves.
+        Walks upward until a non-empty directory or *root_dir* is reached."""
+        if not root_dir or not os.path.isdir(root_dir):
+            return
+        root_dir = os.path.normpath(root_dir)
+        for src_dir in sorted(moved_from, key=lambda d: d.count(os.sep), reverse=True):
+            current = os.path.normpath(src_dir)
+            while current and current.startswith(root_dir) and current != root_dir:
+                try:
+                    if not os.listdir(current):
+                        os.rmdir(current)
+                        current = os.path.dirname(current)
+                    else:
+                        break
+                except OSError:
+                    break
 
 
 def _format_size(size: int) -> str:

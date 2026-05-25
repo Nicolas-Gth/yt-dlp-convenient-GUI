@@ -25,8 +25,6 @@ class DownloadSetupMixin:
         self.create_disclaimer()
 
         self.input_layout.addWidget(self.settings_box)
-        self.adjust_window_size(margin=1.0)
-        self.setMinimumWidth(self.width() + 20)
 
     def set_pre_button_spacer_collapsed(self, collapsed: bool):
         """No-op — spacers are no longer manipulated in the side-by-side layout."""

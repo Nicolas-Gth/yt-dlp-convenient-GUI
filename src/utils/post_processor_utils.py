@@ -566,15 +566,15 @@ class CustomPostProcessor(yt_dlp.postprocessor.PostProcessor):
         def replace_var(m):
             name = m.group(1)
             if name in tokens:
-                return tokens[name]
+                return tokens[name].replace('/', '_').replace('\\', '_')
             if name == 'title':
-                return clean_title
+                return clean_title.replace('/', '_').replace('\\', '_')
             if name == 'artist':
-                return artist
+                return artist.replace('/', '_').replace('\\', '_')
             if name == 'album':
-                return album
+                return album.replace('/', '_').replace('\\', '_')
             if name == 'tracknumber':
-                return tracknumber
+                return tracknumber.replace('/', '_').replace('\\', '_')
             return m.group(0)
 
         return cls._TEMPLATE_VAR_RE.sub(replace_var, template)
@@ -583,7 +583,7 @@ class CustomPostProcessor(yt_dlp.postprocessor.PostProcessor):
     # File renaming
     # ------------------------------------------------------------------
 
-    _FILENAME_ILLEGAL_RE = re.compile(r'[!?:#%&{}<>|*$@~]')
+    _FILENAME_ILLEGAL_RE = re.compile(r'[!?:#%&{}<>|*$@~/\\]')
 
     @staticmethod
     def _sanitize_path_component(component: str) -> str:
