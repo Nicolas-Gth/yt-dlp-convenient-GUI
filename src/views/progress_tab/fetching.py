@@ -36,8 +36,6 @@ class ProgressFetchingMixin:
 
         self.progress_container_layout.addWidget(self.fetching_frame)
 
-        self.adjust_window_size(margin=1.6)
-
     def update_fetching_progress(self, current: int, total: int = None):
         """Update the fetching progress bar — count shown inside the bar."""
         if not hasattr(self, 'fetching_label') or not hasattr(self, 'fetching_progress'):

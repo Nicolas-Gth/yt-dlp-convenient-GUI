@@ -6,9 +6,10 @@ menu bar, and dynamic window resizing.
 """
 from PySide6.QtGui import QFont, QIcon, QAction, QActionGroup, QDesktopServices
 from PySide6.QtCore import Qt, QUrl
-from PySide6.QtWidgets import QMenuBar, QMenu, QMessageBox, QWidgetAction, QCheckBox
+from PySide6.QtWidgets import QMenuBar, QMenu, QMessageBox, QWidgetAction, QCheckBox, QApplication
 from config import APP_TITLE, APP_NAME, APP_VERSION, APP_AUTHOR, APP_AUTHOR_URL, ICON_PATH, COOKIES_DIR
 from utils.i18n_utils import t, AVAILABLE_LANGUAGES, MENU_LANGUAGES
+from utils.settings_utils import settings_manager
 
 
 class WindowMixin:
@@ -283,6 +284,7 @@ class WindowMixin:
                 if child and not child.isHidden():
                     child.updateGeometry()
                     w += max(child.sizeHint().width(),
+                            child.minimumWidth(),
                             _widest_leaf(child.layout()) if child.layout() else 0)
         else:
             self.main_layout.activate()
@@ -296,3 +298,41 @@ class WindowMixin:
         diff_h = max(0, self.frameGeometry().height() - cw.height())
         if w > diff_w:
             self.resize(w + diff_w, h + diff_h)
+
+    def _restore_window_geometry(self):
+        """Restore saved window geometry or set a sensible default.
+        Clamp to available screen space, respecting minimum size hints.
+        """
+        screen = QApplication.primaryScreen()
+        if screen is None:
+            return
+        avail = screen.availableGeometry()
+
+        saved = settings_manager.get_setting("window_geometry", None)
+        if isinstance(saved, (list, tuple)) and len(saved) == 4:
+            x, y, w, h = saved
+            if all(isinstance(v, (int, float)) and v > 0 for v in (w, h)):
+                left = max(avail.x(), x)
+                top = max(avail.y(), y)
+                right = min(avail.right(), int(x + w))
+                bottom = min(avail.bottom(), int(y + h))
+                if right - left > 0 and bottom - top > 0:
+                    self.setGeometry(left, top, right - left, bottom - top)
+                    return
+
+        self.progress_container.show()
+        self.adjust_window_size(margin=2.0)
+
+        min_w = self.minimumSizeHint().width()
+        if min_w > 0:
+            self.setMinimumWidth(min_w)
+
+        geo = self.geometry()
+        left = max(avail.x(), geo.x())
+        top = max(avail.y(), geo.y())
+        right = min(avail.right(), geo.right())
+        bottom = min(avail.bottom(), geo.bottom())
+        if right - left > 0 and bottom - top > 0:
+            self.setGeometry(left, top, right - left, bottom - top)
+
+        self.progress_container.hide()
