@@ -7,7 +7,7 @@ The heavy lifting is split across:
     - progress_view.py  : download progress UI (ProgressMixin)
     - event_handlers_view.py : callbacks & validation (EventHandlersMixin)
 """
-from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QTabWidget, QMessageBox
+from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QTabWidget, QMessageBox, QSizePolicy, QGroupBox
 from PySide6.QtCore import Qt
 
 from config import DEFAULT_BITRATE, DEFAULT_QUALITY, DEFAULT_NORMALIZE_TARGET, FILE_FORMATS
@@ -53,20 +53,39 @@ class MainApplicationView(QMainWindow, WindowMixin, DownloadTabMixin, ProgressMi
         self.progress_container_layout.setContentsMargins(0, 0, 0, 0)
         self.progress_container_layout.setSpacing(8)
 
+        # Single QGroupBox "Téléchargement" that contains everything
+        self.progress_group = QGroupBox(t("progress.group_title"))
+        self.progress_group.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
+        self.progress_container_layout.addWidget(self.progress_group, 1)
+
+        self.group_layout = QVBoxLayout(self.progress_group)
+        self.group_layout.setContentsMargins(7, 5, 7, 5)
+        self.group_layout.setSpacing(8)
+
+        # Inner wrapper for dynamic progress widgets (cleared between fetch/download modes)
+        self.progress_inner = QWidget()
+        self.progress_inner_layout = QVBoxLayout(self.progress_inner)
+        self.progress_inner_layout.setContentsMargins(0, 0, 0, 0)
+        self.progress_inner_layout.setSpacing(8)
+        self.group_layout.addWidget(self.progress_inner, 1)
+
+        # Push inner content to the top, tables fill the rest
+        self.group_layout.addStretch()
+
+        # Tables panel — downloaded / skipped (inside the group box)
+        self.tables_container = QWidget()
+        self.tables_layout = QVBoxLayout(self.tables_container)
+        self.tables_layout.setContentsMargins(0, 0, 0, 0)
+        self.tables_layout.setSpacing(0)
+        self.tables_container.hide()
+        self.group_layout.addWidget(self.tables_container, 1)
+
         # Horizontal layout: settings left | progress right
         self._top_layout = QHBoxLayout()
         self._top_layout.setSpacing(8)
         self._top_layout.addWidget(self.input_container, 1)
         self._top_layout.addWidget(self.progress_container, 1)
         self.main_layout.addLayout(self._top_layout)
-
-        # Bottom panel — downloaded / skipped tables (initially hidden, stretches to fill)
-        self.tables_container = QWidget()
-        self.tables_layout = QVBoxLayout(self.tables_container)
-        self.tables_layout.setContentsMargins(0, 0, 0, 0)
-        self.tables_layout.setSpacing(0)
-        self.tables_container.hide()
-        self.main_layout.addWidget(self.tables_container, 1)
 
         self.setup_window()
         self.setup_fonts()

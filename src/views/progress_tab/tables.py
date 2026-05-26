@@ -18,6 +18,10 @@ class ProgressTablesMixin:
         if not hasattr(self, '_tables_splitter') or self._tables_splitter is None:
             self._tables_splitter = QSplitter(Qt.Vertical)
             self._tables_splitter.setChildrenCollapsible(False)
+            self._tables_splitter.setHandleWidth(6)
+            self._tables_splitter.setStyleSheet(
+                "QSplitter::handle { margin: 4px 0; }"
+            )
             self._splitter_user_moved = False
             self._tables_splitter.splitterMoved.connect(
                 lambda: setattr(self, '_splitter_user_moved', True)

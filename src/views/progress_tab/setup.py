@@ -20,19 +20,28 @@ class ProgressSetupMixin(ProgressLayoutMixin):
         """Show download progress widgets in the right panel."""
         self.disable_interactive_widgets()
         self.convert_button.hide()
+        self.stop_button.setEnabled(True)
+        self.stop_button.setText(" " + t("button.stop"))
+        self.stop_button.setIcon(QIcon(STOP_ICON_PATH))
+        self.stop_button.setStyleSheet("""
+            QPushButton {
+                background-color: #a63333; color: white; border: none;
+                border-radius: 4px; padding: 8px 16px;
+            }
+            QPushButton:hover { background-color: #c94444; }
+        """)
+        self.stop_button.show()
 
-        # Show and clear the right panel
         self.progress_container.show()
-        self._clear_layout(self.progress_container_layout)
+        self._clear_layout(self.progress_inner_layout)
 
         row_h = self.fontMetrics().height() + 6
 
-        # Create progress frame inside the right panel (stretches to fill)
-        self.progress_frame = QGroupBox(t("progress.group_title"))
-        self.progress_frame.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
-        self.progress_frame.setAlignment(Qt.AlignLeft)
+        # Create progress frame inside the right panel
+        self.progress_frame = QWidget()
+        self.progress_frame.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
         frame_layout = QVBoxLayout(self.progress_frame)
-        frame_layout.setContentsMargins(7, 5, 7, 5)
+        frame_layout.setContentsMargins(0, 0, 0, 0)
 
         num_rows = 4 if is_playlist else 3
 
@@ -66,8 +75,8 @@ class ProgressSetupMixin(ProgressLayoutMixin):
         if is_playlist:
             self._info_row_playlist = row
             item = QTableWidgetItem(t("progress.info.playlist"))
-            f = item.font(); f.setBold(True); item.setFont(f)
             item.setFlags(Qt.ItemIsEnabled)
+            item.setForeground(Qt.gray)
             self.info_table.setItem(row, 0, item)
             val_item = QTableWidgetItem(""); val_item.setFlags(Qt.ItemIsEnabled)
             self.info_table.setItem(row, 1, val_item)
@@ -129,24 +138,8 @@ class ProgressSetupMixin(ProgressLayoutMixin):
             self._eta_timer.timeout.connect(self._update_eta_timer)
             self._eta_timer.start(1000)
 
-        # Stop button centered in remaining vertical space
-        frame_layout.addStretch()
-        self.stop_button = QPushButton(" " + t("button.stop"))
-        self.stop_button.setIcon(QIcon(STOP_ICON_PATH))
-        self.stop_button.setIconSize(QSize(16, 16))
-        self.stop_button.setCursor(Qt.PointingHandCursor)
-        self.stop_button.setStyleSheet("""
-            QPushButton {
-                background-color: #a63333; color: white; border: none;
-                border-radius: 4px; padding: 8px 16px;
-            }
-            QPushButton:hover { background-color: #c94444; }
-        """)
-        self.stop_button.clicked.connect(self._on_stop_click)
-        frame_layout.addWidget(self.stop_button, alignment=Qt.AlignCenter)
-        frame_layout.addStretch()
-
-        self.progress_container_layout.addWidget(self.progress_frame, 1)
+        self.progress_inner_layout.addWidget(self.progress_frame)
+        self.progress_inner_layout.addStretch()
 
         # Reset tables-related state
         self._tables_splitter = None
@@ -165,8 +158,6 @@ class ProgressSetupMixin(ProgressLayoutMixin):
 
         if hasattr(self, 'stop_button') and self.stop_button is not None:
             self.stop_button.hide()
-            self.stop_button.deleteLater()
-            self.stop_button = None
 
         if hasattr(self, '_skipped_group') and self._skipped_group is not None:
             self._skipped_group.hide()
@@ -187,7 +178,7 @@ class ProgressSetupMixin(ProgressLayoutMixin):
             self._info_item_count = None
 
         # Clear both panels
-        self._clear_layout(self.progress_container_layout)
+        self._clear_layout(self.progress_inner_layout)
         self._clear_layout(self.tables_layout)
         self.progress_container.hide()
         self.tables_container.hide()
@@ -223,8 +214,15 @@ class ProgressSetupMixin(ProgressLayoutMixin):
         """Transform the UI for the completed state."""
         self._stop_eta_timer()
 
-        # Hide the right panel
-        self.progress_container.hide()
+        self._clear_layout(self.progress_inner_layout)
+        self.group_layout.setStretchFactor(self.progress_inner, 0)
+        self.progress_frame = None
+        self.thumbnail_label = None
+        self.info_table = None
+        self._eta_callback = None
+
+        if hasattr(self, 'stop_button') and self.stop_button is not None:
+            self.stop_button.hide()
 
         # Transform convert button into "New download"
         if hasattr(self, 'convert_button') and self.convert_button is not None:

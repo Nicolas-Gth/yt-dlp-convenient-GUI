@@ -163,6 +163,8 @@ class WindowMixin:
         # GroupBox titles
         if hasattr(self, 'settings_box'):
             self.settings_box.setTitle(t("settings.group_title"))
+        if hasattr(self, 'progress_group'):
+            self.progress_group.setTitle(t("progress.group_title"))
         if hasattr(self, 'format_box'):
             self.format_box.setTitle(t("format.group_title"))
             self.mp3_radio.setText(t("format.mp3"))
