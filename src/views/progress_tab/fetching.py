@@ -70,6 +70,8 @@ class ProgressFetchingMixin:
             self.fetching_frame.hide()
             self.fetching_frame.deleteLater()
             self.fetching_frame = None
+        self.fetching_label = None
+        self.fetching_progress = None
 
         self._clear_layout(self.progress_inner_layout)
 
