@@ -110,6 +110,7 @@
   "files.open": "Open file",
   "files.open_folder": "Open containing folder",
   "files.path": "Path",
+  "files.refresh": "Refresh",
   "files.reorganize_error": "Reorganize Error",
   "files.reorganize_error_detail": "Could not move:\n{src}\n→ {dst}\n\nError: {error}",
   "files.search_placeholder": "Search…",

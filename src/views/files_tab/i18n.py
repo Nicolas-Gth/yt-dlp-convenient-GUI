@@ -44,6 +44,8 @@ class FilesI18nMixin:
             self._files_apply_format_btn.setText(t("files.apply_format"))
         if hasattr(self, '_files_columns_btn') and self._files_columns_btn is not None:
             self._files_columns_btn.setText(t("files.columns_label"))
+        if hasattr(self, '_files_refresh_btn') and self._files_refresh_btn is not None:
+            self._files_refresh_btn.setText(t("files.refresh"))
         if hasattr(self, '_detail_group') and self._detail_group is not None:
             self._detail_group.setTitle(t("metadata.group_title"))
         if hasattr(self, '_identify_btn') and self._identify_btn is not None:

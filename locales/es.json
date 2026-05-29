@@ -109,6 +109,7 @@
   "files.open": "Abrir archivo",
   "files.open_folder": "Abrir carpeta",
   "files.path": "Ruta",
+  "files.refresh": "Actualizar",
   "files.reorganize_error": "Error de reorganización",
   "files.reorganize_error_detail": "No se pudo mover:\n{src}\n→ {dst}\n\nError: {error}",
   "files.search_placeholder": "Buscar…",

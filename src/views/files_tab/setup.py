@@ -119,6 +119,14 @@ class FilesSetupMixin:
         menu.aboutToShow.connect(self._update_columns_menu)
         self._files_columns_btn.setMenu(menu)
         search_row.addWidget(self._files_columns_btn)
+
+        self._files_refresh_btn = QPushButton(t("files.refresh"))
+        self._files_refresh_btn.setCursor(Qt.PointingHandCursor)
+        self._files_refresh_btn.setIcon(QIcon(
+            "assets/ui/refresh-icon-light.svg" if is_dark_mode() else "assets/ui/refresh-icon-dark.svg"
+        ))
+        self._files_refresh_btn.clicked.connect(self.refresh_files_list)
+        search_row.addWidget(self._files_refresh_btn)
         files_layout.addLayout(search_row)
 
         self._files_table = QTableWidget(0, 10)
@@ -342,6 +350,9 @@ class FilesSetupMixin:
             btn = getattr(self, attr, None)
             if btn is not None:
                 btn.setIcon(QIcon(icon))
+        refresh_icon = "assets/ui/refresh-icon-light.svg" if is_dark_mode() else "assets/ui/refresh-icon-dark.svg"
+        if hasattr(self, '_files_refresh_btn') and self._files_refresh_btn is not None:
+            self._files_refresh_btn.setIcon(QIcon(refresh_icon))
 
     def _restore_column_widths(self):
         """Restore file table column widths from settings."""

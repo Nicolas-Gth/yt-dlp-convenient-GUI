@@ -109,6 +109,7 @@
   "files.open": "Apri file",
   "files.open_folder": "Apri cartella",
   "files.path": "Percorso",
+  "files.refresh": "Aggiorna",
   "files.reorganize_error": "Errore di riorganizzazione",
   "files.reorganize_error_detail": "Impossibile spostare:\n{src}\n→ {dst}\n\nErrore: {error}",
   "files.search_placeholder": "Cerca…",

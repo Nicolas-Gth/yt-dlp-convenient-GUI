@@ -109,6 +109,7 @@
   "files.open": "Datei öffnen",
   "files.open_folder": "Ordner öffnen",
   "files.path": "Pfad",
+  "files.refresh": "Aktualisieren",
   "files.reorganize_error": "Fehler beim Verschieben",
   "files.reorganize_error_detail": "Konnte nicht verschoben werden:\n{src}\n→ {dst}\n\nFehler: {error}",
   "files.search_placeholder": "Suchen…",
