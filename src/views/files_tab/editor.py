@@ -1,4 +1,5 @@
 import os
+import traceback
 
 from PySide6.QtWidgets import QTableWidgetItem
 from PySide6.QtCore import Qt
@@ -84,7 +85,10 @@ class FilesEditorMixin:
                             ext = orig_ext
                         new_filepath = os.path.join(os.path.dirname(self._current_detail_filepath), base + ext)
                     continue
-                if key in _FIELD_KEYS:
+                is_fixed = key in _FIELD_KEYS
+                if not is_fixed and row not in self._modified_rows:
+                    continue
+                if is_fixed:
                     tag_key = _FIELD_KEYS[key][0]
                     if isinstance(audio, OggOpus):
                         tag_key = _FIELD_KEYS[key][2]  # 'album', 'title', etc.
@@ -133,4 +137,5 @@ class FilesEditorMixin:
             self._files_saved_selection = new_filepath
             self.refresh_files_list()
         except Exception as e:
+            traceback.print_exc()
             print(f"Save metadata error: {e}")

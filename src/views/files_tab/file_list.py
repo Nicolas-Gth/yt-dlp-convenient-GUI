@@ -99,11 +99,8 @@ class FilesListMixin:
             loading = QTableWidgetItem(t("files.loading"))
             loading.setFlags(Qt.ItemIsEnabled)
             self._files_table.setItem(0, 0, loading)
-            self._files_table.setItem(0, 1, QTableWidgetItem(""))
-            self._files_table.setItem(0, 2, QTableWidgetItem(""))
-            self._files_table.setItem(0, 3, QTableWidgetItem(""))
-            self._files_table.setItem(0, 4, QTableWidgetItem(""))
-            self._files_table.setItem(0, 5, QTableWidgetItem(""))
+            for c in range(1, self._files_table.columnCount()):
+                self._files_table.setItem(0, c, QTableWidgetItem(""))
             self._files_table.setEnabled(False)
 
         self._scanner.start()
