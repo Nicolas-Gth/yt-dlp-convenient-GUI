@@ -2,12 +2,12 @@ from PySide6.QtWidgets import QPushButton
 from PySide6.QtGui import QIcon
 from PySide6.QtCore import Qt, QSize
 
-from config import DOWNLOAD_ICON_PATH
+from config import DOWNLOAD_ICON_PATH, STOP_ICON_PATH
 from utils.i18n_utils import t
 
 
 class DownloadButtonMixin:
-    """Mixin that creates the main download button."""
+    """Mixin that creates the main download button and the stop button."""
 
     def create_convert_button(self):
         """Create the main convert button."""
@@ -28,3 +28,18 @@ class DownloadButtonMixin:
         """)
         self.convert_button.clicked.connect(self._on_convert_click)
         self.settings_layout.addWidget(self.convert_button, alignment=Qt.AlignCenter)
+
+        self.stop_button = QPushButton(" " + t("button.stop"))
+        self.stop_button.setIcon(QIcon(STOP_ICON_PATH))
+        self.stop_button.setIconSize(QSize(16, 16))
+        self.stop_button.setCursor(Qt.PointingHandCursor)
+        self.stop_button.setStyleSheet("""
+            QPushButton {
+                background-color: #a63333; color: white; border: none;
+                border-radius: 4px; padding: 8px 16px;
+            }
+            QPushButton:hover { background-color: #c94444; }
+        """)
+        self.stop_button.clicked.connect(self._on_stop_click)
+        self.stop_button.hide()
+        self.settings_layout.addWidget(self.stop_button, alignment=Qt.AlignCenter)

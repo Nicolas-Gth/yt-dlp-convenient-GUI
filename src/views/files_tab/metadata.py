@@ -135,6 +135,116 @@ def _check_lyrics(filepath):
                     text = str(tag)
                     break
         if text:
+            if re.search(r'^\[\d{2}:\d{2}[.:]\d{2}\]', text, re.MULTILINE):
+                return 'LRC', 'lrc'
+            return 'Txt', 'txt'
+    except Exception:
+        pass
+    return t("table.none"), ''
+
+
+def _extract_scan_metadata(filepath):
+    """Extract all metadata needed by the file scanner in a single file open.
+    Returns (artist, title, album, genre, year, tracknumber, lyrics, lyr_type).
+    """
+    from mutagen.mp4 import MP4
+    from mutagen.oggopus import OggOpus
+
+    artist = ""
+    title = ""
+    album = ""
+    genre = ""
+    year = ""
+    tracknumber = ""
+    lyrics = t("table.none")
+    lyr_type = ""
+
+    # --- sidecar lyrics (no mutagen needed) ---
+    base = os.path.splitext(filepath)[0]
+    if os.path.exists(base + '.lrc'):
+        lyrics, lyr_type = 'LRC', 'lrc'
+    elif os.path.exists(base + '.txt'):
+        lyrics, lyr_type = 'Txt', 'txt'
+
+    audio = _load_audio(filepath)
+    if audio is not None and audio.tags is not None:
+        tags = audio.tags
+        try:
+            if isinstance(audio, OggOpus):
+                artist = "; ".join(tags.get('artist', []) or []).strip()
+                title = "; ".join(tags.get('title', []) or []).strip()
+                album = "; ".join(tags.get('album', []) or []).strip()
+                genre = "; ".join(tags.get('genre', []) or []).strip()
+                raw_year = "; ".join(tags.get('date', []) or []).strip()
+                year = raw_year[:4] if raw_year and raw_year[:4].isdigit() else raw_year
+                tracknumber = "; ".join(tags.get('tracknumber', []) or []).strip()
+                # embedded lyrics
+                if not lyr_type:
+                    val = tags.get('lyrics')
+                    text = val[0] if val else None
+                    if text:
+                        lyrics, lyr_type = ('LRC', 'lrc') if re.search(r'^\[\d{2}:\d{2}[.:]\d{2}\]', text, re.MULTILINE) else ('Txt', 'txt')
+            elif isinstance(audio, MP4):
+                artist = (tags.get('\xa9ART', [None])[0] or "").strip()
+                title = (tags.get('\xa9nam', [None])[0] or "").strip()
+                album = (tags.get('\xa9alb', [None])[0] or "").strip()
+                genre = (tags.get('\xa9gen', [None])[0] or "").strip()
+                raw_year = (tags.get('\xa9day', [None])[0] or "").strip()
+                year = raw_year[:4] if raw_year and raw_year[:4].isdigit() else raw_year
+                trkn = tags.get('trkn')
+                if trkn and trkn[0]:
+                    tracknumber = str(trkn[0][0])
+                # embedded lyrics
+                if not lyr_type:
+                    val = tags.get('\xa9lyr')
+                    text = val[0] if val else None
+                    if text:
+                        lyrics, lyr_type = ('LRC', 'lrc') if re.search(r'^\[\d{2}:\d{2}[.:]\d{2}\]', text, re.MULTILINE) else ('Txt', 'txt')
+            else:  # MP3
+                def _text(frame):
+                    return "; ".join(str(v) for v in frame.text) if hasattr(frame, 'text') else str(frame)
+
+                artist_frame = tags.get('TPE1')
+                artist = _text(artist_frame).strip() if artist_frame else ""
+                title_frame = tags.get('TIT2')
+                title = _text(title_frame).strip() if title_frame else ""
+                album_frame = tags.get('TALB')
+                album = _text(album_frame).strip() if album_frame else ""
+                genre_frame = tags.get('TCON')
+                genre = _text(genre_frame).strip() if genre_frame else ""
+                year_frame = tags.get('TDRC') or tags.get('TYER')
+                if year_frame:
+                    raw = _text(year_frame).strip()
+                    year = raw[:4] if raw and raw[:4].isdigit() else raw
+                trck_frame = tags.get('TRCK')
+                tracknumber = _text(trck_frame).strip() if trck_frame else ""
+                # embedded lyrics
+                if not lyr_type:
+                    for tag in tags.values():
+                        if tag.FrameID == 'USLT':
+                            text = str(tag)
+                            lyrics, lyr_type = ('LRC', 'lrc') if re.search(r'^\[\d{2}:\d{2}[.:]\d{2}\]', text, re.MULTILINE) else ('Txt', 'txt')
+                            break
+        except Exception:
+            pass
+
+    return artist, title, album, genre, year, tracknumber, lyrics, lyr_type
+    try:
+        from mutagen.mp4 import MP4
+        from mutagen.oggopus import OggOpus
+        text = None
+        if isinstance(audio, OggOpus):
+            val = audio.tags.get('lyrics')
+            text = val[0] if val else None
+        elif isinstance(audio, MP4):
+            val = audio.tags.get('\xa9lyr')
+            text = val[0] if val else None
+        else:
+            for tag in audio.tags.values():
+                if tag.FrameID == 'USLT':
+                    text = str(tag)
+                    break
+        if text:
             # Detect LRC: lines starting with [mm:ss.xx]
             if re.search(r'^\[\d{2}:\d{2}[.:]\d{2}\]', text, re.MULTILINE):
                 return 'LRC', 'lrc'

@@ -95,6 +95,27 @@ class RefreshMixin:
             elif not self.convert_button.isHidden():
                 self.convert_button.setText(" " + t("button.download"))
 
+        # ── Progress labels ──
+        try:
+            if hasattr(self, 'progress_label') and self.progress_label is not None:
+                self.progress_label.setText(t("progress.element"))
+        except RuntimeError:
+            pass
+        try:
+            if hasattr(self, 'total_progress_label') and self.total_progress_label is not None:
+                self.total_progress_label.setText(t("progress.total"))
+        except RuntimeError:
+            pass
+
+        # ── Fetching label ──
+        try:
+            if hasattr(self, 'fetching_label') and self.fetching_label is not None:
+                is_playlist = hasattr(self, 'fetching_progress') and self.fetching_progress is not None and self.fetching_progress.maximum() > 0
+                self.fetching_label.setText(
+                    t("fetching.info") if not is_playlist else t("fetching.playlist"))
+        except RuntimeError:
+            pass
+
         # Files tab
         if hasattr(self, 'retranslate_files_tab'):
             self.retranslate_files_tab()

@@ -4,7 +4,7 @@ from datetime import datetime
 
 from PySide6.QtCore import QThread, Signal
 
-from .metadata import _extract_title_artist, _check_lyrics
+from .metadata import _extract_scan_metadata
 
 # yt-dlp temporary file patterns
 _TEMP_RE = re.compile(r'\.f\d+\.[a-zA-Z0-9]+$')
@@ -51,14 +51,13 @@ class FileScanner(QThread):
                     if _is_temp_file(full):
                         continue
                     rel = os.path.relpath(full, directory)
-                    artist, title = _extract_title_artist(full)
-                    lyrics, lyr_type = _check_lyrics(full)
+                    artist, title, album, genre, year, tracknumber, lyrics, lyr_type = _extract_scan_metadata(full)
                     try:
                         mtime = datetime.fromtimestamp(os.path.getmtime(full)).strftime("%d/%m/%Y %H:%M")
                         size = os.path.getsize(full)
                     except (OSError, FileNotFoundError):
                         continue
-                    results.append((full, rel, artist, title, lyrics, lyr_type, size, mtime))
+                    results.append((full, rel, artist, title, album, genre, year, tracknumber, lyrics, lyr_type, size, mtime))
 
         if not self.isInterruptionRequested():
             results.sort(key=lambda x: x[1].lower())

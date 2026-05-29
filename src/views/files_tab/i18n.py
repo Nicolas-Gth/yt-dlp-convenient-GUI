@@ -18,12 +18,16 @@ class FilesI18nMixin:
                 t("files.filename"),
                 t("files.title"),
                 t("files.artist"),
+                t("files.column_album"),
+                t("files.column_genre"),
+                t("files.column_year"),
+                t("files.column_track"),
                 t("files.lyrics"),
                 t("files.size"),
                 t("files.modified"),
             ])
             for r in range(self._files_table.rowCount()):
-                item = self._files_table.item(r, 3)
+                item = self._files_table.item(r, 7)
                 if item:
                     lyr_type = item.data(Qt.UserRole)
                     if lyr_type == 'lrc':
@@ -38,6 +42,10 @@ class FilesI18nMixin:
             self._files_structure_group.setTitle(t("files.structure_title"))
         if hasattr(self, '_files_apply_format_btn') and self._files_apply_format_btn is not None:
             self._files_apply_format_btn.setText(t("files.apply_format"))
+        if hasattr(self, '_files_columns_btn') and self._files_columns_btn is not None:
+            self._files_columns_btn.setText(t("files.columns_label"))
+        if hasattr(self, '_files_refresh_btn') and self._files_refresh_btn is not None:
+            self._files_refresh_btn.setText(t("files.refresh"))
         if hasattr(self, '_detail_group') and self._detail_group is not None:
             self._detail_group.setTitle(t("metadata.group_title"))
         if hasattr(self, '_identify_btn') and self._identify_btn is not None:

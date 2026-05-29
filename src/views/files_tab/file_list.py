@@ -12,7 +12,7 @@ from PySide6.QtCore import Qt
 from utils.i18n_utils import t
 from utils.settings_utils import settings_manager
 
-from .metadata import _extract_title_artist, _check_lyrics, _extract_template_info
+from .metadata import _extract_template_info
 from .scanner import FileScanner
 
 
@@ -99,11 +99,8 @@ class FilesListMixin:
             loading = QTableWidgetItem(t("files.loading"))
             loading.setFlags(Qt.ItemIsEnabled)
             self._files_table.setItem(0, 0, loading)
-            self._files_table.setItem(0, 1, QTableWidgetItem(""))
-            self._files_table.setItem(0, 2, QTableWidgetItem(""))
-            self._files_table.setItem(0, 3, QTableWidgetItem(""))
-            self._files_table.setItem(0, 4, QTableWidgetItem(""))
-            self._files_table.setItem(0, 5, QTableWidgetItem(""))
+            for c in range(1, self._files_table.columnCount()):
+                self._files_table.setItem(0, c, QTableWidgetItem(""))
             self._files_table.setEnabled(False)
 
         self._scanner.start()
@@ -134,20 +131,24 @@ class FilesListMixin:
         if same_set and len(existing_rows) == len(results):
             self._files_table.blockSignals(True)
             self._files_table.setSortingEnabled(False)
-            for idx, (filepath, relpath, artist, title, lyrics, lyr_type, size, mtime) in enumerate(results):
+            for idx, (filepath, relpath, artist, title, album, genre, year, tracknumber, lyrics, lyr_type, size, mtime) in enumerate(results):
                 watched_dirs.add(os.path.dirname(filepath))
                 row = existing_rows[filepath]
                 self._files_table.item(row, 0).setText(relpath)
                 self._files_table.item(row, 1).setText(title)
                 self._files_table.item(row, 2).setText(artist)
-                l_item = self._files_table.item(row, 3)
+                self._files_table.item(row, 3).setText(album)
+                self._files_table.item(row, 4).setText(genre)
+                self._files_table.item(row, 5).setText(year)
+                self._files_table.item(row, 6).setText(tracknumber)
+                l_item = self._files_table.item(row, 7)
                 l_item.setText(lyrics)
                 l_item.setData(Qt.UserRole, lyr_type)
-                s_item = self._files_table.item(row, 4)
+                s_item = self._files_table.item(row, 8)
                 if isinstance(s_item, _NumericItem):
                     s_item.setText(_format_size(size))
                     s_item._sort_value = size
-                self._files_table.item(row, 5).setText(mtime)
+                self._files_table.item(row, 9).setText(mtime)
             self._restoring_widths = True
             self._files_table.horizontalHeader().resizeSections(QHeaderView.ResizeToContents)
             self._restoring_widths = False
@@ -163,7 +164,7 @@ class FilesListMixin:
             ROW_HEIGHT = 24
             selected_row = -1
 
-            for idx, (filepath, relpath, artist, title, lyrics, lyr_type, size, mtime) in enumerate(results):
+            for idx, (filepath, relpath, artist, title, album, genre, year, tracknumber, lyrics, lyr_type, size, mtime) in enumerate(results):
                 self._files_table.setRowHeight(idx, ROW_HEIGHT)
                 watched_dirs.add(os.path.dirname(filepath))
 
@@ -183,18 +184,34 @@ class FilesListMixin:
                 artist_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
                 self._files_table.setItem(idx, 2, artist_item)
 
+                album_item = QTableWidgetItem(album)
+                album_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
+                self._files_table.setItem(idx, 3, album_item)
+
+                genre_item = QTableWidgetItem(genre)
+                genre_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
+                self._files_table.setItem(idx, 4, genre_item)
+
+                year_item = QTableWidgetItem(year)
+                year_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
+                self._files_table.setItem(idx, 5, year_item)
+
+                track_item = QTableWidgetItem(tracknumber)
+                track_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
+                self._files_table.setItem(idx, 6, track_item)
+
                 lyrics_item = QTableWidgetItem(lyrics)
                 lyrics_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
                 lyrics_item.setData(Qt.UserRole, lyr_type)
-                self._files_table.setItem(idx, 3, lyrics_item)
+                self._files_table.setItem(idx, 7, lyrics_item)
 
                 size_item = _NumericItem(_format_size(size), size)
                 size_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
-                self._files_table.setItem(idx, 4, size_item)
+                self._files_table.setItem(idx, 8, size_item)
 
                 mtime_item = QTableWidgetItem(mtime)
                 mtime_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
-                self._files_table.setItem(idx, 5, mtime_item)
+                self._files_table.setItem(idx, 9, mtime_item)
 
             self._restoring_widths = True
             self._files_table.horizontalHeader().resizeSections(QHeaderView.ResizeToContents)
@@ -254,25 +271,28 @@ class FilesListMixin:
 
     def _on_files_context_menu(self, pos):
         """Right-click context menu on the file table."""
-        from PySide6.QtGui import QAction, QIcon
-        from PySide6.QtWidgets import QApplication
-        from utils.theme_utils import is_dark_mode
+        from PySide6.QtGui import QIcon
+        from PySide6.QtWidgets import QStyle
         rows = set(idx.row() for idx in self._files_table.selectedIndexes())
         if not rows:
             return
-        dark = is_dark_mode()
+        style = self._files_table.style()
         menu = QMenu(self._files_table)
-        copy_icon = QIcon("assets/ui/copy-icon-light.svg" if dark else "assets/ui/copy-icon-dark.svg")
+        open_folder_action = menu.addAction(style.standardIcon(QStyle.SP_DirOpenIcon), t("files.open_folder"))
+        menu.addSeparator()
+        copy_icon = QIcon.fromTheme("edit-copy")
+        if copy_icon.isNull():
+            copy_icon = style.standardIcon(QStyle.SP_FileIcon)
         copy_path_action = menu.addAction(copy_icon, t("files.copy_path"))
         copy_name_action = menu.addAction(copy_icon, t("files.copy_name"))
         menu.addSeparator()
-        rename_icon = QIcon("assets/ui/rename-icon-light.svg" if dark else "assets/ui/rename-icon-dark.svg")
-        restructure_action = menu.addAction(rename_icon, t("files.restructure_selected"))
+        restructure_action = menu.addAction(QIcon.fromTheme("edit-rename"), t("files.restructure_selected"))
         menu.addSeparator()
-        delete_icon = QIcon("assets/ui/delete-icon-light.svg" if dark else "assets/ui/delete-icon-dark.svg")
-        delete_action = menu.addAction(delete_icon, t("files.delete"))
+        delete_action = menu.addAction(style.standardIcon(QStyle.SP_TrashIcon), t("files.delete"))
         action = menu.exec(self._files_table.viewport().mapToGlobal(pos))
-        if action == delete_action:
+        if action == open_folder_action:
+            self._open_selected_folders(rows)
+        elif action == delete_action:
             self._delete_selected_files(rows)
         elif action == restructure_action:
             self._restructure_selected_files(rows)
@@ -303,6 +323,23 @@ class FilesListMixin:
         if filepaths:
             from PySide6.QtWidgets import QApplication
             QApplication.clipboard().setText("\n".join(os.path.basename(fp) for fp in filepaths))
+
+    def _open_selected_files(self, rows):
+        filepaths = self._get_selected_filepaths(rows)
+        if filepaths:
+            from PySide6.QtGui import QDesktopServices
+            from PySide6.QtCore import QUrl
+            for fp in filepaths:
+                QDesktopServices.openUrl(QUrl.fromLocalFile(fp))
+
+    def _open_selected_folders(self, rows):
+        filepaths = self._get_selected_filepaths(rows)
+        if filepaths:
+            from PySide6.QtGui import QDesktopServices
+            from PySide6.QtCore import QUrl
+            folders = set(os.path.dirname(fp) for fp in filepaths)
+            for folder in folders:
+                QDesktopServices.openUrl(QUrl.fromLocalFile(folder))
 
     def _delete_selected_files(self, rows):
         """Delete the files in the given selected rows."""
@@ -455,7 +492,9 @@ class FilesListMixin:
                 self._files_table.setRowHidden(row, False)
                 continue
             match = False
-            for col in (0, 1, 2):
+            for col in range(self._files_table.columnCount()):
+                if self._files_table.isColumnHidden(col):
+                    continue
                 item = self._files_table.item(row, col)
                 if item and query in item.text().lower():
                     match = True

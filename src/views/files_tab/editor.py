@@ -1,4 +1,5 @@
 import os
+import traceback
 
 from PySide6.QtWidgets import QTableWidgetItem
 from PySide6.QtCore import Qt
@@ -39,6 +40,7 @@ class FilesEditorMixin:
         try:
             from mutagen.mp4 import MP4
             from mutagen.oggopus import OggOpus
+            import mutagen.id3
             tags = audio.tags
             new_filepath = self._current_detail_filepath
             # Handle lyrics (separate widget)
@@ -83,7 +85,10 @@ class FilesEditorMixin:
                             ext = orig_ext
                         new_filepath = os.path.join(os.path.dirname(self._current_detail_filepath), base + ext)
                     continue
-                if key in _FIELD_KEYS:
+                is_fixed = key in _FIELD_KEYS
+                if not is_fixed and row not in self._modified_rows:
+                    continue
+                if is_fixed:
                     tag_key = _FIELD_KEYS[key][0]
                     if isinstance(audio, OggOpus):
                         tag_key = _FIELD_KEYS[key][2]  # 'album', 'title', etc.
@@ -114,11 +119,10 @@ class FilesEditorMixin:
                             frame.text = [val]
                         else:
                             try:
-                                cls = type(tags).__module__
-                                frame_cls = getattr(tags, '_ID3Tags__module', {}).get(key)
+                                frame_cls = getattr(mutagen.id3, key, None)
                                 if frame_cls:
                                     tags.add(frame_cls(encoding=3, text=[val]))
-                            except (KeyError, AttributeError):
+                            except Exception:
                                 pass
                     else:
                         tags.delall(key)
@@ -133,4 +137,5 @@ class FilesEditorMixin:
             self._files_saved_selection = new_filepath
             self.refresh_files_list()
         except Exception as e:
+            traceback.print_exc()
             print(f"Save metadata error: {e}")

@@ -31,7 +31,8 @@ class SettingsManager:
             "last_enrich_metadata": False,
             "last_prevent_sleep": False,
             "use_experimental_branch": False,
-            "last_output_template": ""
+            "last_output_template": "",
+            "files_visible_columns": ["filename", "title", "artist", "lyrics", "size", "modified"]
         }
         
     def _get_config_directory(self) -> Path:
