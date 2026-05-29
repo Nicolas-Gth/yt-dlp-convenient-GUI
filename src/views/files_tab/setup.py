@@ -2,7 +2,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QWidget, QTableWidget, QTableWidgetItem,
     QHeaderView, QAbstractItemView, QFrame, QSplitter, QLabel,
     QSizePolicy, QGroupBox, QPushButton, QSlider, QTextEdit,
-    QLineEdit, QComboBox, QMessageBox, QCheckBox
+    QLineEdit, QComboBox, QMessageBox, QCheckBox, QMenu
 )
 from PySide6.QtGui import QIcon
 from PySide6.QtCore import Qt, QTimer, QFileSystemWatcher, QSize
@@ -99,18 +99,37 @@ class FilesSetupMixin:
         files_layout = QVBoxLayout(files_group)
         files_layout.setContentsMargins(5, 10, 5, 8)
 
-        # Search bar above the file table
+        # Search bar + column selector above the file table
+        search_row = QHBoxLayout()
+        search_row.setContentsMargins(0, 0, 0, 0)
+        search_row.setSpacing(6)
         self._files_search = QLineEdit()
         self._files_search.setPlaceholderText(t("files.search_placeholder"))
         self._files_search.setClearButtonEnabled(True)
         self._files_search.textChanged.connect(self._on_files_search_changed)
-        files_layout.addWidget(self._files_search)
+        search_row.addWidget(self._files_search, 1)
+        self._files_columns_btn = QPushButton(t("files.columns_label"))
+        self._files_columns_btn.setCursor(Qt.PointingHandCursor)
+        menu = QMenu(self._files_columns_btn)
+        for idx, (key, header_key) in enumerate(self._COLUMNS):
+            action = menu.addAction(t(header_key))
+            action.setCheckable(True)
+            action.setData((idx, key))
+            action.toggled.connect(self._toggle_column)
+        menu.aboutToShow.connect(self._update_columns_menu)
+        self._files_columns_btn.setMenu(menu)
+        search_row.addWidget(self._files_columns_btn)
+        files_layout.addLayout(search_row)
 
-        self._files_table = QTableWidget(0, 6)
+        self._files_table = QTableWidget(0, 10)
         self._files_table.setHorizontalHeaderLabels([
             t("files.filename"),
             t("files.title"),
             t("files.artist"),
+            t("files.column_album"),
+            t("files.column_genre"),
+            t("files.column_year"),
+            t("files.column_track"),
             t("files.lyrics"),
             t("files.size"),
             t("files.modified"),
@@ -133,11 +152,8 @@ class FilesSetupMixin:
         )
         hdr = self._files_table.horizontalHeader()
         hdr.setMinimumSectionSize(60)
-        hdr.setSectionResizeMode(0, QHeaderView.Interactive)
-        hdr.setSectionResizeMode(1, QHeaderView.Interactive)
-        hdr.setSectionResizeMode(2, QHeaderView.Interactive)
-        hdr.setSectionResizeMode(3, QHeaderView.Interactive)
-        hdr.setSectionResizeMode(4, QHeaderView.Interactive)
+        for i in range(10):
+            hdr.setSectionResizeMode(i, QHeaderView.Interactive)
         hdr.setStretchLastSection(True)
         hdr.setDefaultAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         hdr.sectionResized.connect(self._on_section_resized)
@@ -145,6 +161,15 @@ class FilesSetupMixin:
         self._files_table.itemSelectionChanged.connect(self._on_file_selected)
         self._files_table.setContextMenuPolicy(Qt.CustomContextMenu)
         self._files_table.customContextMenuRequested.connect(self._on_files_context_menu)
+
+        _h_scroll = self._files_table.horizontalScrollBar()
+        _original_scroll_to = self._files_table.scrollTo
+        def _no_h_scroll(index, hint=QAbstractItemView.EnsureVisible):
+            h = _h_scroll.value()
+            _original_scroll_to(index, hint)
+            _h_scroll.setValue(h)
+        self._files_table.scrollTo = _no_h_scroll
+        self._apply_column_visibility()
         files_layout.addWidget(self._files_table, 1)
         left_layout.addWidget(files_group, 1)
         splitter.addWidget(left)
@@ -326,7 +351,7 @@ class FilesSetupMixin:
             return
         self._restoring_widths = True
         hdr = self._files_table.horizontalHeader()
-        minimums = {3: 70, 4: 110}
+        minimums = {7: 70, 8: 110}
         for i, w in enumerate(widths):
             w = max(w, minimums.get(i, 60))
             hdr.resizeSection(i, w)
@@ -337,7 +362,7 @@ class FilesSetupMixin:
         if getattr(self, '_restoring_widths', False) or not getattr(self, '_columns_ready', False):
             return
         hdr = self._files_table.horizontalHeader()
-        minimums = {3: 70, 4: 110}
+        minimums = {7: 70, 8: 110}
         min_w = minimums.get(logical_index, 0)
         if min_w and new_size < min_w:
             self._restoring_widths = True
@@ -364,3 +389,51 @@ class FilesSetupMixin:
             hdr = self._files_table.horizontalHeader()
             hdr.setSortIndicator(col, Qt.SortOrder(order))
             self._restoring_widths = False
+
+    _COLUMNS = [
+        ("filename", "files.filename"),
+        ("title", "files.title"),
+        ("artist", "files.artist"),
+        ("album", "files.column_album"),
+        ("genre", "files.column_genre"),
+        ("year", "files.column_year"),
+        ("track", "files.column_track"),
+        ("lyrics", "files.lyrics"),
+        ("size", "files.size"),
+        ("modified", "files.modified"),
+    ]
+
+    def _apply_column_visibility(self):
+        visible = settings_manager.get_setting("files_visible_columns")
+        if not visible:
+            visible = ["filename", "title", "artist", "lyrics", "size", "modified"]
+        for idx, (key, _header) in enumerate(self._COLUMNS):
+            self._files_table.setColumnHidden(idx, key not in visible)
+
+    def _update_columns_menu(self):
+        visible = settings_manager.get_setting("files_visible_columns")
+        if not visible:
+            visible = ["filename", "title", "artist", "lyrics", "size", "modified"]
+        menu = self._files_columns_btn.menu()
+        for action in menu.actions():
+            if action.isSeparator():
+                continue
+            _idx, key = action.data()
+            action.blockSignals(True)
+            action.setChecked(key in visible)
+            action.blockSignals(False)
+
+    def _toggle_column(self, checked):
+        action = self.sender()
+        if action is None:
+            return
+        idx, key = action.data()
+        self._files_table.setColumnHidden(idx, not checked)
+        visible = settings_manager.get_setting("files_visible_columns")
+        if not visible:
+            visible = ["filename", "title", "artist", "lyrics", "size", "modified"]
+        if checked and key not in visible:
+            visible.append(key)
+        elif not checked and key in visible:
+            visible.remove(key)
+        settings_manager.set_setting("files_visible_columns", visible)

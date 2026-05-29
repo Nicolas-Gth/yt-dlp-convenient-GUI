@@ -12,7 +12,7 @@ from PySide6.QtCore import Qt
 from utils.i18n_utils import t
 from utils.settings_utils import settings_manager
 
-from .metadata import _extract_title_artist, _check_lyrics, _extract_template_info
+from .metadata import _extract_template_info
 from .scanner import FileScanner
 
 
@@ -134,20 +134,24 @@ class FilesListMixin:
         if same_set and len(existing_rows) == len(results):
             self._files_table.blockSignals(True)
             self._files_table.setSortingEnabled(False)
-            for idx, (filepath, relpath, artist, title, lyrics, lyr_type, size, mtime) in enumerate(results):
+            for idx, (filepath, relpath, artist, title, album, genre, year, tracknumber, lyrics, lyr_type, size, mtime) in enumerate(results):
                 watched_dirs.add(os.path.dirname(filepath))
                 row = existing_rows[filepath]
                 self._files_table.item(row, 0).setText(relpath)
                 self._files_table.item(row, 1).setText(title)
                 self._files_table.item(row, 2).setText(artist)
-                l_item = self._files_table.item(row, 3)
+                self._files_table.item(row, 3).setText(album)
+                self._files_table.item(row, 4).setText(genre)
+                self._files_table.item(row, 5).setText(year)
+                self._files_table.item(row, 6).setText(tracknumber)
+                l_item = self._files_table.item(row, 7)
                 l_item.setText(lyrics)
                 l_item.setData(Qt.UserRole, lyr_type)
-                s_item = self._files_table.item(row, 4)
+                s_item = self._files_table.item(row, 8)
                 if isinstance(s_item, _NumericItem):
                     s_item.setText(_format_size(size))
                     s_item._sort_value = size
-                self._files_table.item(row, 5).setText(mtime)
+                self._files_table.item(row, 9).setText(mtime)
             self._restoring_widths = True
             self._files_table.horizontalHeader().resizeSections(QHeaderView.ResizeToContents)
             self._restoring_widths = False
@@ -163,7 +167,7 @@ class FilesListMixin:
             ROW_HEIGHT = 24
             selected_row = -1
 
-            for idx, (filepath, relpath, artist, title, lyrics, lyr_type, size, mtime) in enumerate(results):
+            for idx, (filepath, relpath, artist, title, album, genre, year, tracknumber, lyrics, lyr_type, size, mtime) in enumerate(results):
                 self._files_table.setRowHeight(idx, ROW_HEIGHT)
                 watched_dirs.add(os.path.dirname(filepath))
 
@@ -183,18 +187,34 @@ class FilesListMixin:
                 artist_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
                 self._files_table.setItem(idx, 2, artist_item)
 
+                album_item = QTableWidgetItem(album)
+                album_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
+                self._files_table.setItem(idx, 3, album_item)
+
+                genre_item = QTableWidgetItem(genre)
+                genre_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
+                self._files_table.setItem(idx, 4, genre_item)
+
+                year_item = QTableWidgetItem(year)
+                year_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
+                self._files_table.setItem(idx, 5, year_item)
+
+                track_item = QTableWidgetItem(tracknumber)
+                track_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
+                self._files_table.setItem(idx, 6, track_item)
+
                 lyrics_item = QTableWidgetItem(lyrics)
                 lyrics_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
                 lyrics_item.setData(Qt.UserRole, lyr_type)
-                self._files_table.setItem(idx, 3, lyrics_item)
+                self._files_table.setItem(idx, 7, lyrics_item)
 
                 size_item = _NumericItem(_format_size(size), size)
                 size_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
-                self._files_table.setItem(idx, 4, size_item)
+                self._files_table.setItem(idx, 8, size_item)
 
                 mtime_item = QTableWidgetItem(mtime)
                 mtime_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
-                self._files_table.setItem(idx, 5, mtime_item)
+                self._files_table.setItem(idx, 9, mtime_item)
 
             self._restoring_widths = True
             self._files_table.horizontalHeader().resizeSections(QHeaderView.ResizeToContents)
@@ -475,7 +495,9 @@ class FilesListMixin:
                 self._files_table.setRowHidden(row, False)
                 continue
             match = False
-            for col in (0, 1, 2):
+            for col in range(self._files_table.columnCount()):
+                if self._files_table.isColumnHidden(col):
+                    continue
                 item = self._files_table.item(row, col)
                 if item and query in item.text().lower():
                     match = True
