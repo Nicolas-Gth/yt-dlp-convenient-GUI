@@ -39,6 +39,7 @@ class FilesEditorMixin:
         try:
             from mutagen.mp4 import MP4
             from mutagen.oggopus import OggOpus
+            import mutagen.id3
             tags = audio.tags
             new_filepath = self._current_detail_filepath
             # Handle lyrics (separate widget)
@@ -114,11 +115,10 @@ class FilesEditorMixin:
                             frame.text = [val]
                         else:
                             try:
-                                cls = type(tags).__module__
-                                frame_cls = getattr(tags, '_ID3Tags__module', {}).get(key)
+                                frame_cls = getattr(mutagen.id3, key, None)
                                 if frame_cls:
                                     tags.add(frame_cls(encoding=3, text=[val]))
-                            except (KeyError, AttributeError):
+                            except Exception:
                                 pass
                     else:
                         tags.delall(key)
