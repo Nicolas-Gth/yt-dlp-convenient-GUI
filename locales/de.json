@@ -101,6 +101,8 @@
   "files.no_lyrics": "No lyrics",
   "files.no_selection": "Keine Datei ausgewählt",
   "files.number": "#",
+  "files.open": "Datei öffnen",
+  "files.open_folder": "Ordner öffnen",
   "files.path": "Pfad",
   "files.reorganize_error": "Fehler beim Verschieben",
   "files.reorganize_error_detail": "Konnte nicht verschoben werden:\n{src}\n→ {dst}\n\nFehler: {error}",

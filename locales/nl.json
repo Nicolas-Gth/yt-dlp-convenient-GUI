@@ -101,6 +101,8 @@
   "files.no_lyrics": "No lyrics",
   "files.no_selection": "Geen bestand geselecteerd",
   "files.number": "#",
+  "files.open": "Bestand openen",
+  "files.open_folder": "Map openen",
   "files.path": "Pad",
   "files.reorganize_error": "Reorganisatiefout",
   "files.reorganize_error_detail": "Kon niet worden verplaatst:\n{src}\n→ {dst}\n\nFout: {error}",

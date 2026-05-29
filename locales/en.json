@@ -102,6 +102,8 @@
   "files.no_lyrics": "No lyrics",
   "files.no_selection": "No file selected",
   "files.number": "#",
+  "files.open": "Open file",
+  "files.open_folder": "Open containing folder",
   "files.path": "Path",
   "files.reorganize_error": "Reorganize Error",
   "files.reorganize_error_detail": "Could not move:\n{src}\n→ {dst}\n\nError: {error}",

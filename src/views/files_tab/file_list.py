@@ -254,25 +254,28 @@ class FilesListMixin:
 
     def _on_files_context_menu(self, pos):
         """Right-click context menu on the file table."""
-        from PySide6.QtGui import QAction, QIcon
-        from PySide6.QtWidgets import QApplication
-        from utils.theme_utils import is_dark_mode
+        from PySide6.QtGui import QIcon
+        from PySide6.QtWidgets import QStyle
         rows = set(idx.row() for idx in self._files_table.selectedIndexes())
         if not rows:
             return
-        dark = is_dark_mode()
+        style = self._files_table.style()
         menu = QMenu(self._files_table)
-        copy_icon = QIcon("assets/ui/copy-icon-light.svg" if dark else "assets/ui/copy-icon-dark.svg")
+        open_folder_action = menu.addAction(style.standardIcon(QStyle.SP_DirOpenIcon), t("files.open_folder"))
+        menu.addSeparator()
+        copy_icon = QIcon.fromTheme("edit-copy")
+        if copy_icon.isNull():
+            copy_icon = style.standardIcon(QStyle.SP_FileIcon)
         copy_path_action = menu.addAction(copy_icon, t("files.copy_path"))
         copy_name_action = menu.addAction(copy_icon, t("files.copy_name"))
         menu.addSeparator()
-        rename_icon = QIcon("assets/ui/rename-icon-light.svg" if dark else "assets/ui/rename-icon-dark.svg")
-        restructure_action = menu.addAction(rename_icon, t("files.restructure_selected"))
+        restructure_action = menu.addAction(QIcon.fromTheme("edit-rename"), t("files.restructure_selected"))
         menu.addSeparator()
-        delete_icon = QIcon("assets/ui/delete-icon-light.svg" if dark else "assets/ui/delete-icon-dark.svg")
-        delete_action = menu.addAction(delete_icon, t("files.delete"))
+        delete_action = menu.addAction(style.standardIcon(QStyle.SP_TrashIcon), t("files.delete"))
         action = menu.exec(self._files_table.viewport().mapToGlobal(pos))
-        if action == delete_action:
+        if action == open_folder_action:
+            self._open_selected_folders(rows)
+        elif action == delete_action:
             self._delete_selected_files(rows)
         elif action == restructure_action:
             self._restructure_selected_files(rows)
@@ -303,6 +306,23 @@ class FilesListMixin:
         if filepaths:
             from PySide6.QtWidgets import QApplication
             QApplication.clipboard().setText("\n".join(os.path.basename(fp) for fp in filepaths))
+
+    def _open_selected_files(self, rows):
+        filepaths = self._get_selected_filepaths(rows)
+        if filepaths:
+            from PySide6.QtGui import QDesktopServices
+            from PySide6.QtCore import QUrl
+            for fp in filepaths:
+                QDesktopServices.openUrl(QUrl.fromLocalFile(fp))
+
+    def _open_selected_folders(self, rows):
+        filepaths = self._get_selected_filepaths(rows)
+        if filepaths:
+            from PySide6.QtGui import QDesktopServices
+            from PySide6.QtCore import QUrl
+            folders = set(os.path.dirname(fp) for fp in filepaths)
+            for folder in folders:
+                QDesktopServices.openUrl(QUrl.fromLocalFile(folder))
 
     def _delete_selected_files(self, rows):
         """Delete the files in the given selected rows."""

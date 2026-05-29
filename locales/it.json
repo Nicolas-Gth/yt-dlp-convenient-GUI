@@ -101,6 +101,8 @@
   "files.no_lyrics": "No lyrics",
   "files.no_selection": "Nessun file selezionato",
   "files.number": "#",
+  "files.open": "Apri file",
+  "files.open_folder": "Apri cartella",
   "files.path": "Percorso",
   "files.reorganize_error": "Errore di riorganizzazione",
   "files.reorganize_error_detail": "Impossibile spostare:\n{src}\n→ {dst}\n\nErrore: {error}",

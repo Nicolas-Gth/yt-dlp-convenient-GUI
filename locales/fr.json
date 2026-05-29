@@ -102,6 +102,8 @@
   "files.no_lyrics": "Aucune parole",
   "files.no_selection": "Aucun fichier sélectionné",
   "files.number": "#",
+  "files.open": "Ouvrir le fichier",
+  "files.open_folder": "Ouvrir le dossier",
   "files.path": "Chemin",
   "files.reorganize_error": "Erreur de réorganisation",
   "files.reorganize_error_detail": "Impossible de déplacer :\n{src}\n→ {dst}\n\nErreur : {error}",
