@@ -175,7 +175,8 @@ def _extract_scan_metadata(filepath):
                 title = "; ".join(tags.get('title', []) or []).strip()
                 album = "; ".join(tags.get('album', []) or []).strip()
                 genre = "; ".join(tags.get('genre', []) or []).strip()
-                year = "; ".join(tags.get('date', []) or []).strip()
+                raw_year = "; ".join(tags.get('date', []) or []).strip()
+                year = raw_year[:4] if raw_year and raw_year[:4].isdigit() else raw_year
                 tracknumber = "; ".join(tags.get('tracknumber', []) or []).strip()
                 # embedded lyrics
                 if not lyr_type:
@@ -188,7 +189,8 @@ def _extract_scan_metadata(filepath):
                 title = (tags.get('\xa9nam', [None])[0] or "").strip()
                 album = (tags.get('\xa9alb', [None])[0] or "").strip()
                 genre = (tags.get('\xa9gen', [None])[0] or "").strip()
-                year = (tags.get('\xa9day', [None])[0] or "").strip()
+                raw_year = (tags.get('\xa9day', [None])[0] or "").strip()
+                year = raw_year[:4] if raw_year and raw_year[:4].isdigit() else raw_year
                 trkn = tags.get('trkn')
                 if trkn and trkn[0]:
                     tracknumber = str(trkn[0][0])
@@ -199,21 +201,23 @@ def _extract_scan_metadata(filepath):
                     if text:
                         lyrics, lyr_type = ('LRC', 'lrc') if re.search(r'^\[\d{2}:\d{2}[.:]\d{2}\]', text, re.MULTILINE) else ('Txt', 'txt')
             else:  # MP3
-                artist = "; ".join(tags.get('TPE1') or []).strip()
-                title = "; ".join(tags.get('TIT2') or []).strip()
-                album = "; ".join(tags.get('TALB') or []).strip()
-                genre = "; ".join(tags.get('TCON') or []).strip()
-                year = (tags.get('TDRC') or [None])[0]
-                if year and hasattr(year, 'text'):
-                    year = str(year.text[0] if year.text else '')
-                elif year:
-                    year = str(year)
-                else:
-                    year = ""
-                year = str(year).strip()
-                trck = tags.get('TRCK')
-                if trck:
-                    tracknumber = str(trck).split('/')[0].strip()
+                def _text(frame):
+                    return "; ".join(str(v) for v in frame.text) if hasattr(frame, 'text') else str(frame)
+
+                artist_frame = tags.get('TPE1')
+                artist = _text(artist_frame).strip() if artist_frame else ""
+                title_frame = tags.get('TIT2')
+                title = _text(title_frame).strip() if title_frame else ""
+                album_frame = tags.get('TALB')
+                album = _text(album_frame).strip() if album_frame else ""
+                genre_frame = tags.get('TCON')
+                genre = _text(genre_frame).strip() if genre_frame else ""
+                year_frame = tags.get('TDRC') or tags.get('TYER')
+                if year_frame:
+                    raw = _text(year_frame).strip()
+                    year = raw[:4] if raw and raw[:4].isdigit() else raw
+                trck_frame = tags.get('TRCK')
+                tracknumber = _text(trck_frame).strip() if trck_frame else ""
                 # embedded lyrics
                 if not lyr_type:
                     for tag in tags.values():
