@@ -19,7 +19,7 @@ from .scanner import FileScanner
 class _NumericItem(QTableWidgetItem):
     """QTableWidgetItem that sorts by an internal numeric value."""
 
-    def __init__(self, text: str, value: int):
+    def __init__(self, text: str, value: float):
         super().__init__(text)
         self._sort_value = value
 
@@ -148,7 +148,10 @@ class FilesListMixin:
                 if isinstance(s_item, _NumericItem):
                     s_item.setText(_format_size(size))
                     s_item._sort_value = size
-                self._files_table.item(row, 9).setText(mtime)
+                m_item = self._files_table.item(row, 9)
+                if isinstance(m_item, _NumericItem):
+                    m_item.setText(datetime.fromtimestamp(mtime).strftime("%d/%m/%Y %H:%M"))
+                    m_item._sort_value = mtime
             self._restoring_widths = True
             self._files_table.horizontalHeader().resizeSections(QHeaderView.ResizeToContents)
             self._restoring_widths = False
@@ -209,7 +212,7 @@ class FilesListMixin:
                 size_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
                 self._files_table.setItem(idx, 8, size_item)
 
-                mtime_item = QTableWidgetItem(mtime)
+                mtime_item = _NumericItem(datetime.fromtimestamp(mtime).strftime("%d/%m/%Y %H:%M"), mtime)
                 mtime_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
                 self._files_table.setItem(idx, 9, mtime_item)
 

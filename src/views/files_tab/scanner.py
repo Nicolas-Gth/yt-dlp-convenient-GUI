@@ -1,6 +1,5 @@
 import os
 import re
-from datetime import datetime
 
 from PySide6.QtCore import QThread, Signal
 
@@ -53,7 +52,7 @@ class FileScanner(QThread):
                     rel = os.path.relpath(full, directory)
                     artist, title, album, genre, year, tracknumber, lyrics, lyr_type = _extract_scan_metadata(full)
                     try:
-                        mtime = datetime.fromtimestamp(os.path.getmtime(full)).strftime("%d/%m/%Y %H:%M")
+                        mtime = os.path.getmtime(full)
                         size = os.path.getsize(full)
                     except (OSError, FileNotFoundError):
                         continue
