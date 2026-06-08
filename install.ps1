@@ -122,7 +122,12 @@ if (-not $hasPython) {
 # -------------------------------------------------------------------
 if ($Launch) {
     Set-Location $AppDir
-    Start-Process -FilePath 'pythonw' -ArgumentList 'run.py' -WorkingDirectory $AppDir -WindowStyle Hidden
+    $launcher = Join-Path $AppDir 'launcher.vbs'
+    if (Test-Path $launcher) {
+        Start-Process -FilePath 'wscript.exe' -ArgumentList "`"$launcher`"" -WorkingDirectory $AppDir -WindowStyle Hidden
+    } else {
+        Start-Process -FilePath 'pythonw' -ArgumentList 'run.py' -WorkingDirectory $AppDir -WindowStyle Hidden
+    }
     exit 0
 }
 
@@ -191,16 +196,41 @@ switch ($form.Tag) {
         Start-Process -FilePath 'pythonw' -ArgumentList 'run.py' -WorkingDirectory $AppDir -WindowStyle Hidden
     }
     'install' {
+        # Create a local launcher script so the shortcut never breaks
+        # when the system Python path changes (e.g. Microsoft Store update).
+        $launcher = Join-Path $AppDir 'launcher.vbs'
+        $launcherContent = @"
+' launcher.vbs for yt-dlp Convenient GUI
+' Resolves pythonw.exe (venv first, then system PATH) and launches run.py silently.
+
+Dim WshShell, FSO, AppDir, VenvPython, SysPython, Args
+
+Set WshShell = CreateObject("WScript.Shell")
+Set FSO = CreateObject("Scripting.FileSystemObject")
+
+AppDir = FSO.GetParentFolderName(WScript.ScriptFullName)
+
+' 1. Try venv pythonw first
+VenvPython = FSO.BuildPath(AppDir, "venv\Scripts\pythonw.exe")
+If FSO.FileExists(VenvPython) Then
+    SysPython = VenvPython
+Else
+    ' 2. Fallback to system pythonw via PATH
+    SysPython = "pythonw.exe"
+End If
+
+Args = """" & FSO.BuildPath(AppDir, "run.py") & """"
+
+WshShell.CurrentDirectory = AppDir
+WshShell.Run """" & SysPython & """ " & Args, 0, False
+"@
+        Set-Content -Path $launcher -Value $launcherContent -Encoding UTF8
+
         $ws = New-Object -ComObject WScript.Shell
-        # Find pythonw.exe next to python.exe
-        $pythonExe = (Get-Command python -ErrorAction SilentlyContinue).Source
-        $pythonw = Join-Path (Split-Path $pythonExe) 'pythonw.exe'
-        $runpy = Join-Path $AppDir 'run.py'
         foreach ($p in @($Desktop, $StartMenu)) {
             $s = $ws.CreateShortcut($p)
-            # Shortcut launches pythonw directly — no PowerShell, no console flash
-            $s.TargetPath = $pythonw
-            $s.Arguments = "`"$runpy`""
+            # Point to the local launcher — its path never changes
+            $s.TargetPath = $launcher
             $s.WorkingDirectory = $AppDir
             $s.WindowStyle = 7
             if (Test-Path $Icon) { $s.IconLocation = $Icon }
