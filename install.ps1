@@ -224,7 +224,7 @@ Args = """" & FSO.BuildPath(AppDir, "run.py") & """"
 WshShell.CurrentDirectory = AppDir
 WshShell.Run """" & SysPython & """ " & Args, 0, False
 "@
-        Set-Content -Path $launcher -Value $launcherContent -Encoding UTF8
+        [IO.File]::WriteAllText($launcher, $launcherContent, [System.Text.Encoding]::UTF8)
 
         $ws = New-Object -ComObject WScript.Shell
         foreach ($p in @($Desktop, $StartMenu)) {
