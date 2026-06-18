@@ -105,8 +105,11 @@ class _YtdlpUpdateWorker(QThread):
     finished_signal = Signal(bool)
 
     def run(self):
-        self.progress.emit(t("startup.updating_ytdlp"))
-        ok = startup_utils.update_ytdlp(on_progress=lambda msg: self.progress.emit(msg))
+        try:
+            self.progress.emit(t("startup.updating_ytdlp"))
+            ok = startup_utils.update_ytdlp(on_progress=lambda msg: self.progress.emit(msg))
+        except Exception:
+            ok = False
         self.finished_signal.emit(ok)
 
 
@@ -134,6 +137,7 @@ class StartupDialog(QDialog):
         self._current_step = 0
         self._total_steps = 5
         self._pending_update = False
+        self._ytdlp_update_started = False
 
         layout = QVBoxLayout(self)
         layout.setSpacing(12)
@@ -308,7 +312,7 @@ class StartupDialog(QDialog):
             msg.setText(t("startup.update_prompt", count=behind))
             msg.setIcon(QMessageBox.Question)
             yes_btn = msg.addButton(t("playlist.yes"), QMessageBox.YesRole)
-            msg.addButton(t("playlist.no"), QMessageBox.NoRole)
+            no_btn = msg.addButton(t("playlist.no"), QMessageBox.NoRole)
             msg.setDefaultButton(yes_btn)
             msg.exec()
             self._pending_update = False
@@ -320,8 +324,7 @@ class StartupDialog(QDialog):
         self._update_ytdlp()
 
     def _on_update_check_done(self, applied: bool):
-        if self._pending_update:
-            # _on_update_info is still handling the QMessageBox; it will call the next step
+        if self._pending_update or self._ytdlp_update_started:
             return
         if applied:
             QMessageBox.information(
@@ -357,6 +360,9 @@ class StartupDialog(QDialog):
     # ------------------------------------------------------------------
 
     def _update_ytdlp(self):
+        if self._ytdlp_update_started:
+            return
+        self._ytdlp_update_started = True
         self._set_status(t("startup.updating_ytdlp"))
         self._ytdlp_worker = _YtdlpUpdateWorker(self)
         self._ytdlp_worker.progress.connect(self._set_status)

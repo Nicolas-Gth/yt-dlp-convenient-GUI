@@ -18,6 +18,7 @@ cookies.txt
 
 # Installer output
 installer/
+yt-dlp-convenient-gui-setup.exe
 version_installer.txt
 python-*.exe
 

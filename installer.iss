@@ -46,8 +46,8 @@ DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 AllowNoIcons=yes
 LicenseFile=LICENSE
-OutputDir=installer
-OutputBaseFilename=yt-dlp-gui-setup-{#MyAppVersion}
+OutputDir=.
+OutputBaseFilename=yt-dlp-convenient-gui-setup
 SetupIconFile=assets\icon.ico
 Compression=lzma2/max
 SolidCompression=yes
@@ -76,8 +76,6 @@ Source: "run.py";                     DestDir: "{app}"; Flags: ignoreversion
 Source: "_bootstrap_win32.py";        DestDir: "{app}"; Flags: ignoreversion
 Source: "_bootstrap_unix.py";         DestDir: "{app}"; Flags: ignoreversion
 Source: "launcher.vbs";               DestDir: "{app}"; Flags: ignoreversion
-Source: "install.ps1";                DestDir: "{app}"; Flags: ignoreversion
-Source: "install.sh";                 DestDir: "{app}"; Flags: ignoreversion
 Source: "LICENSE";                    DestDir: "{app}"; Flags: ignoreversion
 Source: "README.md";                  DestDir: "{app}"; Flags: ignoreversion
 Source: "requirements.txt";           DestDir: "{app}"; Flags: ignoreversion
@@ -90,6 +88,10 @@ Source: "src\controllers\*.py";       DestDir: "{app}\src\controllers"; Flags: i
 Source: "src\models\*.py";            DestDir: "{app}\src\models"; Flags: ignoreversion
 Source: "src\utils\*.py";             DestDir: "{app}\src\utils"; Flags: ignoreversion
 Source: "src\views\*.py";             DestDir: "{app}\src\views"; Flags: ignoreversion
+Source: "src\views\common\*.py";      DestDir: "{app}\src\views\common"; Flags: ignoreversion
+Source: "src\views\download_tab\*.py"; DestDir: "{app}\src\views\download_tab"; Flags: ignoreversion
+Source: "src\views\files_tab\*.py";   DestDir: "{app}\src\views\files_tab"; Flags: ignoreversion
+Source: "src\views\progress_tab\*.py"; DestDir: "{app}\src\views\progress_tab"; Flags: ignoreversion
 
 ; Assets
 Source: "assets\icon.ico";            DestDir: "{app}\assets"; Flags: ignoreversion
@@ -224,7 +226,65 @@ begin
 end;
 
 // ────────────────────────────────────────────────────────────────────────────
-// Post-install: install Python (if needed) and set up the venv
+// Download and extract FFmpeg into {app}\ffmpeg (requires elevated privileges)
+// ────────────────────────────────────────────────────────────────────────────
+
+procedure InstallFFmpeg;
+var
+  AppDir: string;
+  FfmpegBin: string;
+  ZipPath: string;
+  PsPath: string;
+  TempDir: string;
+  ResultCode: Integer;
+begin
+  AppDir := ExpandConstant('{app}');
+  FfmpegBin := AppDir + '\ffmpeg\bin';
+  TempDir := ExpandConstant('{tmp}');
+  ZipPath := TempDir + '\ffmpeg.zip';
+  PsPath := TempDir + '\install_ffmpeg.ps1';
+
+  // Write a small PowerShell script to download and extract FFmpeg
+  if not SaveStringToFile(PsPath,
+      '$ffmpegUrl = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"' + #13#10 +
+      '$zipPath = "' + ZipPath + '"' + #13#10 +
+      '$ffmpegBin = "' + FfmpegBin + '"' + #13#10 +
+      'try {' + #13#10 +
+      '  Write-Host "Downloading FFmpeg..."' + #13#10 +
+      '  Invoke-WebRequest -Uri $ffmpegUrl -OutFile $zipPath -UseBasicParsing' + #13#10 +
+      '  New-Item -ItemType Directory -Force -Path $ffmpegBin | Out-Null' + #13#10 +
+      '  Write-Host "Extracting FFmpeg..."' + #13#10 +
+      '  Add-Type -AssemblyName System.IO.Compression.FileSystem' + #13#10 +
+      '  $zip = [System.IO.Compression.ZipFile]::OpenRead($zipPath)' + #13#10 +
+      '  foreach ($entry in $zip.Entries) {' + #13#10 +
+      '    $name = [System.IO.Path]::GetFileName($entry.FullName)' + #13#10 +
+      '    if ($name -match ''^(ffmpeg|ffprobe|ffplay)\.exe$'') {' + #13#10 +
+      '      $dest = Join-Path $ffmpegBin $name' + #13#10 +
+      '      [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $dest, $true)' + #13#10 +
+      '    }' + #13#10 +
+      '  }' + #13#10 +
+      '  $zip.Dispose()' + #13#10 +
+      '  Remove-Item -LiteralPath $zipPath -Force' + #13#10 +
+      '  Write-Host "FFmpeg installed successfully"' + #13#10 +
+      '} catch {' + #13#10 +
+      '  Write-Host "FFmpeg install failed: $_"' + #13#10 +
+      '  exit 1' + #13#10 +
+      '}', False) then
+  begin
+    Log('Warning: could not write FFmpeg install script');
+    Exit;
+  end;
+
+  if not Exec('powershell.exe', '-NoProfile -ExecutionPolicy Bypass -File "' + PsPath + '"',
+              '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+    ResultCode := 1;
+
+  if ResultCode <> 0 then
+    Log('Warning: FFmpeg download/extraction failed (will be installed on first launch)');
+end;
+
+// ────────────────────────────────────────────────────────────────────────────
+// Post-install: install Python (if needed), venv, and FFmpeg
 // ────────────────────────────────────────────────────────────────────────────
 
 procedure CurStepChanged(CurStep: TSetupStep);
@@ -237,5 +297,8 @@ begin
 
     // Pre-create the virtual environment so the first launch is instant
     SetupVenv;
+
+    // Install FFmpeg with elevated privileges (avoids permission errors on first launch)
+    InstallFFmpeg;
   end;
 end;
