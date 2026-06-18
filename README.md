@@ -29,11 +29,9 @@
 ## Installation
 
 ### Download
-Click the download button and extract the downloaded .zip file into your desired installation folder.
 <div align="center">
-  <a href="https://github.com/Nicolas-Gth/yt-dlp-convenient-GUI/releases/latest/download/yt-dlp-convenient-GUI.zip">
-    <img src="https://img.shields.io/github/v/release/Nicolas-Gth/yt-dlp-convenient-GUI?style=for-the-badge&color=2ea043&labelColor=2ea043&label=%E2%86%93%20Download%20Latest" alt="Download Latest Version">
-  </a>
+  <a href="https://github.com/Nicolas-Gth/yt-dlp-convenient-GUI/releases/latest/download/yt-dlp-convenient-gui-setup.exe"><img src="https://img.shields.io/github/v/release/Nicolas-Gth/yt-dlp-convenient-GUI?style=for-the-badge&color=2ea043&labelColor=2ea043&label=%E2%86%93%20Download%20for%20Windows" alt="Download Latest Version for Windows"></a>
+  <a href="https://github.com/Nicolas-Gth/yt-dlp-convenient-GUI/releases/latest/download/yt-dlp-convenient-GUI.zip"><img src="https://img.shields.io/github/v/release/Nicolas-Gth/yt-dlp-convenient-GUI?style=for-the-badge&color=2ea043&labelColor=2ea043&label=%E2%86%93%20Download%20for%20MacOS/Linux" alt="Download Latest Version for MacOS/Linux"></a>
 </div>
 <br>
 
@@ -42,23 +40,7 @@ Alternatively you can clone this repository with `git clone https://github.com/N
 Both should be done in the directory where you want the app to be installed (your user folder for example. 
 
 ### Windows Users
-Right-click `install.ps1` then select *Run with PowerShell*.
-
-If that isn't possible, open a powershell and do these commands:
-```powershell
-# Go to the project root directory:
-# replace the line after the cd command with the path to where you downloaded the folder
-# you can get the path by right clicking on the app folder-> copy folder path
-cd C:\path\to\the\extracted\app\folder
-
-# Run the installer:
-.\install.ps1
-```
-
-If you encounter a permission issue due to Windows policies, run the following line in the same powershell as mentioned above:
-```powershell
-Set-ExecutionPolicy -ExecutionPolicy Unrestricted -Scope CurrentUser
-```
+Run `yt-dlp-convenient-gui-setup.exe`
 
 ### macOS & Linux Users
 Depending on your desktop environment, you might be able to double-click `install.sh` or right-click it and select *Run in Terminal* or a similar option.
@@ -81,7 +63,7 @@ chmod +x install.sh
 
 ## Troubleshooting
 ### Windows
-- If you encounter a permission issue due to Windows policies, run the following line in a powershell. In the same powershell (if you close it you will have to redo the command so don't close it), run install.ps1 like mentionned in [this section](#windows-users). 
+- If you encounter a permission issue due to Windows policies, run the following line in a powershell:
 ```powershell
 Set-ExecutionPolicy -ExecutionPolicy Unrestricted -Scope CurrentUser
 ```

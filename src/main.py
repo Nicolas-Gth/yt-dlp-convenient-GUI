@@ -30,12 +30,6 @@ def main():
     available.  ApplicationController is imported lazily, after the dialog
     has confirmed (and possibly installed) all dependencies.
     """
-    # On Windows, set the AppUserModelID so the taskbar shows our icon
-    # instead of the default Python icon.
-    if sys.platform == "win32":
-        import ctypes
-        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("nicolasgth.ytdlp-convenient-gui")
-
     # Suppress Qt multimedia / ffmpeg debug noise
     if 'QT_LOGGING_RULES' not in os.environ:
         os.environ['QT_LOGGING_RULES'] = 'qt.multimedia.ffmpeg.debug=false;qt.multimedia.ffmpeg.info=false'
@@ -43,6 +37,7 @@ def main():
         os.environ['AV_LOG_LEVEL'] = 'quiet'
 
     from PySide6.QtWidgets import QApplication
+    from PySide6.QtCore import QCoreApplication
     from PySide6.QtGui import QIcon
     from config import ICON_PATH
     from utils.i18n_utils import init as i18n_init
@@ -50,10 +45,23 @@ def main():
     from utils.theme_utils import apply_theme
     from startup_view import StartupDialog
 
+    # Tell Qt our application name so it doesn't default to "pythonw.exe"
+    QCoreApplication.setApplicationName("yt-dlp Convenient GUI")
+    QCoreApplication.setOrganizationName("nicolasgth")
+
     app = QApplication.instance() or QApplication(sys.argv)
     app.setDesktopFileName('yt-dlp-gui')
     if os.path.isfile(ICON_PATH):
         app.setWindowIcon(QIcon(ICON_PATH))
+
+    # Set the AppUserModelID AFTER QApplication is constructed because
+    # Qt's Windows integration overwrites it with the executable name
+    # during QApplication init.  Calling SetCurrentProcessExplicitAppUserModelID
+    # again here overrides Qt and gives the taskbar button our identity.
+    if sys.platform == "win32":
+        import ctypes
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
+            "nicolasgth.ytdlp-convenient-gui")
 
     # Apply saved theme & language so the startup dialog is translated
     saved_theme = settings_manager.get_setting('theme', 'system')
