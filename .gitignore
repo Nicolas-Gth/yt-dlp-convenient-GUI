@@ -16,6 +16,11 @@ yt-dlp-gui-config.json
 **/yt-dlp-gui-config.json
 cookies.txt
 
+# Installer output
+installer/
+version_installer.txt
+python-*.exe
+
 # Misc
 main.spec
 desktop.ini
