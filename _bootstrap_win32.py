@@ -9,6 +9,13 @@ import ctypes
 import ctypes.wintypes
 import threading
 
+# Set the AppUserModelID at module level so that ANY window created by
+# this module (including the splash) already carries the correct identity.
+# When id is set early the taskbar icon carries our app name and
+# right-click  Pin to taskbar  pins the shortcut instead of python.exe.
+ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
+    "nicolasgth.ytdlp-convenient-gui")
+
 _user32 = ctypes.windll.user32
 _kernel32 = ctypes.windll.kernel32
 _comctl32 = ctypes.windll.comctl32

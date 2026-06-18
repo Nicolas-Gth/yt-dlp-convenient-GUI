@@ -15,7 +15,80 @@ Add-Type -AssemblyName System.Drawing
 
 $AppDir  = Split-Path -Parent $MyInvocation.MyCommand.Definition
 $AppName = 'yt-dlp Convenient GUI'
+$AppId   = 'nicolasgth.ytdlp-convenient-gui'
 $Icon    = Join-Path $AppDir 'assets\icon.ico'
+
+# P/Invoke to write AppUserModelID into a .lnk shortcut so the
+# taskbar recognises the process and pins the correct icon.
+Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+
+public static class ShortcutHelper
+{
+    [ComImport, Guid("886D8EEB-8CF2-4446-8D02-CDBA1DBDCF99")]
+    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    interface IPropertyStore
+    {
+        void GetCount(out uint cProps);
+        void GetAt(uint iProp, out PROPERTYKEY pkey);
+        void GetValue(ref PROPERTYKEY key, out PROPVARIANT pv);
+        void SetValue(ref PROPERTYKEY key, ref PROPVARIANT pv);
+        void Commit();
+    }
+
+    [StructLayout(LayoutKind.Sequential, Pack = 4)]
+    struct PROPERTYKEY
+    {
+        public Guid fmtid;
+        public uint pid;
+    }
+
+    // Minimum PROPVARIANT for VT_LPWSTR — works x86 and x64
+    [StructLayout(LayoutKind.Sequential)]
+    struct PROPVARIANT
+    {
+        public ushort vt;
+        public ushort wReserved1;
+        public ushort wReserved2;
+        public ushort wReserved3;
+        public IntPtr pwszVal;
+    }
+
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+    static extern int SHGetPropertyStoreFromParsingName(
+        string pszPath, IntPtr pbc, uint flags,
+        ref Guid riid,
+        [MarshalAs(UnmanagedType.Interface)] out IPropertyStore ppv);
+
+    static readonly Guid _fmtid = new Guid("9F4C2855-9F79-4B39-A8D0-E1D42DE1D5F3");
+    const uint _pid = 5;
+    const uint GPS_READWRITE = 0x00000002;
+
+    public static void SetAppUserModelId(string path, string appId)
+    {
+        Guid iid = typeof(IPropertyStore).GUID;
+        IPropertyStore store;
+        int hr = SHGetPropertyStoreFromParsingName(
+            path, IntPtr.Zero, GPS_READWRITE, ref iid, out store);
+        if (hr != 0)
+            throw new InvalidOperationException(
+                "SHGetPropertyStoreFromParsingName 0x" + hr.ToString("X8"));
+
+        PROPERTYKEY key = new PROPERTYKEY { fmtid = _fmtid, pid = _pid };
+
+        IntPtr pStr = Marshal.StringToCoTaskMemUni(appId);
+        PROPVARIANT pv = new PROPVARIANT { vt = 31, pwszVal = pStr };
+
+        store.SetValue(ref key, ref pv);
+        Marshal.FreeCoTaskMem(pStr);
+        store.Commit();
+
+        if (Marshal.IsComObject(store))
+            Marshal.ReleaseComObject(store);
+    }
+}
+'@ -ReferencedAssemblies System.Runtime.InteropServices
 
 # -------------------------------------------------------------------
 # i18n helper (works before Python is available)
@@ -122,12 +195,7 @@ if (-not $hasPython) {
 # -------------------------------------------------------------------
 if ($Launch) {
     Set-Location $AppDir
-    $launcher = Join-Path $AppDir 'launcher.vbs'
-    if (Test-Path $launcher) {
-        Start-Process -FilePath 'wscript.exe' -ArgumentList "`"$launcher`"" -WorkingDirectory $AppDir -WindowStyle Hidden
-    } else {
-        Start-Process -FilePath 'pythonw' -ArgumentList 'run.py' -WorkingDirectory $AppDir -WindowStyle Hidden
-    }
+    Start-Process -FilePath 'pythonw' -ArgumentList 'run.py' -WorkingDirectory $AppDir -WindowStyle Hidden
     exit 0
 }
 
@@ -224,18 +292,31 @@ Args = """" & FSO.BuildPath(AppDir, "run.py") & """"
 WshShell.CurrentDirectory = AppDir
 WshShell.Run """" & SysPython & """ " & Args, 0, False
 "@
-        [IO.File]::WriteAllText($launcher, $launcherContent, [System.Text.Encoding]::UTF8)
+        $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+        [IO.File]::WriteAllText($launcher, $launcherContent, $utf8NoBom)
 
         $ws = New-Object -ComObject WScript.Shell
         foreach ($p in @($Desktop, $StartMenu)) {
             $s = $ws.CreateShortcut($p)
-            # Point to the local launcher — its path never changes
-            $s.TargetPath = $launcher
+            # Resolve pythonw.exe: prefer the venv copy (the final process that
+            # actually hosts the main GUI), fall back to PATH-lookup pythonw.
+            $pyw = Join-Path $AppDir 'venv\Scripts\pythonw.exe'
+            if (Test-Path $pyw) {
+                $s.TargetPath = $pyw
+                $s.Arguments = "run.py"
+            } else {
+                $s.TargetPath = 'pythonw.exe'
+                $s.Arguments = "run.py"
+            }
             $s.WorkingDirectory = $AppDir
             $s.WindowStyle = 7
             if (Test-Path $Icon) { $s.IconLocation = $Icon }
             $s.Description = RawT 'shortcut.comment'
             $s.Save()
+
+            # Bind the shortcut to our AppUserModelID so Windows
+            # pins the shortcut instead of pythonw.exe.
+            [ShortcutHelper]::SetAppUserModelId($p, $AppId)
         }
         [System.Windows.Forms.MessageBox]::Show(
             (RawT 'shortcut.created'), $AppName, 'OK', 'Information')

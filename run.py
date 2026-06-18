@@ -157,6 +157,14 @@ def _pip_install_pyside6():
 # ---------------------------------------------------------------------------
 
 def main():
+    # Must be called BEFORE any window (including the native splash) is
+    # created, otherwise the taskbar button picks up the default id and
+    # right-click  Pin to taskbar  will pin python/pythonw instead.
+    if sys.platform == "win32":
+        import ctypes
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
+            "nicolasgth.ytdlp-convenient-gui")
+
     _gui.show_splash(_bootstrap_t("startup.loading"))
 
     _ensure_venv()
