@@ -30,13 +30,8 @@
 
 ### Download
 <div align="center">
-  <a href="https://github.com/Nicolas-Gth/yt-dlp-convenient-GUI/releases/latest/download/yt-dlp-convenient-gui-setup.exe">
-    <img src="https://img.shields.io/badge/Windows-Installer_(.exe)-2ea043?style=for-the-badge&logo=windows" alt="Windows Installer">
-  </a>
-  &nbsp;
-  <a href="https://github.com/Nicolas-Gth/yt-dlp-convenient-GUI/releases/latest/download/yt-dlp-convenient-GUI.zip">
-    <img src="https://img.shields.io/badge/Linux_macOS-Source_(.zip)-2ea043?style=for-the-badge&logo=linux" alt="Linux/macOS Source">
-  </a>
+  <a href="https://github.com/Nicolas-Gth/yt-dlp-convenient-GUI/releases/latest/download/yt-dlp-convenient-gui-setup.exe"><img src="https://img.shields.io/github/v/release/Nicolas-Gth/yt-dlp-convenient-GUI?style=for-the-badge&color=2ea043&labelColor=2ea043&label=%E2%86%93%20Download%20for%20Windows" alt="Download Latest Version for Windows"></a>
+  <a href="https://github.com/Nicolas-Gth/yt-dlp-convenient-GUI/releases/latest/download/yt-dlp-convenient-GUI.zip"><img src="https://img.shields.io/github/v/release/Nicolas-Gth/yt-dlp-convenient-GUI?style=for-the-badge&color=2ea043&labelColor=2ea043&label=%E2%86%93%20Download%20for%20MacOS/Linux" alt="Download Latest Version for MacOS/Linux"></a>
 </div>
 <br>
 
@@ -45,11 +40,7 @@ Alternatively you can clone this repository with `git clone https://github.com/N
 Both should be done in the directory where you want the app to be installed (your user folder for example. 
 
 ### Windows Users
-Download and run `yt-dlp-convenient-gui-setup.exe` from the [latest release](https://github.com/Nicolas-Gth/yt-dlp-convenient-GUI/releases/latest).
-
-Alternatively you can clone this repository with `git clone https://github.com/Nicolas-Gth/yt-dlp-convenient-GUI.git`
-
-Both should be done in the directory where you want the app to be installed (your user folder for example.
+Run `yt-dlp-convenient-gui-setup.exe`
 
 ### macOS & Linux Users
 Depending on your desktop environment, you might be able to double-click `install.sh` or right-click it and select *Run in Terminal* or a similar option.
