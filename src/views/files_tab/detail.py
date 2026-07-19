@@ -640,8 +640,12 @@ class FilesDetailMixin:
             return
         self._show_metadata_selector(filepath)
 
-    def _show_metadata_selector(self, filepath: str):
-        """Show a dialog with metadata candidates. Same UI as cover selector."""
+    def _show_metadata_selector(self, filepath: str, search_artist="", search_title="", search_album=""):
+        """Show a dialog with metadata candidates. Same UI as cover selector.
+        
+        If search_artist/search_title/search_album are provided, they pre-fill
+        the search fields instead of reading from the file's metadata tags.
+        """
         from utils.metadata_enricher_utils import search_metadata_candidates, search_metadata_itunes, _request
         from PySide6.QtWidgets import QApplication, QComboBox
 
@@ -986,27 +990,32 @@ class FilesDetailMixin:
         dlg.raise_()
         QApplication.processEvents()
 
-        # Read file metadata (fast, local)
-        audio = _load_audio(filepath)
-        artist, title, album = "", "", ""
-        if audio is not None and audio.tags is not None:
-            from mutagen.mp4 import MP4
-            from mutagen.oggopus import OggOpus
-            try:
-                if isinstance(audio, OggOpus):
-                    artist = "; ".join(audio.tags.get('artist', []) or []).strip()
-                    title = "; ".join(audio.tags.get('title', []) or []).strip()
-                    album = "; ".join(audio.tags.get('album', []) or []).strip()
-                elif isinstance(audio, MP4):
-                    artist = (audio.tags.get('\xa9ART', [None])[0] or "").strip()
-                    title = (audio.tags.get('\xa9nam', [None])[0] or "").strip()
-                    album = (audio.tags.get('\xa9alb', [None])[0] or "").strip()
-                else:
-                    artist = "; ".join(audio.tags.get('TPE1') or []).strip()
-                    title = "; ".join(audio.tags.get('TIT2') or []).strip()
-                    album = "; ".join(audio.tags.get('TALB') or []).strip()
-            except Exception:
-                pass
+        # Read file metadata or use provided search terms
+        if search_artist or search_title or search_album:
+            artist = search_artist
+            title = search_title
+            album = search_album
+        else:
+            audio = _load_audio(filepath)
+            artist, title, album = "", "", ""
+            if audio is not None and audio.tags is not None:
+                from mutagen.mp4 import MP4
+                from mutagen.oggopus import OggOpus
+                try:
+                    if isinstance(audio, OggOpus):
+                        artist = "; ".join(audio.tags.get('artist', []) or []).strip()
+                        title = "; ".join(audio.tags.get('title', []) or []).strip()
+                        album = "; ".join(audio.tags.get('album', []) or []).strip()
+                    elif isinstance(audio, MP4):
+                        artist = (audio.tags.get('\xa9ART', [None])[0] or "").strip()
+                        title = (audio.tags.get('\xa9nam', [None])[0] or "").strip()
+                        album = (audio.tags.get('\xa9alb', [None])[0] or "").strip()
+                    else:
+                        artist = "; ".join(audio.tags.get('TPE1') or []).strip()
+                        title = "; ".join(audio.tags.get('TIT2') or []).strip()
+                        album = "; ".join(audio.tags.get('TALB') or []).strip()
+                except Exception:
+                    pass
 
         clean_album = album if album and album.lower() not in ("unknown album", "") else ""
         artist_edit.setText(artist)
@@ -1141,38 +1150,54 @@ class FilesDetailMixin:
             return
         self._show_lyrics_search_dialog(filepath)
 
-    def _show_lyrics_search_dialog(self, filepath: str):
-        """Show a dialog to search lyrics from LRCLIB and Genius."""
+    def _show_lyrics_search_dialog(self, filepath: str, search_artist="", search_title=""):
+        """Show a dialog to search lyrics from LRCLIB and Genius.
+        
+        If search_artist/search_title are provided, they pre-fill the search fields
+        instead of reading from the file's metadata tags.
+        """
         from utils.metadata_enricher_utils import search_lyrics_lrclib, _fetch_lyrics_genius
         from PySide6.QtWidgets import QApplication
 
-        # Read file metadata for pre-fill and duration
-        audio = _load_audio(filepath)
-        file_duration = 0
-        artist, title, album = "", "", ""
-        if audio is not None:
-            try:
-                file_duration = int(getattr(audio.info, 'length', 0))
-            except Exception:
-                pass
-            if audio.tags is not None:
-                from mutagen.mp4 import MP4
-                from mutagen.oggopus import OggOpus
+        # Read file metadata for pre-fill and duration, unless overridden
+        if search_artist or search_title:
+            artist = search_artist
+            title = search_title
+            album = ""
+            file_duration = 0
+            audio = _load_audio(filepath)
+            if audio:
                 try:
-                    if isinstance(audio, OggOpus):
-                        artist = "; ".join(audio.tags.get('artist', []) or []).strip()
-                        title = "; ".join(audio.tags.get('title', []) or []).strip()
-                        album = "; ".join(audio.tags.get('album', []) or []).strip()
-                    elif isinstance(audio, MP4):
-                        artist = (audio.tags.get('\xa9ART', [None])[0] or "").strip()
-                        title = (audio.tags.get('\xa9nam', [None])[0] or "").strip()
-                        album = (audio.tags.get('\xa9alb', [None])[0] or "").strip()
-                    else:
-                        artist = "; ".join(audio.tags.get('TPE1') or []).strip()
-                        title = "; ".join(audio.tags.get('TIT2') or []).strip()
-                        album = "; ".join(audio.tags.get('TALB') or []).strip()
+                    file_duration = int(getattr(audio.info, 'length', 0))
                 except Exception:
                     pass
+        else:
+            audio = _load_audio(filepath)
+            file_duration = 0
+            artist, title, album = "", "", ""
+            if audio is not None:
+                try:
+                    file_duration = int(getattr(audio.info, 'length', 0))
+                except Exception:
+                    pass
+                if audio.tags is not None:
+                    from mutagen.mp4 import MP4
+                    from mutagen.oggopus import OggOpus
+                    try:
+                        if isinstance(audio, OggOpus):
+                            artist = "; ".join(audio.tags.get('artist', []) or []).strip()
+                            title = "; ".join(audio.tags.get('title', []) or []).strip()
+                            album = "; ".join(audio.tags.get('album', []) or []).strip()
+                        elif isinstance(audio, MP4):
+                            artist = (audio.tags.get('\xa9ART', [None])[0] or "").strip()
+                            title = (audio.tags.get('\xa9nam', [None])[0] or "").strip()
+                            album = (audio.tags.get('\xa9alb', [None])[0] or "").strip()
+                        else:
+                            artist = "; ".join(audio.tags.get('TPE1') or []).strip()
+                            title = "; ".join(audio.tags.get('TIT2') or []).strip()
+                            album = "; ".join(audio.tags.get('TALB') or []).strip()
+                    except Exception:
+                        pass
 
         dlg = QDialog(self)
         dlg.setWindowTitle(t("lyrics.search_title"))

@@ -291,6 +291,9 @@ class FilesListMixin:
         menu.addSeparator()
         restructure_action = menu.addAction(QIcon.fromTheme("edit-rename"), t("files.restructure_selected"))
         menu.addSeparator()
+        batch_icon = QIcon("assets/ui/search-icon-light.svg")
+        batch_action = menu.addAction(batch_icon, t("batch.context_menu"))
+        menu.addSeparator()
         delete_action = menu.addAction(style.standardIcon(QStyle.SP_TrashIcon), t("files.delete"))
         action = menu.exec(self._files_table.viewport().mapToGlobal(pos))
         if action == open_folder_action:
@@ -299,6 +302,8 @@ class FilesListMixin:
             self._delete_selected_files(rows)
         elif action == restructure_action:
             self._restructure_selected_files(rows)
+        elif action == batch_action:
+            self._on_batch_identify_selected(rows)
         elif action == copy_path_action:
             self._copy_selected_paths(rows)
         elif action == copy_name_action:
