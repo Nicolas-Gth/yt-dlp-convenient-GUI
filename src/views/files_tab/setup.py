@@ -35,7 +35,27 @@ class FilesSetupMixin:
         left_layout.setContentsMargins(8, 8, 4, 8)
         left_layout.setSpacing(0)
 
-        # ── Structure group (above files) ──
+        # ── Operations group (batch + structure) ──
+        operations_group = QGroupBox(t("files.operations_title"))
+        self._files_operations_group = operations_group
+        operations_layout = QVBoxLayout(operations_group)
+        operations_layout.setContentsMargins(5, 10, 5, 8)
+        operations_layout.setSpacing(8)
+
+        # Batch identification button row
+        batch_row = QHBoxLayout()
+        batch_row.setSpacing(6)
+        self._files_batch_btn = QPushButton(t("batch.button"))
+        self._files_batch_btn.setCursor(Qt.PointingHandCursor)
+        batch_icon = "assets/ui/search-icon-light.svg" if is_dark_mode() else "assets/ui/search-icon-dark.svg"
+        self._files_batch_btn.setIcon(QIcon(batch_icon))
+        self._files_batch_btn.setIconSize(QSize(16, 16))
+        self._files_batch_btn.clicked.connect(self._on_batch_identify)
+        batch_row.addWidget(self._files_batch_btn)
+        batch_row.addStretch()
+        operations_layout.addLayout(batch_row)
+
+        # ── Structure group (inside operations group) ──
         structure_group = QGroupBox(t("files.structure_title"))
         self._files_structure_group = structure_group
         structure_layout = QVBoxLayout(structure_group)
@@ -92,7 +112,8 @@ class FilesSetupMixin:
         structure_row.addWidget(self._files_template_info_btn)
         structure_row.addWidget(self._files_apply_format_btn)
         structure_layout.addLayout(structure_row)
-        left_layout.addWidget(structure_group)
+        operations_layout.addWidget(structure_group)
+        left_layout.addWidget(operations_group)
 
         files_group = QGroupBox(t("files.group_title"))
         self._files_group = files_group
@@ -344,9 +365,9 @@ class FilesSetupMixin:
         self.path_entry.textChanged.connect(self._on_download_path_changed)
 
     def _update_search_icons(self):
-        """Update search button icons (identify & lyrics) based on current theme."""
+        """Update search button icons (identify & lyrics & batch) based on current theme."""
         icon = "assets/ui/search-icon-light.svg" if is_dark_mode() else "assets/ui/search-icon-dark.svg"
-        for attr in ('_identify_btn', '_lyrics_search_btn'):
+        for attr in ('_identify_btn', '_lyrics_search_btn', '_files_batch_btn'):
             btn = getattr(self, attr, None)
             if btn is not None:
                 btn.setIcon(QIcon(icon))
