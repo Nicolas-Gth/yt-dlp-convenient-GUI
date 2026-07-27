@@ -75,7 +75,7 @@ class DownloadConfig:
     @property
     def ydl_output_template(self) -> str:
         """Generate the output template for yt-dlp."""
-        return f"{self.output_directory}/%(title)s.%(ext)s"
+        return f"{self.output_directory}/%(title).200s.%(ext)s"
 
 class DownloadProgress:
     """Manages download progress state."""

@@ -490,6 +490,7 @@ class FilesListMixin:
         if not template:
             return
 
+        settings_manager.set_setting("last_output_template", template)
         self._reorganize_selected(filepaths, template)
 
     def _on_files_search_changed(self, text):
@@ -687,6 +688,8 @@ class FilesListMixin:
         s = sanitized.strip()
         if not s or s in ('.', '..'):
             return '_'
+        while len(s.encode('utf-8')) > 200:
+            s = s[:-1]
         return unicodedata.normalize('NFC', s)
 
     @staticmethod

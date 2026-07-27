@@ -590,9 +590,10 @@ class CustomPostProcessor(yt_dlp.postprocessor.PostProcessor):
         """Strip characters that are illegal in file/directory names."""
         sanitized = CustomPostProcessor._FILENAME_ILLEGAL_RE.sub('', component)
         s = sanitized.strip()
-        # Prevent empty components or directory traversal
         if not s or s in ('.', '..'):
             return '_'
+        while len(s.encode('utf-8')) > 200:
+            s = s[:-1]
         return s
 
     def _sanitize_and_rename_file(self, file_path: str, video_infos: Dict, artist_name: str, file_format: str) -> str:

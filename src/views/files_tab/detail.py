@@ -37,13 +37,18 @@ class FilesDetailMixin:
         self._files_meta.setItem(0, 0, item)
         self._files_meta.setSpan(0, 0, 1, 2)
 
+    _VIDEO_EXTENSIONS = {'.mp4', '.webm', '.mkv', '.avi', '.mov', '.flv', '.wmv'}
+
     def _show_file_detail(self, filepath):
         """Populate the right panel with artwork and metadata."""
         if filepath is None or not os.path.isfile(filepath):
             self._clear_meta_panel()
             self._files_artwork.setArtwork(None)
+            self._artwork_wrapper.set_video_mode(False)
+            self._video_stack.setCurrentWidget(self._files_artwork)
             self._artwork_wrapper.hide()
             self._current_detail_filepath = None
+            self._current_is_video = False
             self._play_btn.setEnabled(False)
             self._seek_slider.setEnabled(False)
             self._seek_slider.setValue(0)
@@ -58,11 +63,15 @@ class FilesDetailMixin:
 
         self._artwork_wrapper.show()
 
+        is_video = os.path.splitext(filepath)[1].lower() in self._VIDEO_EXTENSIONS
+
         if self._current_detail_filepath != filepath:
             self._media_player.stop()
+            self._video_stack.setCurrentWidget(self._files_artwork)
             self._media_player.setSource(QUrl.fromLocalFile(filepath))
             self._seek_slider.setValue(0)
         self._current_detail_filepath = filepath
+        self._current_is_video = is_video
         self._play_btn.setEnabled(True)
         self._seek_slider.setEnabled(True)
 

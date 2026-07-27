@@ -2,11 +2,12 @@ from PySide6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QWidget, QTableWidget, QTableWidgetItem,
     QHeaderView, QAbstractItemView, QFrame, QSplitter, QLabel,
     QSizePolicy, QGroupBox, QPushButton, QSlider, QTextEdit,
-    QLineEdit, QComboBox, QMessageBox, QCheckBox, QMenu
+    QLineEdit, QComboBox, QMessageBox, QCheckBox, QMenu, QStackedWidget
 )
 from PySide6.QtGui import QIcon
 from PySide6.QtCore import Qt, QTimer, QFileSystemWatcher, QSize
 from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
+from PySide6.QtMultimediaWidgets import QVideoWidget
 
 from config import INFO_ICON_PATH
 from utils.i18n_utils import t
@@ -218,10 +219,15 @@ class FilesSetupMixin:
         self._files_artwork.edit_requested.connect(self._on_edit_artwork_clicked)
         self._current_detail_filepath = None
 
-        # Audio player
+        # Audio/video player
         self._audio_output = QAudioOutput()
         self._media_player = QMediaPlayer()
         self._media_player.setAudioOutput(self._audio_output)
+        self._video_widget = QVideoWidget()
+        self._video_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self._video_widget.setStyleSheet("background: transparent;")
+        self._video_widget.hide()
+        self._media_player.setVideoOutput(self._video_widget)
         self._media_player.playbackStateChanged.connect(self._on_playback_state_changed)
         self._media_player.positionChanged.connect(self._on_position_changed)
         self._media_player.durationChanged.connect(self._on_duration_changed)
@@ -282,7 +288,10 @@ class FilesSetupMixin:
         aw = QVBoxLayout(artwork_wrapper)
         aw.setContentsMargins(5, 5, 5, 8)
         aw.setSpacing(6)
-        aw.addWidget(self._files_artwork)
+        self._video_stack = QStackedWidget()
+        self._video_stack.addWidget(self._files_artwork)
+        self._video_stack.addWidget(self._video_widget)
+        aw.addWidget(self._video_stack)
         aw.addLayout(player_bar)
         aw.addWidget(self._edit_btn_bar)
 

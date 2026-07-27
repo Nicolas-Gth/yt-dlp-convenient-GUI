@@ -185,10 +185,18 @@ class _SeekSlider(QSlider):
 
 
 class _ArtworkWrapper(QWidget):
-    """Wrapper that caps its height at 50% of parent."""
+    """Wrapper that caps its height based on content type."""
+
+    def __init__(self):
+        super().__init__()
+        self._is_video = False
+
+    def set_video_mode(self, is_video: bool):
+        self._is_video = is_video
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
         p = self.parentWidget()
         if p:
-            self.setMaximumHeight(max(int(p.height() * 0.5), 80))
+            ratio = 0.7 if self._is_video else 0.5
+            self.setMaximumHeight(max(int(p.height() * ratio), 80))
