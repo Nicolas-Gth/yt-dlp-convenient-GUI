@@ -46,6 +46,8 @@ class FilesI18nMixin:
             self._files_apply_format_btn.setText(t("files.apply_format"))
         if hasattr(self, '_files_batch_btn') and self._files_batch_btn is not None:
             self._files_batch_btn.setText(t("batch.button"))
+        if hasattr(self, '_files_normalize_btn') and self._files_normalize_btn is not None:
+            self._files_normalize_btn.setText(t("files.normalize_volume"))
         if hasattr(self, '_files_columns_btn') and self._files_columns_btn is not None:
             self._files_columns_btn.setText(t("files.columns_label"))
         if hasattr(self, '_files_refresh_btn') and self._files_refresh_btn is not None:

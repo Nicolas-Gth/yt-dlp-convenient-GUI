@@ -291,6 +291,8 @@ class FilesListMixin:
         menu.addSeparator()
         restructure_action = menu.addAction(QIcon.fromTheme("edit-rename"), t("files.restructure_selected"))
         menu.addSeparator()
+        normalize_action = menu.addAction(QIcon.fromTheme("audio-volume-high"), t("files.normalize_context_menu"))
+        menu.addSeparator()
         batch_icon = QIcon("assets/ui/search-icon-light.svg")
         batch_action = menu.addAction(batch_icon, t("batch.context_menu"))
         menu.addSeparator()
@@ -302,6 +304,8 @@ class FilesListMixin:
             self._delete_selected_files(rows)
         elif action == restructure_action:
             self._restructure_selected_files(rows)
+        elif action == normalize_action:
+            self._on_normalize_selected(rows)
         elif action == batch_action:
             self._on_batch_identify_selected(rows)
         elif action == copy_path_action:

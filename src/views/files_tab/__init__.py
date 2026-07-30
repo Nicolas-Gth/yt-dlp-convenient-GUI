@@ -15,10 +15,11 @@ from .detail import FilesDetailMixin
 from .editor import FilesEditorMixin
 from .i18n import FilesI18nMixin
 from .batch_identify import BatchIdentifyMixin
+from .normalize import FilesNormalizeMixin
 
 
 class FilesMixin(FilesSetupMixin, FilesPlayerMixin, FilesListMixin,
                  FilesDetailMixin, FilesEditorMixin, FilesI18nMixin,
-                 BatchIdentifyMixin):
+                 BatchIdentifyMixin, FilesNormalizeMixin):
     """Mixin that provides the 'Download folder' tab."""
     pass

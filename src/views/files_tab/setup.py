@@ -53,6 +53,17 @@ class FilesSetupMixin:
         self._files_batch_btn.setIconSize(QSize(16, 16))
         self._files_batch_btn.clicked.connect(self._on_batch_identify)
         batch_row.addWidget(self._files_batch_btn)
+
+        self._files_normalize_btn = QPushButton(t("files.normalize_volume"))
+        self._files_normalize_btn.setCursor(Qt.PointingHandCursor)
+        normalize_icon = QIcon.fromTheme("audio-volume-high")
+        if normalize_icon.isNull():
+            normalize_icon = QIcon.fromTheme("multimedia-volume-control")
+        self._files_normalize_btn.setIcon(normalize_icon)
+        self._files_normalize_btn.setIconSize(QSize(16, 16))
+        self._files_normalize_btn.clicked.connect(self._on_normalize_files)
+        batch_row.addWidget(self._files_normalize_btn)
+
         batch_row.addStretch()
         operations_layout.addLayout(batch_row)
 
