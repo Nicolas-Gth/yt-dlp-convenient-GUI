@@ -67,7 +67,7 @@ class MainApplicationView(QMainWindow, WindowMixin, DownloadTabMixin, ProgressMi
         self.progress_inner_layout = QVBoxLayout(self.progress_inner)
         self.progress_inner_layout.setContentsMargins(0, 0, 0, 0)
         self.progress_inner_layout.setSpacing(8)
-        self.group_layout.addWidget(self.progress_inner, 1)
+        self.group_layout.addWidget(self.progress_inner, 0)
 
         # Push inner content to the top, tables fill the rest
         self.group_layout.addStretch()

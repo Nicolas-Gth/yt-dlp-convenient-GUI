@@ -138,6 +138,7 @@ class ProgressSetupMixin(ProgressLayoutMixin):
             self._eta_timer.timeout.connect(self._update_eta_timer)
             self._eta_timer.start(1000)
 
+        self.group_layout.setStretchFactor(self.progress_inner, 0)
         self.progress_inner_layout.addWidget(self.progress_frame)
         self.progress_inner_layout.addStretch()
 

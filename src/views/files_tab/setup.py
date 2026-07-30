@@ -2,11 +2,12 @@ from PySide6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QWidget, QTableWidget, QTableWidgetItem,
     QHeaderView, QAbstractItemView, QFrame, QSplitter, QLabel,
     QSizePolicy, QGroupBox, QPushButton, QSlider, QTextEdit,
-    QLineEdit, QComboBox, QMessageBox, QCheckBox, QMenu
+    QLineEdit, QComboBox, QMessageBox, QCheckBox, QMenu, QStackedWidget
 )
 from PySide6.QtGui import QIcon
 from PySide6.QtCore import Qt, QTimer, QFileSystemWatcher, QSize
 from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
+from PySide6.QtMultimediaWidgets import QVideoWidget
 
 from config import INFO_ICON_PATH
 from utils.i18n_utils import t
@@ -35,7 +36,38 @@ class FilesSetupMixin:
         left_layout.setContentsMargins(8, 8, 4, 8)
         left_layout.setSpacing(0)
 
-        # ── Structure group (above files) ──
+        # ── Operations group (batch + structure) ──
+        operations_group = QGroupBox(t("files.operations_title"))
+        self._files_operations_group = operations_group
+        operations_layout = QVBoxLayout(operations_group)
+        operations_layout.setContentsMargins(5, 10, 5, 8)
+        operations_layout.setSpacing(8)
+
+        # Batch identification button row
+        batch_row = QHBoxLayout()
+        batch_row.setSpacing(6)
+        self._files_batch_btn = QPushButton(t("batch.button"))
+        self._files_batch_btn.setCursor(Qt.PointingHandCursor)
+        batch_icon = "assets/ui/search-icon-light.svg" if is_dark_mode() else "assets/ui/search-icon-dark.svg"
+        self._files_batch_btn.setIcon(QIcon(batch_icon))
+        self._files_batch_btn.setIconSize(QSize(16, 16))
+        self._files_batch_btn.clicked.connect(self._on_batch_identify)
+        batch_row.addWidget(self._files_batch_btn)
+
+        self._files_normalize_btn = QPushButton(t("files.normalize_volume"))
+        self._files_normalize_btn.setCursor(Qt.PointingHandCursor)
+        normalize_icon = QIcon.fromTheme("audio-volume-high")
+        if normalize_icon.isNull():
+            normalize_icon = QIcon.fromTheme("multimedia-volume-control")
+        self._files_normalize_btn.setIcon(normalize_icon)
+        self._files_normalize_btn.setIconSize(QSize(16, 16))
+        self._files_normalize_btn.clicked.connect(self._on_normalize_files)
+        batch_row.addWidget(self._files_normalize_btn)
+
+        batch_row.addStretch()
+        operations_layout.addLayout(batch_row)
+
+        # ── Structure group (inside operations group) ──
         structure_group = QGroupBox(t("files.structure_title"))
         self._files_structure_group = structure_group
         structure_layout = QVBoxLayout(structure_group)
@@ -92,7 +124,8 @@ class FilesSetupMixin:
         structure_row.addWidget(self._files_template_info_btn)
         structure_row.addWidget(self._files_apply_format_btn)
         structure_layout.addLayout(structure_row)
-        left_layout.addWidget(structure_group)
+        operations_layout.addWidget(structure_group)
+        left_layout.addWidget(operations_group)
 
         files_group = QGroupBox(t("files.group_title"))
         self._files_group = files_group
@@ -197,10 +230,15 @@ class FilesSetupMixin:
         self._files_artwork.edit_requested.connect(self._on_edit_artwork_clicked)
         self._current_detail_filepath = None
 
-        # Audio player
+        # Audio/video player
         self._audio_output = QAudioOutput()
         self._media_player = QMediaPlayer()
         self._media_player.setAudioOutput(self._audio_output)
+        self._video_widget = QVideoWidget()
+        self._video_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self._video_widget.setStyleSheet("background: transparent;")
+        self._video_widget.hide()
+        self._media_player.setVideoOutput(self._video_widget)
         self._media_player.playbackStateChanged.connect(self._on_playback_state_changed)
         self._media_player.positionChanged.connect(self._on_position_changed)
         self._media_player.durationChanged.connect(self._on_duration_changed)
@@ -261,7 +299,10 @@ class FilesSetupMixin:
         aw = QVBoxLayout(artwork_wrapper)
         aw.setContentsMargins(5, 5, 5, 8)
         aw.setSpacing(6)
-        aw.addWidget(self._files_artwork)
+        self._video_stack = QStackedWidget()
+        self._video_stack.addWidget(self._files_artwork)
+        self._video_stack.addWidget(self._video_widget)
+        aw.addWidget(self._video_stack)
         aw.addLayout(player_bar)
         aw.addWidget(self._edit_btn_bar)
 
@@ -344,9 +385,9 @@ class FilesSetupMixin:
         self.path_entry.textChanged.connect(self._on_download_path_changed)
 
     def _update_search_icons(self):
-        """Update search button icons (identify & lyrics) based on current theme."""
+        """Update search button icons (identify & lyrics & batch) based on current theme."""
         icon = "assets/ui/search-icon-light.svg" if is_dark_mode() else "assets/ui/search-icon-dark.svg"
-        for attr in ('_identify_btn', '_lyrics_search_btn'):
+        for attr in ('_identify_btn', '_lyrics_search_btn', '_files_batch_btn'):
             btn = getattr(self, attr, None)
             if btn is not None:
                 btn.setIcon(QIcon(icon))

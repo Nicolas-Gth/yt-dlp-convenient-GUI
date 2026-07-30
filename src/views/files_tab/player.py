@@ -35,6 +35,12 @@ class FilesPlayerMixin:
 
     def _on_playback_state_changed(self, state):
         self._update_play_icon(is_playing=(state == QMediaPlayer.PlayingState))
+        if state == QMediaPlayer.PlayingState and getattr(self, '_current_is_video', False):
+            self._artwork_wrapper.set_video_mode(True)
+            self._video_stack.setCurrentWidget(self._video_widget)
+        elif state == QMediaPlayer.StoppedState:
+            self._artwork_wrapper.set_video_mode(False)
+            self._video_stack.setCurrentWidget(self._files_artwork)
 
     def _on_position_changed(self, pos_ms):
         if not self._seeking:
