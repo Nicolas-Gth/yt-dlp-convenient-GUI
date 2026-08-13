@@ -15,6 +15,11 @@ def cookie_error_message() -> str:
     return t("error.cookie_message", instructions=_get_instructions())
 
 
+def http_403_error_message() -> str:
+    """Return a user-friendly error message for HTTP 403 download blocks."""
+    return t("error.http_403", instructions=_get_instructions())
+
+
 def age_restricted_error_message(entries: list) -> str:
     """Return a user-friendly popup message when videos were skipped due to age restriction."""
     count = len(entries)

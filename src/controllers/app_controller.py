@@ -90,6 +90,7 @@ class ApplicationController:
         self.download_controller.set_age_restricted_callback(self.on_age_restricted_entry)
         self.download_controller.set_format_unavailable_callback(self.on_format_unavailable_entry)
         self.download_controller.set_video_unavailable_callback(self.on_video_unavailable_entry)
+        self.download_controller.set_http_403_callback(self.on_http_403_entry)
     
     def _on_theme_change(self, name: str):
         """Callback when user changes theme from the menu."""
@@ -523,6 +524,11 @@ class ApplicationController:
         """Handle a single video-unavailable entry detected during download."""
         self._invoker.invoke(lambda e=entry: self.view.add_skipped_entry(
             e, t("progress.unavailable"), "progress.unavailable"))
+
+    def on_http_403_entry(self, entry: dict):
+        """Handle a single entry blocked by YouTube (HTTP 403) during download."""
+        self._invoker.invoke(lambda e=entry: self.view.add_skipped_entry(
+            e, t("progress.http_403"), "progress.http_403"))
     
     def on_download_complete(self):
         """Handle download completion (called from download thread)."""
