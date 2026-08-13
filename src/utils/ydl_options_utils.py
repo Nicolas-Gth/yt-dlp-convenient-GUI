@@ -22,6 +22,7 @@ def build_ydl_options(config: DownloadConfig, ffmpeg_path: Optional[str],
         'noplaylist': not config.is_playlist,
         'progress_hooks': [progress_hook],
         'match_filter': cancel_filter,
+        'sleep_interval': 3,
     }
 
     # Use cookies file if available

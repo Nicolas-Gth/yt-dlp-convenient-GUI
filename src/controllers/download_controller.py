@@ -3,6 +3,7 @@ Download controller handling yt-dlp operations and download orchestration.
 """
 import os
 import threading
+import time
 from typing import Optional, Dict, Callable
 import yt_dlp
 from config import COOKIES_PATH, COOKIES_DIR, get_ffmpeg_path
@@ -12,8 +13,13 @@ from utils.playlist_utils import normalize_playlist_url, compute_playlist_offset
 from utils.post_processor_utils import CustomPostProcessor
 from utils.i18n_utils import t
 from utils.ydl_options_utils import build_ydl_options
-from utils.error_messages_utils import cookie_error_message, age_restricted_error_message
+from utils.error_messages_utils import cookie_error_message, age_restricted_error_message, http_403_error_message
 from utils.notification_utils import send_completion_notification
+
+
+_MAX_403_ATTEMPTS = 3      # Initial attempt + 2 retries per video
+_MAX_403_FAILURES = 3      # Consecutive failed videos before stopping the download
+_RETRY_SLEEP_SECONDS = 10  # Pause between retry attempts
 
 
 
@@ -31,6 +37,7 @@ class DownloadController:
         self.age_restricted_callback: Optional[Callable] = None
         self.format_unavailable_callback: Optional[Callable] = None
         self.video_unavailable_callback: Optional[Callable] = None
+        self.http_403_callback: Optional[Callable] = None
         self.video_infos: Optional[Dict] = None
         self._cancelled = False
         self._current_config: Optional[DownloadConfig] = None
@@ -43,6 +50,7 @@ class DownloadController:
         self._age_restricted_entries: list = []  # Entries skipped due to age restriction
         self._format_unavailable_entries: list = []  # Entries skipped due to format errors
         self._video_unavailable_entries: list = []  # Entries skipped because the video is unavailable
+        self._http_403_consecutive: int = 0  # Consecutive videos blocked by HTTP 403
     
     def set_progress_callback(self, callback: Callable):
         """Set the callback function for progress updates."""
@@ -75,6 +83,10 @@ class DownloadController:
     def set_video_unavailable_callback(self, callback: Callable):
         """Set the callback for video-unavailable entries detected during download."""
         self.video_unavailable_callback = callback
+
+    def set_http_403_callback(self, callback: Callable):
+        """Set the callback for entries blocked by YouTube (HTTP 403) during download."""
+        self.http_403_callback = callback
     
     def cancel_download(self):
         """Cancel the current download and clean up partial files."""
@@ -310,6 +322,7 @@ class DownloadController:
         self._age_restricted_entries = []
         self._format_unavailable_entries = []
         self._video_unavailable_entries = []
+        self._http_403_consecutive = 0
         try:
             ydl_opts = build_ydl_options(config, self.ffmpeg_path, self._progress_hook, self._cancel_filter)
 
@@ -342,6 +355,32 @@ class DownloadController:
                         if self.error_callback:
                             self.error_callback(cookie_error_message())
                         return True
+                return False
+
+            def _consume_http_403():
+                """Return True if a 403 block was logged and remove those errors."""
+                had_403 = any("HTTP Error 403" in err for err in error_capture.errors)
+                if had_403:
+                    error_capture.errors[:] = [
+                        err for err in error_capture.errors if "HTTP Error 403" not in err
+                    ]
+                return had_403
+
+            def _handle_http_403_failure(video_title: str = '', video_channel: str = ''):
+                """Track a 403-failed entry and stop the download after a few consecutive failures."""
+                self._http_403_consecutive += 1
+                entry = {
+                    'title': video_title or 'Unknown',
+                    'channel': video_channel or '',
+                }
+                if self.http_403_callback:
+                    self.http_403_callback(entry)
+                if self._http_403_consecutive >= _MAX_403_FAILURES:
+                    print(f"YouTube blocked {self._http_403_consecutive} videos in a row - stopping the download.")
+                    self._cleanup_partial_files(config.output_directory)
+                    if self.error_callback:
+                        self.error_callback(http_403_error_message())
+                    return True
                 return False
 
             def _check_age_restricted(video_title: str = '', video_channel: str = ''):
@@ -434,10 +473,27 @@ class DownloadController:
                             (entry_meta.get('channel') or entry_meta.get('uploader', ''))
                             if entry_meta else ''
                         )
-                        ydl.download([url])
-                        if _check_cookie_error():
-                            self._ydl_instance = None
-                            return
+                        attempts = 0
+                        failed_403 = False
+                        while True:
+                            attempts += 1
+                            ydl.download([url])
+                            if _check_cookie_error():
+                                self._ydl_instance = None
+                                return
+                            had_403 = _consume_http_403()
+                            if had_403 and attempts < _MAX_403_ATTEMPTS:
+                                print(f"YouTube blocked the download (HTTP 403) - retry {attempts}/{_MAX_403_ATTEMPTS - 1}...")
+                                time.sleep(_RETRY_SLEEP_SECONDS)
+                                continue
+                            failed_403 = had_403
+                            break
+                        if failed_403:
+                            if _handle_http_403_failure(video_title, video_channel):
+                                self._ydl_instance = None
+                                return
+                        else:
+                            self._http_403_consecutive = 0
                         _check_age_restricted(video_title, video_channel)
                         _check_format_unavailable(video_title, video_channel)
                         _check_video_unavailable(video_title, video_channel)
@@ -448,7 +504,25 @@ class DownloadController:
                         CustomPostProcessor(config, normalize_callback=self.normalize_callback),
                         when='post_process'
                     )
-                    ydl.download([config.url])
+                    attempts = 0
+                    failed_403 = False
+                    while True:
+                        attempts += 1
+                        ydl.download([config.url])
+                        had_403 = _consume_http_403()
+                        if had_403 and attempts < _MAX_403_ATTEMPTS:
+                            print(f"YouTube blocked the download (HTTP 403) - retry {attempts}/{_MAX_403_ATTEMPTS - 1}...")
+                            time.sleep(_RETRY_SLEEP_SECONDS)
+                            continue
+                        failed_403 = had_403
+                        break
+                    if failed_403:
+                        print("YouTube blocked the download (HTTP 403).")
+                        self._cleanup_partial_files(config.output_directory)
+                        if self.error_callback:
+                            self.error_callback(http_403_error_message())
+                        self._ydl_instance = None
+                        return
                     # For single videos, check age restriction and format errors
                     vi = self.video_infos or {}
                     _check_age_restricted(
