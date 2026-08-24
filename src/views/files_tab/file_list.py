@@ -9,7 +9,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt
 
-from utils.i18n_utils import t
+from utils.i18n_utils import t, plural_suffix
 from utils.settings_utils import settings_manager
 
 from .metadata import _extract_template_info
@@ -76,6 +76,7 @@ class FilesListMixin:
         if not directory or not os.path.isdir(directory):
             self._files_table.setRowCount(0)
             self._show_file_detail(None)
+            self._update_files_group_title()
             return
 
         # Avoid duplicate scans for the same directory
@@ -258,6 +259,15 @@ class FilesListMixin:
             if current_search:
                 self._on_files_search_changed(current_search)
 
+        self._update_files_group_title()
+
+    def _update_files_group_title(self):
+        """Set the files group title to include the current file count."""
+        count = self._files_table.rowCount()
+        self._files_group.setTitle(
+            t("files.group_title", count=count, count_s=plural_suffix(count))
+        )
+
     def _on_file_selected(self):
         """Show detail for the first selected file."""
         rows = set(idx.row() for idx in self._files_table.selectedIndexes())
@@ -382,6 +392,52 @@ class FilesListMixin:
             except OSError:
                 pass
         self.refresh_files_list()
+
+    def _on_remove_empty_folders(self):
+        """Remove all empty directories under the download folder."""
+        directory = self.path_entry.text().strip()
+        if not directory or not os.path.isdir(directory):
+            return
+        empty_dirs = self._find_empty_dirs(directory)
+        if not empty_dirs:
+            QMessageBox.information(self, t("files.remove_empty_folders"), t("files.remove_empty_none"))
+            return
+        reply = QMessageBox.question(
+            self,
+            t("files.remove_empty_folders"),
+            t("files.remove_empty_confirm", count=len(empty_dirs)),
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        if reply != QMessageBox.Yes:
+            return
+        removed = 0
+        for path in empty_dirs:
+            try:
+                os.rmdir(path)
+                removed += 1
+            except OSError:
+                pass
+        QMessageBox.information(
+            self, t("files.remove_empty_folders"), t("files.remove_empty_done", count=removed)
+        )
+        self.refresh_files_list()
+
+    @staticmethod
+    def _find_empty_dirs(root_dir: str) -> list:
+        """Return paths of directories under *root_dir* that are empty
+        after cascading removal of empty subdirectories."""
+        empty = set()
+        for current, dirs, files in os.walk(root_dir, topdown=False):
+            for name in dirs:
+                path = os.path.join(current, name)
+                try:
+                    entries = os.listdir(path)
+                except OSError:
+                    continue
+                if all(os.path.join(path, e) in empty for e in entries):
+                    empty.add(path)
+        return sorted(empty, key=lambda p: p.count(os.sep), reverse=True)
 
     def _restructure_selected_files(self, rows):
         """Open a template dialog and restructure the selected files."""

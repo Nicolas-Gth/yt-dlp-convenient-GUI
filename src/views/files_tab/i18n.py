@@ -37,7 +37,7 @@ class FilesI18nMixin:
                     else:
                         item.setText(t("table.none"))
         if hasattr(self, '_files_group') and self._files_group is not None:
-            self._files_group.setTitle(t("files.group_title"))
+            self._update_files_group_title()
         if hasattr(self, '_files_operations_group') and self._files_operations_group is not None:
             self._files_operations_group.setTitle(t("files.operations_title"))
         if hasattr(self, '_files_structure_group') and self._files_structure_group is not None:
@@ -48,6 +48,8 @@ class FilesI18nMixin:
             self._files_batch_btn.setText(t("batch.button"))
         if hasattr(self, '_files_normalize_btn') and self._files_normalize_btn is not None:
             self._files_normalize_btn.setText(t("files.normalize_volume"))
+        if hasattr(self, '_files_remove_empty_btn') and self._files_remove_empty_btn is not None:
+            self._files_remove_empty_btn.setText(t("files.remove_empty_folders"))
         if hasattr(self, '_files_columns_btn') and self._files_columns_btn is not None:
             self._files_columns_btn.setText(t("files.columns_label"))
         if hasattr(self, '_files_refresh_btn') and self._files_refresh_btn is not None:

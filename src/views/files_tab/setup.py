@@ -2,7 +2,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QWidget, QTableWidget, QTableWidgetItem,
     QHeaderView, QAbstractItemView, QFrame, QSplitter, QLabel,
     QSizePolicy, QGroupBox, QPushButton, QSlider, QTextEdit,
-    QLineEdit, QComboBox, QMessageBox, QCheckBox, QMenu, QStackedWidget
+    QLineEdit, QComboBox, QMessageBox, QCheckBox, QMenu, QStackedWidget, QStyle
 )
 from PySide6.QtGui import QIcon
 from PySide6.QtCore import Qt, QTimer, QFileSystemWatcher, QSize
@@ -63,6 +63,13 @@ class FilesSetupMixin:
         self._files_normalize_btn.setIconSize(QSize(16, 16))
         self._files_normalize_btn.clicked.connect(self._on_normalize_files)
         batch_row.addWidget(self._files_normalize_btn)
+
+        self._files_remove_empty_btn = QPushButton(t("files.remove_empty_folders"))
+        self._files_remove_empty_btn.setCursor(Qt.PointingHandCursor)
+        self._files_remove_empty_btn.setIcon(self.style().standardIcon(QStyle.SP_TrashIcon))
+        self._files_remove_empty_btn.setIconSize(QSize(16, 16))
+        self._files_remove_empty_btn.clicked.connect(self._on_remove_empty_folders)
+        batch_row.addWidget(self._files_remove_empty_btn)
 
         batch_row.addStretch()
         operations_layout.addLayout(batch_row)
@@ -127,7 +134,7 @@ class FilesSetupMixin:
         operations_layout.addWidget(structure_group)
         left_layout.addWidget(operations_group)
 
-        files_group = QGroupBox(t("files.group_title"))
+        files_group = QGroupBox("")
         self._files_group = files_group
         files_layout = QVBoxLayout(files_group)
         files_layout.setContentsMargins(5, 10, 5, 8)
@@ -383,6 +390,7 @@ class FilesSetupMixin:
         self._file_watcher.directoryChanged.connect(self._on_watcher_changed)
         self._file_watcher.fileChanged.connect(self._on_watcher_changed)
         self.path_entry.textChanged.connect(self._on_download_path_changed)
+        self._update_files_group_title()
 
     def _update_search_icons(self):
         """Update search button icons (identify & lyrics & batch) based on current theme."""

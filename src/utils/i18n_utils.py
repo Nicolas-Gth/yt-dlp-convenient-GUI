@@ -170,6 +170,27 @@ def get_language() -> str:
     return _current_language
 
 
+_PLURAL_SUFFIX_RULES = {
+    "en": lambda n: "" if n == 1 else "s",
+    "fr": lambda n: "" if n <= 1 else "s",
+    "es": lambda n: "" if n == 1 else "s",
+    "de": lambda n: "" if n == 1 else "en",
+    "it": lambda n: "",
+    "nl": lambda n: "" if n == 1 else "en",
+}
+
+
+def plural_suffix(count: int) -> str:
+    """Return the plural suffix for *count* in the active language.
+
+    Designed for translation templates such as ``"{count} file{count_s}"``,
+    yielding e.g. ``1 file`` / ``2 files`` (or ``1 Datei`` / ``2 Dateien``).
+    """
+    resolved = _detect_system_language() if _current_language == "system" else _current_language
+    rule = _PLURAL_SUFFIX_RULES.get(resolved, _PLURAL_SUFFIX_RULES["en"])
+    return rule(count)
+
+
 def t(key: str, **kwargs) -> str:
     """Translate *key*, interpolating any ``{name}`` placeholders with *kwargs*.
 
