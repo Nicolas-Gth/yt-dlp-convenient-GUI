@@ -28,15 +28,27 @@ def _load_audio(filepath):
         elif ext == '.opus':
             from mutagen.oggopus import OggOpus
             return OggOpus(filepath)
+        elif ext == '.flac':
+            from mutagen.flac import FLAC
+            return FLAC(filepath)
     except Exception:
         pass
     return None
 
 
+def _is_vorbis_comments(audio):
+    """Return True if *audio* uses Vorbis-style comment tags (Opus, FLAC)."""
+    try:
+        from mutagen.oggopus import OggOpus
+        from mutagen.flac import FLAC
+        return isinstance(audio, (OggOpus, FLAC))
+    except Exception:
+        return False
+
+
 def _extract_title_artist(filepath):
     """Extract (title, artist) from an audio/video file using mutagen."""
     from mutagen.mp4 import MP4
-    from mutagen.oggopus import OggOpus
     audio = _load_audio(filepath)
     if audio is None or audio.tags is None:
         return "", ""
@@ -44,7 +56,7 @@ def _extract_title_artist(filepath):
     title = ""
     tags = audio.tags
     try:
-        if isinstance(audio, OggOpus):
+        if _is_vorbis_comments(audio):
             artist = "; ".join(tags.get('artist', []) or [])
             title = "; ".join(tags.get('title', []) or [])
         elif isinstance(audio, MP4):
@@ -65,7 +77,6 @@ def _extract_template_info(filepath):
     Missing values fallback to sensible defaults (same as download tab).
     """
     from mutagen.mp4 import MP4
-    from mutagen.oggopus import OggOpus
     info = {"artist": "", "title": "", "album": "", "tracknumber": ""}
     audio = _load_audio(filepath)
     if audio is None or audio.tags is None:
@@ -73,7 +84,7 @@ def _extract_template_info(filepath):
     else:
         tags = audio.tags
         try:
-            if isinstance(audio, OggOpus):
+            if _is_vorbis_comments(audio):
                 info["artist"] = "; ".join(tags.get('artist', []) or []).strip()
                 info["title"] = "; ".join(tags.get('title', []) or []).strip()
                 info["album"] = "; ".join(tags.get('album', []) or []).strip()
@@ -121,9 +132,8 @@ def _check_lyrics(filepath):
         return t("table.none"), ''
     try:
         from mutagen.mp4 import MP4
-        from mutagen.oggopus import OggOpus
         text = None
-        if isinstance(audio, OggOpus):
+        if _is_vorbis_comments(audio):
             val = audio.tags.get('lyrics')
             text = val[0] if val else None
         elif isinstance(audio, MP4):
@@ -148,7 +158,6 @@ def _extract_scan_metadata(filepath):
     Returns (artist, title, album, genre, year, tracknumber, lyrics, lyr_type).
     """
     from mutagen.mp4 import MP4
-    from mutagen.oggopus import OggOpus
 
     artist = ""
     title = ""
@@ -170,7 +179,7 @@ def _extract_scan_metadata(filepath):
     if audio is not None and audio.tags is not None:
         tags = audio.tags
         try:
-            if isinstance(audio, OggOpus):
+            if _is_vorbis_comments(audio):
                 artist = "; ".join(tags.get('artist', []) or []).strip()
                 title = "; ".join(tags.get('title', []) or []).strip()
                 album = "; ".join(tags.get('album', []) or []).strip()
@@ -259,6 +268,7 @@ def _extract_artwork(audio) -> Optional[QPixmap]:
     try:
         from mutagen.mp4 import MP4
         from mutagen.oggopus import OggOpus
+        from mutagen.flac import FLAC
 
         if isinstance(audio, OggOpus):
             pics = audio.tags.get('metadata_block_picture', []) if audio.tags else []
@@ -272,6 +282,14 @@ def _extract_artwork(audio) -> Optional[QPixmap]:
                     qimg = QImage()
                     qimg.loadFromData(data[idx:])
                     return QPixmap.fromImage(qimg)
+            return None
+
+        elif isinstance(audio, FLAC):
+            pics = getattr(audio, 'pictures', []) or []
+            if pics:
+                qimg = QImage()
+                qimg.loadFromData(pics[0].data)
+                return QPixmap.fromImage(qimg)
             return None
 
         elif isinstance(audio, MP4):
@@ -303,9 +321,8 @@ def _extract_all_metadata(audio) -> List[Tuple[str, str]]:
         return rows
     try:
         from mutagen.mp4 import MP4
-        from mutagen.oggopus import OggOpus
 
-        if isinstance(audio, OggOpus):
+        if _is_vorbis_comments(audio):
             for key, values in (audio.tags or {}).items():
                 if key.startswith('metadata_block_picture') or key in ('cover', 'lyrics'):
                     continue
@@ -332,8 +349,7 @@ def _extract_lyrics_text(audio) -> Optional[str]:
         return None
     try:
         from mutagen.mp4 import MP4
-        from mutagen.oggopus import OggOpus
-        if isinstance(audio, OggOpus):
+        if _is_vorbis_comments(audio):
             val = audio.tags.get('lyrics')
             return val[0] if val else None
         elif isinstance(audio, MP4):
@@ -413,6 +429,29 @@ def _embed_artwork(filepath: str, image_data: bytes, mime: str = "image/jpeg", a
             audio['metadata_block_picture'] = [
                 base64.b64encode(pic.write()).decode('ascii')
             ]
+            audio.save()
+            return True
+
+        elif ext == '.flac':
+            from mutagen.flac import Picture
+            if audio_obj is not None:
+                audio_obj.clear_pictures()
+                pic = Picture()
+                pic.type = 3
+                pic.mime = mime
+                pic.desc = "Cover"
+                pic.data = image_data
+                audio_obj.add_picture(pic)
+                return True
+            from mutagen.flac import FLAC
+            audio = FLAC(filepath)
+            audio.clear_pictures()
+            pic = Picture()
+            pic.type = 3
+            pic.mime = mime
+            pic.desc = "Cover"
+            pic.data = image_data
+            audio.add_picture(pic)
             audio.save()
             return True
     except Exception as e:

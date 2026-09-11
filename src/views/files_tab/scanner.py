@@ -38,7 +38,7 @@ class FileScanner(QThread):
 
     def run(self):
         directory = self.directory
-        extensions = ('.mp3', '.mp4', '.opus')
+        extensions = ('.mp3', '.mp4', '.opus', '.flac')
         results = []
 
         for root, _dirs, filenames in os.walk(directory):

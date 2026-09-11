@@ -6,7 +6,7 @@ from PySide6.QtCore import Qt
 
 from utils.i18n_utils import t
 
-from .metadata import _load_audio
+from .metadata import _load_audio, _is_vorbis_comments
 from .constants import _FIELD_KEYS
 
 
@@ -39,14 +39,13 @@ class FilesEditorMixin:
             return
         try:
             from mutagen.mp4 import MP4
-            from mutagen.oggopus import OggOpus
             import mutagen.id3
             tags = audio.tags
             new_filepath = self._current_detail_filepath
             # Handle lyrics (separate widget)
             lyrics_val = self._lyrics_edit.toPlainText()
             if lyrics_val.strip():
-                if isinstance(audio, OggOpus):
+                if _is_vorbis_comments(audio):
                     tags['lyrics'] = [lyrics_val]
                 elif isinstance(audio, MP4):
                     tags['\xa9lyr'] = [lyrics_val]
@@ -57,7 +56,7 @@ class FilesEditorMixin:
                     tags.add(uslt)
             else:
                 # Remove lyrics tag when text is empty
-                if isinstance(audio, OggOpus):
+                if _is_vorbis_comments(audio):
                     try:
                         del tags['lyrics']
                     except KeyError:
@@ -90,13 +89,13 @@ class FilesEditorMixin:
                     continue
                 if is_fixed:
                     tag_key = _FIELD_KEYS[key][0]
-                    if isinstance(audio, OggOpus):
+                    if _is_vorbis_comments(audio):
                         tag_key = _FIELD_KEYS[key][2]  # 'album', 'title', etc.
                     elif isinstance(audio, MP4):
                         tag_key = _FIELD_KEYS[key][1]  # '\xa9alb', '\xa9nam', etc.
                     key = tag_key
                 val = val_item.text()
-                if isinstance(audio, OggOpus):
+                if _is_vorbis_comments(audio):
                     if val:
                         tags[key] = [val]
                     else:
