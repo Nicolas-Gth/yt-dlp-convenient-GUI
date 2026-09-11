@@ -11,7 +11,7 @@ from PySide6.QtGui import QPixmap
 
 from utils.i18n_utils import t
 
-from .metadata import _load_audio, _extract_artwork, _extract_all_metadata, _extract_lyrics_text, _tag_label, _embed_artwork
+from .metadata import _load_audio, _extract_artwork, _extract_all_metadata, _extract_lyrics_text, _tag_label, _embed_artwork, _is_vorbis_comments
 from .widgets import _FlowLayout
 from .constants import _FIELD_KEYS, _FIELD_LABELS
 
@@ -581,9 +581,8 @@ class FilesDetailMixin:
         artist, title, album = "", "", ""
         if audio is not None and audio.tags is not None:
             from mutagen.mp4 import MP4
-            from mutagen.oggopus import OggOpus
             try:
-                if isinstance(audio, OggOpus):
+                if _is_vorbis_comments(audio):
                     artist = "; ".join(audio.tags.get('artist', []) or []).strip()
                     title = "; ".join(audio.tags.get('title', []) or []).strip()
                     album = "; ".join(audio.tags.get('album', []) or []).strip()
@@ -1009,9 +1008,8 @@ class FilesDetailMixin:
             artist, title, album = "", "", ""
             if audio is not None and audio.tags is not None:
                 from mutagen.mp4 import MP4
-                from mutagen.oggopus import OggOpus
                 try:
-                    if isinstance(audio, OggOpus):
+                    if _is_vorbis_comments(audio):
                         artist = "; ".join(audio.tags.get('artist', []) or []).strip()
                         title = "; ".join(audio.tags.get('title', []) or []).strip()
                         album = "; ".join(audio.tags.get('album', []) or []).strip()
@@ -1056,7 +1054,6 @@ class FilesDetailMixin:
         """
         from mutagen.mp3 import MP3
         from mutagen.mp4 import MP4
-        from mutagen.oggopus import OggOpus
         from utils.metadata_enricher_utils import _request
 
         audio = _load_audio(filepath)
@@ -1066,7 +1063,7 @@ class FilesDetailMixin:
 
         try:
             # ── Opus ──
-            if isinstance(audio, OggOpus):
+            if _is_vorbis_comments(audio):
                 tags = audio.tags
                 for key in ("title", "artist", "album", "albumartist", "date", "genre", "tracknumber"):
                     if key in tags:
@@ -1191,9 +1188,8 @@ class FilesDetailMixin:
                     pass
                 if audio.tags is not None:
                     from mutagen.mp4 import MP4
-                    from mutagen.oggopus import OggOpus
                     try:
-                        if isinstance(audio, OggOpus):
+                        if _is_vorbis_comments(audio):
                             artist = "; ".join(audio.tags.get('artist', []) or []).strip()
                             title = "; ".join(audio.tags.get('title', []) or []).strip()
                             album = "; ".join(audio.tags.get('album', []) or []).strip()
@@ -1554,7 +1550,6 @@ class FilesDetailMixin:
     def _apply_lyrics_result(self, filepath: str, result: dict):
         """Apply lyrics from search result to the audio file."""
         from mutagen.mp4 import MP4
-        from mutagen.oggopus import OggOpus
         from mutagen.id3 import USLT
 
         audio = _load_audio(filepath)
@@ -1567,7 +1562,7 @@ class FilesDetailMixin:
             if not lyrics_text:
                 return
 
-            if isinstance(audio, OggOpus):
+            if _is_vorbis_comments(audio):
                 audio.tags['lyrics'] = [lyrics_text]
             elif isinstance(audio, MP4):
                 audio.tags['\xa9lyr'] = [lyrics_text]

@@ -16,7 +16,7 @@ from PySide6.QtCore import Qt, QTimer, QSize
 
 from utils.i18n_utils import t
 from utils.settings_utils import settings_manager
-from .metadata import _load_audio, _extract_title_artist, _extract_artwork, _check_lyrics
+from .metadata import _load_audio, _extract_title_artist, _extract_artwork, _check_lyrics, _is_vorbis_comments
 
 
 class BatchIdentifyDialog(QDialog):
@@ -265,7 +265,6 @@ class BatchIdentifyMixin:
             return False, ["all"]
 
         from mutagen.mp4 import MP4
-        from mutagen.oggopus import OggOpus
 
         missing = []
         artist = ""
@@ -276,7 +275,7 @@ class BatchIdentifyMixin:
 
         tags = audio.tags
         try:
-            if isinstance(audio, OggOpus):
+            if _is_vorbis_comments(audio):
                 artist = "; ".join(tags.get('artist', []) or []).strip()
                 title = "; ".join(tags.get('title', []) or []).strip()
                 album = "; ".join(tags.get('album', []) or []).strip()
@@ -530,9 +529,8 @@ class BatchIdentifyMixin:
         audio = _load_audio(filepath)
         if audio is not None and audio.tags is not None:
             from mutagen.mp4 import MP4
-            from mutagen.oggopus import OggOpus
             try:
-                if isinstance(audio, OggOpus):
+                if _is_vorbis_comments(audio):
                     album = "; ".join(audio.tags.get('album', []) or []).strip()
                 elif isinstance(audio, MP4):
                     album = (audio.tags.get('\xa9alb', [None])[0] or "").strip()
