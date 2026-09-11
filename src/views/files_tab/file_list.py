@@ -29,6 +29,12 @@ class _NumericItem(QTableWidgetItem):
         return super().__lt__(other)
 
 
+def _track_sort_value(tracknumber: str) -> float:
+    """Parse a track-number string into a numeric sort key."""
+    match = re.search(r'\d+', tracknumber or "")
+    return float(match.group()) if match else 0.0
+
+
 class FilesListMixin:
     """Mixin that provides file-list scanning and selection."""
 
@@ -141,7 +147,10 @@ class FilesListMixin:
                 self._files_table.item(row, 3).setText(album)
                 self._files_table.item(row, 4).setText(genre)
                 self._files_table.item(row, 5).setText(year)
-                self._files_table.item(row, 6).setText(tracknumber)
+                track_item = self._files_table.item(row, 6)
+                track_item.setText(tracknumber)
+                if isinstance(track_item, _NumericItem):
+                    track_item._sort_value = _track_sort_value(tracknumber)
                 l_item = self._files_table.item(row, 7)
                 l_item.setText(lyrics)
                 l_item.setData(Qt.UserRole, lyr_type)
@@ -200,7 +209,7 @@ class FilesListMixin:
                 year_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
                 self._files_table.setItem(idx, 5, year_item)
 
-                track_item = QTableWidgetItem(tracknumber)
+                track_item = _NumericItem(tracknumber, _track_sort_value(tracknumber))
                 track_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
                 self._files_table.setItem(idx, 6, track_item)
 
