@@ -7,9 +7,9 @@ from PySide6.QtWidgets import (
     QLineEdit, QStackedWidget, QTextEdit, QListWidget, QListWidgetItem
 )
 from PySide6.QtCore import Qt, QTimer, QRect, QPoint, QSize, QThread, Signal, QUrl
-from PySide6.QtGui import QPixmap
 
 from utils.i18n_utils import t
+from views.common.pixmap_utils import qpixmap_from_data
 
 from .metadata import _load_audio, _extract_artwork, _extract_all_metadata, _extract_lyrics_text, _tag_label, _embed_artwork, _is_vorbis_comments
 from .widgets import _FlowLayout
@@ -393,8 +393,7 @@ class FilesDetailMixin:
                 thumb_lbl.setStyleSheet("QLabel { background: transparent; }")
                 data = item.get("artwork_data")
                 if data:
-                    pix = QPixmap()
-                    pix.loadFromData(data)
+                    pix = qpixmap_from_data(data)
                     if not pix.isNull():
                         thumb_lbl.setPixmap(pix.scaled(150, 150, Qt.KeepAspectRatio, Qt.SmoothTransformation))
                 card_layout.addWidget(thumb_lbl, alignment=Qt.AlignCenter)
@@ -768,8 +767,7 @@ class FilesDetailMixin:
                 thumb_lbl.setStyleSheet("QLabel { background: transparent; }")
                 data = item.get("artwork_data")
                 if data:
-                    pix = QPixmap()
-                    pix.loadFromData(data)
+                    pix = qpixmap_from_data(data)
                     if not pix.isNull():
                         thumb_lbl.setPixmap(pix.scaled(150, 150, Qt.KeepAspectRatio, Qt.SmoothTransformation))
                 card_layout.addWidget(thumb_lbl, alignment=Qt.AlignCenter)

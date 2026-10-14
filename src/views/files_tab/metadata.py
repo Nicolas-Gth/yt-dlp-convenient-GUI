@@ -2,9 +2,10 @@ import os
 import re
 from typing import Optional, List, Tuple
 
-from PySide6.QtGui import QPixmap, QImage
+from PySide6.QtGui import QPixmap
 
 from utils.i18n_utils import t
+from views.common.pixmap_utils import qpixmap_from_data
 
 from .constants import _TAG_LABELS
 
@@ -274,31 +275,24 @@ def _extract_artwork(audio) -> Optional[QPixmap]:
             pics = audio.tags.get('metadata_block_picture', []) if audio.tags else []
             if pics:
                 import base64
-                data = base64.b64decode(pics[0])
-                idx = data.find(b'\xff\xd8')
-                if idx < 0:
-                    idx = data.find(b'\x89PNG')
-                if idx >= 0:
-                    qimg = QImage()
-                    qimg.loadFromData(data[idx:])
-                    return QPixmap.fromImage(qimg)
+                from mutagen.flac import Picture
+                try:
+                    pic = Picture(base64.b64decode(pics[0]))
+                    return qpixmap_from_data(pic.data)
+                except Exception:
+                    pass
             return None
 
         elif isinstance(audio, FLAC):
             pics = getattr(audio, 'pictures', []) or []
             if pics:
-                qimg = QImage()
-                qimg.loadFromData(pics[0].data)
-                return QPixmap.fromImage(qimg)
+                return qpixmap_from_data(pics[0].data)
             return None
 
         elif isinstance(audio, MP4):
             covr = audio.tags.get('covr', []) if audio.tags else []
             if covr:
-                data = covr[0]
-                qimg = QImage()
-                qimg.loadFromData(data)
-                return QPixmap.fromImage(qimg)
+                return qpixmap_from_data(covr[0])
             return None
 
         else:
@@ -306,9 +300,7 @@ def _extract_artwork(audio) -> Optional[QPixmap]:
                 return None
             for tag in audio.tags.values():
                 if tag.FrameID == 'APIC':
-                    qimg = QImage()
-                    qimg.loadFromData(tag.data)
-                    return QPixmap.fromImage(qimg)
+                    return qpixmap_from_data(tag.data)
     except Exception:
         pass
     return None
