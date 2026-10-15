@@ -11,7 +11,7 @@ class RefreshMixin:
 
     def refresh_table_theme(self):
         """Force table widgets to pick up the new palette colours."""
-        for attr in ('info_table', '_normalize_table', '_skipped_table', '_files_table', '_files_meta', '_play_btn', '_lyrics_edit', '_elapsed_label', '_total_label', '_edit_reset_btn', '_edit_save_btn', '_edit_btn_bar', '_prevent_sleep_check', '_experimental_check', '_lyrics_search_btn'):
+        for attr in ('info_table', '_normalize_table', '_skipped_table', '_files_table', '_files_meta', '_play_btn', '_lyrics_edit', '_elapsed_label', '_total_label', '_edit_reset_btn', '_edit_save_btn', '_edit_btn_bar', '_prevent_sleep_check', '_experimental_check', '_lyrics_search_btn', '_soulseek_results_table', '_soulseek_transfers_table'):
             widget = getattr(self, attr, None)
             if widget is not None:
                 sheet = widget.styleSheet()
@@ -119,3 +119,7 @@ class RefreshMixin:
         # Files tab
         if hasattr(self, 'retranslate_files_tab'):
             self.retranslate_files_tab()
+
+        # Soulseek tab
+        if hasattr(self, 'retranslate_soulseek_tab'):
+            self.retranslate_soulseek_tab()

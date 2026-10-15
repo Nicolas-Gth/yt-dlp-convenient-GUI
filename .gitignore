@@ -10,6 +10,7 @@ dist
 build
 ffmpeg
 temp
+slskd/
 
 # User settings and configuration
 yt-dlp-gui-config.json

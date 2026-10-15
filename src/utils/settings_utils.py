@@ -32,7 +32,10 @@ class SettingsManager:
             "last_prevent_sleep": False,
             "use_experimental_branch": False,
             "last_output_template": "",
-            "files_visible_columns": ["filename", "title", "artist", "lyrics", "size", "modified"]
+            "files_visible_columns": ["filename", "title", "artist", "lyrics", "size", "modified"],
+            "soulseek_disclaimer_accepted": False,
+            "soulseek_username": "",
+            "soulseek_password": "",
         }
         
     def _get_config_directory(self) -> Path:

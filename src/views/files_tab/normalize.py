@@ -41,6 +41,57 @@ def _no_window_kwargs():
     return {'startupinfo': si, 'creationflags': subprocess.CREATE_NO_WINDOW}
 
 
+def _ffprobe_bin(ffmpeg_dir):
+    if ffmpeg_dir:
+        candidate = os.path.join(ffmpeg_dir, 'ffprobe')
+        if os.path.exists(candidate):
+            return candidate
+    return 'ffprobe'
+
+
+def _probe_audio_params(file_path, ffmpeg_dir=None):
+    """Return (sample_rate, bits) for the first audio stream, or (None, None)."""
+    try:
+        result = subprocess.run(
+            [_ffprobe_bin(ffmpeg_dir), '-v', 'error', '-select_streams', 'a:0',
+             '-show_entries', 'stream=sample_rate,bits_per_raw_sample,bits_per_sample',
+             '-of', 'default=noprint_wrappers=1', file_path],
+            capture_output=True, text=True, timeout=30, **_no_window_kwargs(),
+        )
+    except Exception:
+        return None, None
+
+    rate = None
+    bits = None
+    for line in result.stdout.splitlines():
+        key, _, value = line.partition('=')
+        value = value.strip()
+        if not value.isdigit():
+            continue
+        if key == 'sample_rate':
+            rate = int(value)
+        elif key == 'bits_per_raw_sample':
+            bits = int(value)
+        elif key == 'bits_per_sample' and bits is None:
+            bits = int(value)
+    return rate, bits
+
+
+def _output_sample_rate(encoder, src_rate):
+    """Pick an output sample rate supported by *encoder*.
+
+    ``loudnorm`` always upsamples to 192 kHz internally, so the output rate must
+    be forced back or files are re-encoded at 192 kHz (up to 4x larger).
+    """
+    if not src_rate:
+        return None
+    if encoder == 'libopus':
+        return 48000  # libopus only supports 48/24/16/12/8 kHz
+    if encoder == 'libmp3lame':
+        return src_rate if src_rate <= 48000 else 48000
+    return src_rate
+
+
 def _normalize_audio_file(file_path, target_lufs):
     from config import get_ffmpeg_path
 
@@ -60,6 +111,8 @@ def _normalize_audio_file(file_path, target_lufs):
     base, ext_ = os.path.splitext(file_path)
     tmp_path = f"{base}.normalizing{ext_}"
 
+    src_rate, src_bits = _probe_audio_params(file_path, ffmpeg_dir)
+
     cmd = [
         ffmpeg_bin, '-y', '-i', file_path,
         '-af', f'loudnorm=I={target_lufs}:TP=-1.5:LRA=11',
@@ -68,7 +121,20 @@ def _normalize_audio_file(file_path, target_lufs):
     if ext in _VIDEO_CONTAINERS:
         cmd += ['-c:v', 'copy']
 
-    cmd += ['-c:a', encoder, tmp_path]
+    cmd += ['-c:a', encoder]
+
+    # loudnorm resamples to 192 kHz internally; force the output back to the
+    # source sample rate so files (notably FLAC) are not re-encoded at 192 kHz.
+    out_rate = _output_sample_rate(encoder, src_rate)
+    if out_rate:
+        cmd += ['-ar', str(out_rate)]
+
+    # Preserve the bit depth for lossless FLAC (the default 32-bit float output
+    # makes files up to 4x larger than the source).
+    if ext == '.flac' and src_bits:
+        cmd += ['-sample_fmt', 's16' if src_bits <= 16 else 's32']
+
+    cmd += [tmp_path]
 
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=300, **_no_window_kwargs())

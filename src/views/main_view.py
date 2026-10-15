@@ -21,9 +21,10 @@ from .progress_tab import ProgressMixin
 from .event_handlers_view import EventHandlersMixin
 from .refresh_view import RefreshMixin
 from .files_tab import FilesMixin
+from .soulseek_tab import SoulseekMixin
 
 
-class MainApplicationView(QMainWindow, WindowMixin, DownloadTabMixin, ProgressMixin, EventHandlersMixin, RefreshMixin, FilesMixin):
+class MainApplicationView(QMainWindow, WindowMixin, DownloadTabMixin, ProgressMixin, EventHandlersMixin, RefreshMixin, FilesMixin, SoulseekMixin):
     """Main application window and GUI components."""
 
     def __init__(self):
@@ -96,6 +97,7 @@ class MainApplicationView(QMainWindow, WindowMixin, DownloadTabMixin, ProgressMi
         # Add tabs
         self.tabs.addTab(self._download_tab, t("tabs.download"))
         self.setup_files_tab()
+        self.setup_soulseek_tab()
 
         # Callbacks (set by controller)
         self.on_browse_callback = None
@@ -114,6 +116,11 @@ class MainApplicationView(QMainWindow, WindowMixin, DownloadTabMixin, ProgressMi
             geo = self.geometry()
             settings_manager.set_setting("window_geometry",
                 (geo.x(), geo.y(), geo.width(), geo.height()))
+        try:
+            from utils.soulseek_utils import get_server
+            get_server().stop()
+        except Exception:
+            pass
         super().closeEvent(event)
 
     # ------------------------------------------------------------------
